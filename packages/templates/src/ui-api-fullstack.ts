@@ -15,12 +15,15 @@ export default defineConfig({
 })
 `
 
-const TESTPILOT_CONFIG = `import { defineConfig } from 'testpilot-qa'
-
-export default defineConfig({
+// Emitted as a plain object so a freshly-scaffolded project installs and runs
+// without depending on the (currently unpublished) testpilot-qa package. Once
+// testpilot-qa is installed you can switch to the typed helper:
+//   import { defineConfig } from 'testpilot-qa'
+//   export default defineConfig({ ... })
+const TESTPILOT_CONFIG = `export default {
   testDir: 'tests',
   playwrightConfig: 'playwright.config.ts',
-})
+}
 `
 
 // The UI example renders inline HTML (no web server needed) so it passes
@@ -108,7 +111,6 @@ function packageJson(ctx: TemplateContext): string {
     },
     devDependencies: {
       '@playwright/test': '^1.49.0',
-      'testpilot-qa': '^0.1.0',
     },
   }
   return `${JSON.stringify(pkg, null, 2)}\n`

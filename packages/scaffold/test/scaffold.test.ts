@@ -37,16 +37,21 @@ describe('scaffoldProject', () => {
     }
   })
 
-  it('generates plain Playwright config and a testpilot-qa-backed config', () => {
+  it('generates an installable project that does not depend on testpilot-qa', () => {
     scaffoldProject({ targetDir: dir, projectName: 'demo' })
 
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
     expect(pkg.name).toBe('demo')
     expect(pkg.scripts['test:e2e']).toBe('playwright test')
     expect(pkg.devDependencies['@playwright/test']).toBeDefined()
+    // Must stay installable before testpilot-qa is published.
+    expect(pkg.devDependencies['testpilot-qa']).toBeUndefined()
 
     const tpConfig = readFileSync(join(dir, 'testpilot.config.ts'), 'utf8')
-    expect(tpConfig).toContain("from 'testpilot-qa'")
+    expect(tpConfig).toContain("testDir: 'tests'")
+    expect(tpConfig).toContain("playwrightConfig: 'playwright.config.ts'")
+    // No import — loads without testpilot-qa installed.
+    expect(tpConfig).not.toContain("from 'testpilot-qa'")
 
     const pwConfig = readFileSync(join(dir, 'playwright.config.ts'), 'utf8')
     expect(pwConfig).toContain("from '@playwright/test'")

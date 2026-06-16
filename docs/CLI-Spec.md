@@ -50,17 +50,22 @@ Scaffold a new TestPilot-managed Playwright project, or add TestPilot to an exis
 testpilot init [directory] [options]
 ```
 
-| Option | Description | Default |
-|---|---|---|
-| `--template <id>` | Template pack. **MVP: only `ui-api-fullstack`.** (`ui-pom`, `api`, `component` arrive in V1.) | `ui-api-fullstack` |
-| `--language <lang>` | `ts` (others via packs later). | `ts` |
-| `--package-manager <pm>` | `pnpm` \| `npm` \| `yarn` \| `bun`. | auto-detect |
-| `--base-url <url>` | Seed `baseURL` in Playwright config. | prompt |
-| `--ci <provider>` | Generate CI workflow: `github` \| `gitlab` \| `none`. | `github` |
-| `--ai <agents...>` | Generate agent files: `claude` `codex` `cursor` `copilot` `all`. | `all` |
-| `--no-install` | Skip dependency install. | install |
-| `--no-example` | Skip generating/running the example test. | run example |
-| `--yes` | Accept all defaults, no prompts. | interactive |
+> The table below is the **target** option surface. Flags actually implemented in Milestone 2.5 are
+> `[directory]`, `--template`, `--force`, and the globals `--json`/`--quiet` (see the implemented
+> note after the table). The remaining options are planned for later milestones.
+
+| Option | Description | Default | Status |
+|---|---|---|---|
+| `--template <id>` | Template pack. **MVP: only `ui-api-fullstack`.** (`ui-pom`, `api`, `component` arrive in V1.) | `ui-api-fullstack` | implemented |
+| `--force` | Overwrite existing files (otherwise they are skipped). | off | implemented |
+| `--language <lang>` | `ts` (others via packs later). | `ts` | planned |
+| `--package-manager <pm>` | `pnpm` \| `npm` \| `yarn` \| `bun`. | auto-detect | planned |
+| `--base-url <url>` | Seed `baseURL` in Playwright config. | prompt | planned |
+| `--ci <provider>` | Generate CI workflow: `github` \| `gitlab` \| `none`. | `github` | planned |
+| `--ai <agents...>` | Generate agent files: `claude` `codex` `cursor` `copilot` `all`. | `all` | planned |
+| `--no-install` | Skip dependency install. | install | planned |
+| `--no-example` | Skip generating/running the example test. | run example | planned |
+| `--yes` | Accept all defaults, no prompts. | interactive | accepted (no-op) |
 
 **Behavior (target):** resolves template → previews file plan → writes → installs → runs the example test to prove green → generates AI context files. Detects an existing Playwright project and switches to *augment* mode (adds config + AI files, does not overwrite tests).
 
@@ -336,6 +341,6 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 
 ## 9. Anti-Goals (commands we deliberately won't build)
 
-- **No `testpilot run`** — that's `playwright test`. We never shadow the runner.
+- **`testpilot run` is a thin pass-through only** — it shells out to the project's local Playwright and preserves its exit code. It is **not** a custom runner and never reimplements execution; `npx playwright test` always works without it.
 - **No `testpilot assert`/custom matchers** — Playwright's `expect` stays the assertion API.
 - **No global mutable state / hidden cache** that changes results between identical runs.
