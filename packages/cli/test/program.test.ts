@@ -17,4 +17,20 @@ describe('CLI program', () => {
     const program = buildProgram()
     expect(program.description()).toContain('Playwright')
   })
+
+  it('registers the global options', () => {
+    const program = buildProgram()
+    const longs = program.options.map((option) => option.long)
+    expect(longs).toEqual(
+      expect.arrayContaining([
+        '--json',
+        '--config',
+        '--cwd',
+        '--yes',
+        '--quiet',
+        '--verbose',
+        '--no-color',
+      ]),
+    )
+  })
 })
