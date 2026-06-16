@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@testpilot/core": ["packages/core/src/index.ts"],
+      "@testpilot/locator-intelligence": ["packages/locator-intelligence/src/index.ts"],
+      "@testpilot/scaffold": ["packages/scaffold/src/index.ts"],
+      "@testpilot/templates": ["packages/templates/src/index.ts"],
+      "@testpilot/ai": ["packages/ai/src/index.ts"],
+      "@testpilot/reporters": ["packages/reporters/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src", "packages/*/test"]
+}

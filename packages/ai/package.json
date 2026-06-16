@@ -1,0 +1,20 @@
+{
+  "name": "@testpilot/ai",
+  "version": "0.0.0",
+  "description": "AI agent context generators for TestPilot QA (reserved).",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup"
+  }
+}

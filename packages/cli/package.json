@@ -1,0 +1,19 @@
+{
+  "name": "testpilot-qa",
+  "version": "0.0.0",
+  "description": "A developer-experience layer and project accelerator for Playwright.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "testpilot": "./dist/index.js",
+    "tpq": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@testpilot/core": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}

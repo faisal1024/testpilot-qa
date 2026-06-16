@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@testpilot/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

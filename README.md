@@ -1,0 +1,79 @@
+# TestPilot QA
+
+> A developer-experience layer and project accelerator for **Playwright**.
+> Not a test framework. Not a Playwright replacement. A toolkit that gets you to *good* Playwright faster — and keeps it good.
+
+TestPilot QA does three jobs:
+
+1. **Scaffold** maintainable Playwright UI + API projects from opinionated templates.
+2. **Analyze** existing tests for fragile locators and flaky patterns — *Locator Intelligence*.
+3. **Integrate** with AI coding agents (Claude Code, Codex, Cursor, Copilot) so they write good Playwright by default.
+
+Everything it generates is **ejectable plain Playwright** — zero lock-in.
+
+---
+
+## Discovery Documents
+
+This repository currently contains the architecture discovery phase. Start here:
+
+| Document | What it covers |
+|---|---|
+| [Architecture](docs/Architecture.md) | System architecture, components, package boundaries, dependency & extension strategy — plus **challenged assumptions**. |
+| [CLI Spec](docs/CLI-Spec.md) | Commands, arguments, examples, exit codes, future command roadmap. |
+| [Locator Intelligence Design](docs/Locator-Intelligence-Design.md) | Locator hierarchy, rules engine, scoring model, suggestions, future AI enhancements. |
+| [AI Agent Integration](docs/AI-Agent-Integration.md) | Claude/Codex/Cursor/Copilot support, single-source guidance, MCP, recommended repo structure. |
+| [Roadmap](docs/Roadmap.md) | MVP → V1 → V2 → V3, with sequencing rationale. |
+| [GitHub Issues](docs/GitHub-Issues.md) | Prioritized backlog: Epics → Stories → Tasks, with suggested labels. |
+
+---
+
+## The Locator Quality Hierarchy (the core idea)
+
+| Tier | Prefer | Avoid |
+|---|---|---|
+| A | `getByRole` · `getByLabel` · `getByPlaceholder` · `getByText` | — |
+| B | `getByTestId` | — |
+| C | — | raw CSS / `text=` engine strings, chained `nth()` |
+| D | — | **XPath**, `:nth-child`, class/id structural selectors |
+
+```ts
+// ❌ fragile
+page.locator('.btn-primary')
+page.locator('#container > div > button:nth-child(3)')
+
+// ✅ resilient
+page.getByRole('button', { name: 'Save' })
+page.getByLabel('Email')
+```
+
+---
+
+## Key Architectural Decisions (and pushback on the brief)
+
+- **Two-tier Locator Intelligence.** Static AST analysis ships first (detect + educate); **DOM-aware concrete suggestions** (`getByRole('button', { name: 'Save' })`) come in V2 once they can be validated. Never present a static guess as a DOM-backed fact.
+- **Reuse, don't reinvent.** Build on `@typescript-eslint/parser`; an `eslint-plugin-testpilot` follows in **V1** (the rules engine is built to make it a thin adapter) rather than competing with the linter ecosystem.
+- **One guidance source, many agent files.** `CLAUDE.md` / `AGENTS.md` / Copilot / Cursor files are *generated* from a single canonical source to prevent drift.
+- **TypeScript-first.** Other languages arrive later as community **template packs** behind a stable manifest contract — not a day-one maintainer commitment.
+- **Offline by default.** The analyzer and scaffolder need no network and no API key; LLM features are opt-in and isolated.
+
+See [Architecture §2](docs/Architecture.md) for the full set of challenged assumptions.
+
+---
+
+## Approved MVP scope
+
+Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
+
+- **Commands:** `init`, `analyze`, `doctor`, `explain` (only).
+- **One template:** `ui-api-fullstack` (UI + API in a single TypeScript project).
+- **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
+- **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.
+- **Internal interfaces only** — no public plugin system yet.
+- **Deferred:** `fix`, ESLint plugin, CI/SARIF, DOM-aware suggestions, MCP, LLM features, and the docs portal.
+
+See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
+
+## Status
+
+Approved — discovery docs aligned to the updated plan. No implementation code yet; Milestone 1 (repo foundation) is specified in `docs/Milestone-1-Plan.md` and awaits approval before coding begins.

@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a problem with TestPilot QA
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Commands run, config used, and a minimal example if possible.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TestPilot QA version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, OS, package manager, Playwright version.
+    validations:
+      required: true
