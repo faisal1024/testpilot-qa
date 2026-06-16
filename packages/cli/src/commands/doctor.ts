@@ -1,6 +1,10 @@
-import { ExitCode } from '../util/exit-codes.js'
+import type { Command } from 'commander'
+import { readGlobalOptions } from '../util/global-options.js'
+import { notImplemented } from '../util/not-implemented.js'
+import { resolveConfigOrExit } from '../util/resolve-config.js'
 
-export function doctorCommand(): never {
-  console.error('`testpilot doctor` is not yet implemented — coming in Phase 4.')
-  process.exit(ExitCode.NOT_IMPLEMENTED)
+export async function doctorCommand(_options: unknown, command: Command): Promise<never> {
+  const globals = readGlobalOptions(command)
+  await resolveConfigOrExit(globals)
+  notImplemented('doctor', 'Phase 4', globals)
 }

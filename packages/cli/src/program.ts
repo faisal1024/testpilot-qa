@@ -6,13 +6,20 @@ import { explainCommand } from './commands/explain.js'
 import { initCommand } from './commands/init.js'
 
 /**
- * Builds the TestPilot CLI program. Milestone 1 wires the command shell only;
- * each command currently delegates to a placeholder handler.
+ * Builds the TestPilot CLI program. Milestone 2 adds the global option surface
+ * and config loading; command handlers remain placeholders until their phases.
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
     .description('A developer-experience layer and project accelerator for Playwright.')
     .version(VERSION, '-v, --version')
+    .option('--json', 'Output machine-readable JSON.', false)
+    .option('--config <path>', 'Path to testpilot.config.ts.')
+    .option('--cwd <path>', 'Run as if in this directory.')
+    .option('-y, --yes', 'Skip confirmation prompts.', false)
+    .option('-q, --quiet', 'Only print errors.', false)
+    .option('--verbose', 'Enable verbose logging.', false)
+    .option('--no-color', 'Disable colored output.')
 
   program
     .command('init')

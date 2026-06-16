@@ -4,9 +4,17 @@
   "description": "A developer-experience layer and project accelerator for Playwright.",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "testpilot": "./dist/index.js",
-    "tpq": "./dist/index.js"
+    "testpilot": "./dist/cli.js",
+    "tpq": "./dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {

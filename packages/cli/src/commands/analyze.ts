@@ -1,6 +1,10 @@
-import { ExitCode } from '../util/exit-codes.js'
+import type { Command } from 'commander'
+import { readGlobalOptions } from '../util/global-options.js'
+import { notImplemented } from '../util/not-implemented.js'
+import { resolveConfigOrExit } from '../util/resolve-config.js'
 
-export function analyzeCommand(): never {
-  console.error('`testpilot analyze` is not yet implemented — coming in Milestone 4.')
-  process.exit(ExitCode.NOT_IMPLEMENTED)
+export async function analyzeCommand(_options: unknown, command: Command): Promise<never> {
+  const globals = readGlobalOptions(command)
+  await resolveConfigOrExit(globals)
+  notImplemented('analyze', 'Milestone 4', globals)
 }
