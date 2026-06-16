@@ -46,6 +46,9 @@ importers:
       '@testpilot/core':
         specifier: workspace:*
         version: link:../core
+      '@testpilot/scaffold':
+        specifier: workspace:*
+        version: link:../scaffold
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -63,7 +66,11 @@ importers:
 
   packages/reporters: {}
 
-  packages/scaffold: {}
+  packages/scaffold:
+    dependencies:
+      '@testpilot/templates':
+        specifier: workspace:*
+        version: link:../templates
 
   packages/templates: {}
 

@@ -1,9 +1,8 @@
 {
   "name": "@testpilot/templates",
   "version": "0.0.0",
-  "description": "Project templates for TestPilot QA (reserved).",
+  "description": "Built-in project templates for TestPilot QA.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

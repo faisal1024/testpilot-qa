@@ -1,7 +1,8 @@
 /**
  * @testpilot/core — shared types and utilities.
  *
- * Milestone 2 adds the configuration surface (schema, loader, helpers).
+ * Milestone 2 added the configuration surface (schema, loader, helpers).
+ * Milestone 2.5 adds project discovery and the Playwright pass-through runner.
  * Feature types (Finding, LocatorContext, Rule, Reporter, …) arrive in their
  * respective phases.
  */
@@ -26,3 +27,17 @@ export {
   type TestPilotConfig,
   type TestPilotConfigInput,
 } from './config/schema.js'
+export {
+  findPlaywrightConfig,
+  findProjectRoot,
+  findUp,
+  isDirectory,
+  resolvePlaywrightBin,
+} from './project/discovery.js'
+export {
+  buildPlaywrightArgs,
+  defaultProcessRunner,
+  type ProcessRunner,
+  runPlaywright,
+  type RunPlaywrightOptions,
+} from './project/run-playwright.js'

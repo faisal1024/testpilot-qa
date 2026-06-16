@@ -13,6 +13,33 @@ Everything it generates is **ejectable plain Playwright** — zero lock-in.
 
 ---
 
+## Quick start
+
+```bash
+# Scaffold a TypeScript Playwright project (UI + API examples)
+npx testpilot-qa init demo --yes
+cd demo
+
+# Install Playwright and run the generated tests
+npm install
+npx playwright install
+npx playwright test          # plain Playwright — always works
+
+# …or run through TestPilot (a thin pass-through around Playwright)
+npx testpilot-qa run
+npx testpilot-qa run -- --project=chromium
+```
+
+`testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
+finds the Playwright config, and forwards to your local Playwright, preserving its exit code.
+Delete `testpilot.config.ts` and the `testpilot-qa` dependency and you still have a working
+Playwright suite.
+
+**Available today:** `init` (scaffold) and `run` (Playwright pass-through). `analyze`, `doctor`,
+and `explain` are registered but print a "not yet implemented" notice until their milestones.
+
+---
+
 ## Discovery Documents
 
 This repository currently contains the architecture discovery phase. Start here:
