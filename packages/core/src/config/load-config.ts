@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { createJiti } from 'jiti'
 import { ConfigError } from './errors.js'
@@ -49,6 +49,9 @@ export function findConfigFile(cwd: string): string | null {
  */
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadConfigResult> {
   const cwd = options.cwd ? resolve(options.cwd) : process.cwd()
+  if (!existsSync(cwd) || !statSync(cwd).isDirectory()) {
+    throw new ConfigError(`Working directory does not exist: ${cwd}`)
+  }
 
   let filepath: string | null
   if (options.configPath) {

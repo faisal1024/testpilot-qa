@@ -88,4 +88,8 @@ describe('loadConfig', () => {
       loadConfig({ cwd: dir, configPath: 'does-not-exist.config.ts' }),
     ).rejects.toBeInstanceOf(ConfigError)
   })
+
+  it('throws ConfigError when the cwd does not exist', async () => {
+    await expect(loadConfig({ cwd: join(dir, 'nope') })).rejects.toBeInstanceOf(ConfigError)
+  })
 })
