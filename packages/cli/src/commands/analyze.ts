@@ -1,7 +1,7 @@
 import { analyze } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
-import { isBelowThreshold, resolveMinScore } from '../util/gating.js'
+import { isBelowThreshold, isValidMinScore, resolveMinScore } from '../util/gating.js'
 import { readGlobalOptions } from '../util/global-options.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
@@ -17,7 +17,7 @@ export async function analyzeCommand(
 ): Promise<void> {
   const globals = readGlobalOptions(command)
 
-  if (options.minScore !== undefined && Number.isNaN(options.minScore)) {
+  if (options.minScore !== undefined && !isValidMinScore(options.minScore)) {
     if (!globals.quiet) {
       console.error('--min-score must be a number between 0 and 100.')
     }

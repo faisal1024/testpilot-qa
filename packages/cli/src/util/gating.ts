@@ -15,3 +15,8 @@ export function resolveMinScore(
 export function isBelowThreshold(score: number, threshold: number | undefined): boolean {
   return threshold !== undefined && score < threshold
 }
+
+/** Validates a `--min-score` value against the same 0–100 range as config. */
+export function isValidMinScore(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 100
+}
