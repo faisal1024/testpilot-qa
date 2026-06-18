@@ -25,15 +25,24 @@ npm install
 npx playwright install
 npx playwright test          # plain Playwright — always works
 
+# Generated npm scripts (plain Playwright)
+npm run test:e2e             # all tests
+npm run test:e2e:ui          # UI tests only
+npm run test:e2e:api         # API tests only
+npm run test:e2e:parallel    # run with 2 workers
+
 # …or run through TestPilot (a thin pass-through around Playwright)
 npx testpilot-qa run
-npx testpilot-qa run -- --project=chromium
+npx testpilot-qa run -- --workers=2
+npx testpilot-qa run -- tests/ui --workers=2
 ```
 
 `testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
 finds the Playwright config, and forwards to your local Playwright, preserving its exit code.
-Delete `testpilot.config.ts` and the `testpilot-qa` dependency and you still have a working
-Playwright suite.
+Parallelism is **Playwright's** (`fullyParallel: true` + `--workers`), not TestPilot's — any
+Playwright flag passes straight through after `--`. The generated sample tests are independent and
+parallel-safe by design. Delete `testpilot.config.ts` and the `testpilot-qa` dependency and you
+still have a working Playwright suite.
 
 ```bash
 # Analyze locator quality in your existing tests (read-only)

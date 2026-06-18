@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -87,6 +87,26 @@ describe('buildPlaywrightArgs', () => {
       }),
     ).toEqual(['test', '--config', '/p/playwright.config.ts'])
   })
+
+  it('forwards Playwright parallelism args verbatim', () => {
+    expect(
+      buildPlaywrightArgs({
+        projectRoot: dir,
+        binPath: '/bin/playwright',
+        playwrightConfigPath: null,
+        forwardedArgs: ['--workers=2'],
+      }),
+    ).toEqual(['test', '--workers=2'])
+
+    expect(
+      buildPlaywrightArgs({
+        projectRoot: dir,
+        binPath: '/bin/playwright',
+        playwrightConfigPath: null,
+        forwardedArgs: ['tests/ui', '--workers=2'],
+      }),
+    ).toEqual(['test', 'tests/ui', '--workers=2'])
+  })
 })
 
 describe('runPlaywright', () => {
@@ -109,4 +129,24 @@ describe('runPlaywright', () => {
       { command: '/bin/playwright', args: ['test', 'tests/example.spec.ts'], cwd: dir },
     ])
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'forwards --workers=2 to the real binary and preserves its exit code',
+    async () => {
+      const argvFile = join(dir, 'argv.txt')
+      const bin = join(dir, 'fake-playwright')
+      writeFileSync(bin, `#!/usr/bin/env bash\necho "$@" > "${argvFile}"\nexit 3\n`)
+      chmodSync(bin, 0o755)
+
+      const code = await runPlaywright({
+        projectRoot: dir,
+        binPath: bin,
+        playwrightConfigPath: null,
+        forwardedArgs: ['tests/ui', '--workers=2'],
+      })
+
+      expect(code).toBe(3)
+      expect(readFileSync(argvFile, 'utf8').trim()).toBe('test tests/ui --workers=2')
+    },
+  )
 })

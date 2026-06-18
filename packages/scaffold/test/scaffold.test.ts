@@ -19,6 +19,7 @@ const EXPECTED_FILES = [
   'playwright.config.ts',
   'testpilot.config.ts',
   'tests/ui/example.spec.ts',
+  'tests/ui/todo.spec.ts',
   'tests/api/example.spec.ts',
   '.gitignore',
   '.github/workflows/e2e.yml',
@@ -55,6 +56,38 @@ describe('scaffoldProject', () => {
 
     const pwConfig = readFileSync(join(dir, 'playwright.config.ts'), 'utf8')
     expect(pwConfig).toContain("from '@playwright/test'")
+  })
+
+  it('configures Playwright for parallel execution', () => {
+    scaffoldProject({ targetDir: dir, projectName: 'demo' })
+    const pwConfig = readFileSync(join(dir, 'playwright.config.ts'), 'utf8')
+    expect(pwConfig).toContain('fullyParallel: true')
+    expect(pwConfig).toContain('workers:')
+    expect(pwConfig).toContain('process.env.CI ? 2 : undefined')
+  })
+
+  it('generates plain-Playwright execution scripts', () => {
+    scaffoldProject({ targetDir: dir, projectName: 'demo' })
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    expect(pkg.scripts).toMatchObject({
+      'test:e2e': 'playwright test',
+      'test:e2e:ui': 'playwright test tests/ui',
+      'test:e2e:api': 'playwright test tests/api',
+      'test:e2e:parallel': 'playwright test --workers=2',
+      'test:e2e:headed': 'playwright test --headed',
+    })
+  })
+
+  it('generates two independent UI samples and one API sample', () => {
+    scaffoldProject({ targetDir: dir, projectName: 'demo' })
+    expect(existsSync(join(dir, 'tests/ui/example.spec.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'tests/ui/todo.spec.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'tests/api/example.spec.ts'))).toBe(true)
+    // The samples use user-facing locators only (clean for the analyzer).
+    const todo = readFileSync(join(dir, 'tests/ui/todo.spec.ts'), 'utf8')
+    expect(todo).toContain('getByLabel')
+    expect(todo).toContain('getByRole')
+    expect(todo).not.toContain('waitForTimeout')
   })
 
   it('defaults the project name to the target directory basename', () => {
