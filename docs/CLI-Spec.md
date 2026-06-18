@@ -4,9 +4,12 @@
 > Binary name: `testpilot` (alias `tpq`)
 > Bootstrap: `npx testpilot-qa` / `npm create testpilot-qa@latest`
 
-> **MVP command surface (approved plan):** `init`, `analyze`, `doctor`, `explain`.
+> **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`.
 > `fix`, `add`, and `list` are **deferred to V1**. `init` ships a **single** `ui-api-fullstack`
 > template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
+>
+> **Implemented (Milestone 2.5):** `init` (scaffold) and `run` (a thin Playwright pass-through —
+> not a custom runner). `analyze`/`doctor`/`explain` are registered placeholders until their phases.
 
 ---
 
@@ -47,32 +50,69 @@ Scaffold a new TestPilot-managed Playwright project, or add TestPilot to an exis
 testpilot init [directory] [options]
 ```
 
-| Option | Description | Default |
-|---|---|---|
-| `--template <id>` | Template pack. **MVP: only `ui-api-fullstack`.** (`ui-pom`, `api`, `component` arrive in V1.) | `ui-api-fullstack` |
-| `--language <lang>` | `ts` (others via packs later). | `ts` |
-| `--package-manager <pm>` | `pnpm` \| `npm` \| `yarn` \| `bun`. | auto-detect |
-| `--base-url <url>` | Seed `baseURL` in Playwright config. | prompt |
-| `--ci <provider>` | Generate CI workflow: `github` \| `gitlab` \| `none`. | `github` |
-| `--ai <agents...>` | Generate agent files: `claude` `codex` `cursor` `copilot` `all`. | `all` |
-| `--no-install` | Skip dependency install. | install |
-| `--no-example` | Skip generating/running the example test. | run example |
-| `--yes` | Accept all defaults, no prompts. | interactive |
+> The table below is the **target** option surface. Flags actually implemented in Milestone 2.5 are
+> `[directory]`, `--template`, `--force`, and the globals `--json`/`--quiet` (see the implemented
+> note after the table). The remaining options are planned for later milestones.
 
-**Behavior:** resolves template → previews file plan → writes → installs → runs the example test to prove green → generates AI context files. Detects an existing Playwright project and switches to *augment* mode (adds config + AI files, does not overwrite tests).
+| Option | Description | Default | Status |
+|---|---|---|---|
+| `--template <id>` | Template pack. **MVP: only `ui-api-fullstack`.** (`ui-pom`, `api`, `component` arrive in V1.) | `ui-api-fullstack` | implemented |
+| `--force` | Overwrite existing files (otherwise they are skipped). | off | implemented |
+| `--language <lang>` | `ts` (others via packs later). | `ts` | planned |
+| `--package-manager <pm>` | `pnpm` \| `npm` \| `yarn` \| `bun`. | auto-detect | planned |
+| `--base-url <url>` | Seed `baseURL` in Playwright config. | prompt | planned |
+| `--ci <provider>` | Generate CI workflow: `github` \| `gitlab` \| `none`. | `github` | planned |
+| `--ai <agents...>` | Generate agent files: `claude` `codex` `cursor` `copilot` `all`. | `all` | planned |
+| `--no-install` | Skip dependency install. | install | planned |
+| `--no-example` | Skip generating/running the example test. | run example | planned |
+| `--yes` | Accept all defaults, no prompts. | interactive | accepted (no-op) |
+
+**Behavior (target):** resolves template → previews file plan → writes → installs → runs the example test to prove green → generates AI context files. Detects an existing Playwright project and switches to *augment* mode (adds config + AI files, does not overwrite tests).
+
+> **As implemented (Milestone 2.5):** generates the `ui-api-fullstack` files (`package.json`,
+> `playwright.config.ts`, `testpilot.config.ts`, UI + API example tests, `.gitignore`, README,
+> GitHub Actions workflow). Supported flags today: `[directory]` (default `.`), `--template`
+> (default `ui-api-fullstack`), `--force`, and the global `--json`/`--quiet`. **Never overwrites**
+> existing files without `--force` (they are reported as skipped). Dependency install, AI-file
+> generation, `--base-url`, `--ci`, and prompts are deferred to later milestones; `--yes` is
+> accepted (init is already non-interactive).
 
 **Examples**
 ```bash
-# Interactive
-npm create testpilot-qa@latest
-
-# Fully specified, non-interactive (CI / agents)
-testpilot init e2e --template ui-api-fullstack --base-url https://staging.acme.dev \
-  --package-manager pnpm --ci github --ai all --yes
-
-# Add TestPilot to an existing Playwright repo
-testpilot init --ai claude,cursor --no-example
+testpilot init demo --yes
+testpilot init demo --template ui-api-fullstack --force
+testpilot init demo --json
 ```
+
+---
+
+### 3.1a `testpilot run` *(MVP — implemented in 2.5)*
+
+Run Playwright tests through a **thin pass-through**. TestPilot adds no execution semantics — Playwright remains the runner.
+
+```
+testpilot run [-- <playwright args>]
+```
+
+**Behavior:** finds the project root (nearest `package.json`), loads `testpilot.config.ts` if
+present, resolves the Playwright config (from `config.playwrightConfig` or discovery), invokes the
+**local** `node_modules/.bin/playwright test`, forwards any args after `--` verbatim, and exits with
+Playwright's own exit code.
+
+| Situation | Exit code |
+|---|---|
+| Playwright's result | passes through (Playwright's code) |
+| Invalid `testpilot.config.ts` | `3` |
+| Playwright not installed locally | `4` (message: run `npm install`) |
+
+**Examples**
+```bash
+testpilot run
+testpilot run -- --project=chromium
+testpilot run -- tests/example.spec.ts
+```
+
+The generated project must still run with plain `npx playwright test`.
 
 ---
 
@@ -301,6 +341,6 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 
 ## 9. Anti-Goals (commands we deliberately won't build)
 
-- **No `testpilot run`** — that's `playwright test`. We never shadow the runner.
+- **`testpilot run` is a thin pass-through only** — it shells out to the project's local Playwright and preserves its exit code. It is **not** a custom runner and never reimplements execution; `npx playwright test` always works without it.
 - **No `testpilot assert`/custom matchers** — Playwright's `expect` stays the assertion API.
 - **No global mutable state / hidden cache** that changes results between identical runs.

@@ -51,12 +51,16 @@ The credible core: scaffold a great project, detect the worst locators reliably,
 - Config loading (`testpilot.config.ts` + zod) wired but minimal.
 - *Not built:* `fix`, `heal`, MCP, DOM-aware suggestions, docs portal, AI generation.
 
-### Phase 2 — Project Scaffolding MVP  *(Milestone 3)*
+### Phase 2 — Project Scaffolding MVP  *(Milestone 2.5)*
 - `testpilot init` with **one** `ui-api-fullstack` TypeScript template.
-- UI example test + API example test + `playwright.config.ts` + environment config.
-- GitHub Actions template + README template.
-- Generated AI guidance files **from one canonical source** (`testpilot/agent-guidance.md`).
-- **Success:** `npx testpilot-qa init` → installs cleanly → example test passes → output is plain/ejectable Playwright.
+- UI example test + API example test + `playwright.config.ts` + `testpilot.config.ts`.
+- GitHub Actions template + README template; overwrite protection (`--force`).
+- **`testpilot run`** — a thin Playwright pass-through (convenience wrapper, **not** a custom
+  runner). Locates the project, finds the Playwright config, forwards args after `--`, preserves
+  Playwright's exit code. Reconciles the original "early `run`" idea without architectural debt.
+- Generated AI guidance files from one canonical source — *deferred to a later milestone*.
+- **Success:** `npx testpilot-qa init demo --yes` → `npx playwright test` passes (verified: UI + API
+  example tests green) → output is plain/ejectable Playwright; `testpilot run` delegates to it.
 
 ### Phase 3 — Locator Intelligence Tier 1  *(Milestones 4–5)*
 - AST-based locator extraction; `LocatorContext` model; rules engine.

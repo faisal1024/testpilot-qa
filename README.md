@@ -13,6 +13,33 @@ Everything it generates is **ejectable plain Playwright** — zero lock-in.
 
 ---
 
+## Quick start
+
+```bash
+# Scaffold a TypeScript Playwright project (UI + API examples)
+npx testpilot-qa init demo --yes
+cd demo
+
+# Install Playwright and run the generated tests
+npm install
+npx playwright install
+npx playwright test          # plain Playwright — always works
+
+# …or run through TestPilot (a thin pass-through around Playwright)
+npx testpilot-qa run
+npx testpilot-qa run -- --project=chromium
+```
+
+`testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
+finds the Playwright config, and forwards to your local Playwright, preserving its exit code.
+Delete `testpilot.config.ts` and the `testpilot-qa` dependency and you still have a working
+Playwright suite.
+
+**Available today:** `init` (scaffold) and `run` (Playwright pass-through). `analyze`, `doctor`,
+and `explain` are registered but print a "not yet implemented" notice until their milestones.
+
+---
+
 ## Discovery Documents
 
 This repository currently contains the architecture discovery phase. Start here:
@@ -65,7 +92,7 @@ See [Architecture §2](docs/Architecture.md) for the full set of challenged assu
 
 Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 
-- **Commands:** `init`, `analyze`, `doctor`, `explain` (only).
+- **Commands:** `init`, `run`, `analyze`, `doctor`, `explain`. (`init` + `run` are implemented; the rest are placeholders until their milestones.)
 - **One template:** `ui-api-fullstack` (UI + API in a single TypeScript project).
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.
@@ -76,4 +103,6 @@ See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
 ## Status
 
-Approved — discovery docs aligned to the updated plan. No implementation code yet; Milestone 1 (repo foundation) is specified in `docs/Milestone-1-Plan.md` and awaits approval before coding begins.
+Active development. Milestone 1 (repo foundation) and Milestone 2 (CLI basics: global options + config
+loading) are merged. Milestone 2.5 implements `init` (scaffolding) and `run` (Playwright pass-through).
+Locator Intelligence (`analyze`) is next. See [Roadmap](docs/Roadmap.md).

@@ -4,10 +4,12 @@ import { analyzeCommand } from './commands/analyze.js'
 import { doctorCommand } from './commands/doctor.js'
 import { explainCommand } from './commands/explain.js'
 import { initCommand } from './commands/init.js'
+import { runCommand } from './commands/run.js'
 
 /**
- * Builds the TestPilot CLI program. Milestone 2 adds the global option surface
- * and config loading; command handlers remain placeholders until their phases.
+ * Builds the TestPilot CLI program. Milestone 2.5 implements `init`
+ * (scaffolding) and `run` (a thin Playwright pass-through); `analyze`, `doctor`
+ * and `explain` remain placeholders until their phases.
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -22,9 +24,18 @@ export function buildProgram(): Command {
     .option('--no-color', 'Disable colored output.')
 
   program
-    .command('init')
-    .description('Scaffold a Playwright project (Milestone 3).')
+    .command('init [directory]')
+    .description('Scaffold a Playwright project.')
+    .option('--template <id>', 'Template to use.', 'ui-api-fullstack')
+    .option('--force', 'Overwrite existing files.', false)
     .action(initCommand)
+
+  program
+    .command('run')
+    .description('Run Playwright tests — a thin pass-through. Forward args after `--`.')
+    .allowUnknownOption()
+    .allowExcessArguments()
+    .action(runCommand)
 
   program
     .command('analyze')

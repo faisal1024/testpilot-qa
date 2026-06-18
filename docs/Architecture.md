@@ -5,7 +5,8 @@
 > Scope: System architecture, components, package boundaries, dependency & extension strategy
 
 > **Alignment note (approved plan):** MVP ships **one** template (`ui-api-fullstack`), the
-> MVP command set is `init` / `analyze` / `doctor` / `explain`, rules/reporters/generators are
+> MVP command set is `init` / `run` / `analyze` / `doctor` / `explain` (`init` + `run` implemented in
+> Milestone 2.5; `run` is a thin Playwright pass-through), rules/reporters/generators are
 > **simple internal interfaces** (no public plugin system yet), and `fix`, the ESLint plugin, MCP,
 > DOM-aware suggestions, and the docs portal are explicitly deferred. See §2 and `Roadmap.md`.
 

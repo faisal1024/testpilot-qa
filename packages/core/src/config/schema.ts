@@ -26,16 +26,24 @@ export const aiSchema = z
 /**
  * The TestPilot configuration shape (see docs/CLI-Spec.md §4).
  *
- * Milestone 2 defines the config surface and validation only — none of the
- * referenced features (rules, scoring) are implemented yet.
+ * Milestone 2.5 adds `playwrightConfig` (used by `testpilot run`). Rules,
+ * scoring, and AI fields describe the surface for later milestones; none of
+ * those features are implemented yet.
+ *
+ * Unknown top-level keys are **rejected** (`.strict()`) so typos surface
+ * immediately rather than being silently ignored. New fields are added to this
+ * schema as features land.
  */
-export const configSchema = z.object({
-  testDir: z.string().default('tests'),
-  include: z.array(z.string()).default(['**/*.spec.ts', '**/*.test.ts']),
-  rules: z.record(severitySchema).default({}),
-  scoring: scoringSchema,
-  ai: aiSchema,
-})
+export const configSchema = z
+  .object({
+    testDir: z.string().default('tests'),
+    playwrightConfig: z.string().default('playwright.config.ts'),
+    include: z.array(z.string()).default(['**/*.spec.ts', '**/*.test.ts']),
+    rules: z.record(severitySchema).default({}),
+    scoring: scoringSchema,
+    ai: aiSchema,
+  })
+  .strict()
 
 export type TestPilotConfig = z.infer<typeof configSchema>
 export type TestPilotConfigInput = z.input<typeof configSchema>

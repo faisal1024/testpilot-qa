@@ -30,6 +30,7 @@ function writeConfig(targetDir: string, source: string): string {
 describe('defaultConfig', () => {
   it('applies sensible defaults', () => {
     expect(defaultConfig.testDir).toBe('tests')
+    expect(defaultConfig.playwrightConfig).toBe('playwright.config.ts')
     expect(defaultConfig.include).toEqual(['**/*.spec.ts', '**/*.test.ts'])
     expect(defaultConfig.scoring.minScore).toBe(80)
     expect(defaultConfig.scoring.weights).toEqual({ error: 5, warn: 2, info: 0.5 })
@@ -47,6 +48,11 @@ describe('defineConfig', () => {
 describe('configSchema', () => {
   it('rejects an out-of-range minScore', () => {
     const result = configSchema.safeParse({ scoring: { minScore: 150 } })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects unknown top-level keys', () => {
+    const result = configSchema.safeParse({ nonsense: true })
     expect(result.success).toBe(false)
   })
 })
