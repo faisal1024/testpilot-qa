@@ -32,7 +32,8 @@ describe('defaultConfig', () => {
     expect(defaultConfig.testDir).toBe('tests')
     expect(defaultConfig.playwrightConfig).toBe('playwright.config.ts')
     expect(defaultConfig.include).toEqual(['**/*.spec.ts', '**/*.test.ts'])
-    expect(defaultConfig.scoring.minScore).toBe(80)
+    // minScore is optional (no default) so `analyze` does not gate unless asked.
+    expect(defaultConfig.scoring.minScore).toBeUndefined()
     expect(defaultConfig.scoring.weights).toEqual({ error: 5, warn: 2, info: 0.5 })
     expect(defaultConfig.ai.agents).toEqual(['claude'])
   })

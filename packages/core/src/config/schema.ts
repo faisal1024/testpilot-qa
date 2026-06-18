@@ -6,7 +6,9 @@ export type Severity = z.infer<typeof severitySchema>
 
 export const scoringSchema = z
   .object({
-    minScore: z.number().min(0).max(100).default(80),
+    // Optional on purpose: when unset (and no --min-score flag), `analyze` does
+    // not gate. A default here would silently gate every run.
+    minScore: z.number().min(0).max(100).optional(),
     weights: z
       .object({
         error: z.number().nonnegative().default(5),

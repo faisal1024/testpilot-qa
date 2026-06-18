@@ -40,6 +40,9 @@ export function buildProgram(): Command {
   program
     .command('analyze [patterns...]')
     .description('Analyze locator quality in test files.')
+    .option('--min-score <number>', 'Fail (non-zero exit) if the score is below this value.', (v) =>
+      Number(v),
+    )
     .action(analyzeCommand)
 
   program.command('doctor').description('Diagnose the project (Phase 4).').action(doctorCommand)

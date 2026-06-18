@@ -14,6 +14,7 @@ import { parseSource } from './parser.js'
 import { resolveTestFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
+import { computeScore } from './score.js'
 
 export interface AnalyzeOptions {
   /** Directory analysis is relative to (file discovery and reported paths). */
@@ -81,6 +82,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
+  let callSites = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(options.cwd, absolute))
@@ -100,7 +102,10 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       continue
     }
 
-    for (const context of extractLocators(code, program)) {
+    const contexts = extractLocators(code, program)
+    callSites += contexts.length
+
+    for (const context of contexts) {
       for (const { rule, severity } of rules) {
         const violation = rule.evaluate(context)
         if (!violation) {
@@ -130,6 +135,9 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     bySeverity[finding.severity] += 1
   }
 
+  // Parse errors are reported but do not penalize the score in this milestone.
+  const score = computeScore(findings, callSites, options.config.scoring.weights)
+
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     command: 'analyze',
@@ -139,6 +147,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       findings: findings.length,
       bySeverity,
     },
+    score,
     findings,
     warnings,
     parseErrors,

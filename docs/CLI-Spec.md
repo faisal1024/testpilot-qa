@@ -126,15 +126,28 @@ Run Locator Intelligence over test files. Read-only.
 testpilot analyze [globs...] [options]
 ```
 
-> **As implemented (Milestone 3B):** the full MVP Tier 1 rule set runs —
+> **As implemented (Milestone 3B–3C):** the full MVP Tier 1 rule set runs —
 > `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`,
 > `prefer-user-facing-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
 > positional globs, else `config.include` resolved under `config.testDir`. Output is the human
 > table (default) or stable `--json`. Per-rule **severity is config-driven** (`rules: { 'no-xpath':
 > 'warn' }`; `'off'` disables). Unknown rule ids in config surface as **warnings** (not failures).
-> Unparseable files are reported in `parseErrors` and skipped. **Reporting-only: exit code is 0**
-> even with findings or parse errors — `--min-score` / score gating arrives in Milestone 3C.
-> Rules give **category-level guidance only** (no concrete, DOM-derived rewrites).
+> Unparseable files are reported in `parseErrors` and skipped. Rules give **category-level guidance
+> only** (no concrete, DOM-derived rewrites).
+>
+> **Scoring & gating (3C):** every run computes a deterministic, static **Locator Quality Score**
+> (0–100) with a letter grade (A ≥90, B ≥80, C ≥70, D ≥60, F <60) and four sub-scores — Resilience
+> (locator rules), Flakiness (flakiness rules), Accessibility, Maintainability (the last two stay
+> 100 until such rules exist). **Score model:** `penalty = Σ severity weight`,
+> `maxPenalty = analyzed call-sites × error weight`, `score = clamp(round(100 × (1 − penalty/maxPenalty)), 0, 100)`;
+> weights come from `config.scoring.weights`. **Zero call-sites → 100/A** (no detectable debt).
+> Parse errors are reported but **do not** affect the score yet.
+>
+> **`--min-score <n>`** gates CI: if the score is below `n`, the command exits **1** with a clear
+> message; otherwise (and whenever no threshold is set) it exits **0**. **Precedence:** the
+> `--min-score` flag wins; otherwise `config.scoring.minScore`; otherwise no gating. `--json` still
+> prints the full report (including `score`) even when the gate fails. Still Tier 1 / static — not
+> DOM-aware.
 
 | Option | Description | Default | Version |
 |---|---|---|---|
@@ -282,18 +295,28 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.1`)**. (`score` joins `summary` in Milestone 3C;
-DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.2`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "command": "analyze",
   "summary": {
     "filesAnalyzed": 3,
     "filesWithParseErrors": 0,
     "findings": 9,
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
+  },
+  "score": {
+    "score": 18,
+    "grade": "F",
+    "callSites": 8,
+    "subScores": {
+      "resilience": { "score": 30, "grade": "F" },
+      "accessibility": { "score": 100, "grade": "A" },
+      "maintainability": { "score": 100, "grade": "A" },
+      "flakiness": { "score": 88, "grade": "B" }
+    }
   },
   "findings": [
     {

@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.1')
+    expect(report.schemaVersion).toBe('1.2')
     expect(report.summary).toEqual({
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
@@ -149,5 +149,71 @@ describe('analyze — Tier 1 rule set', () => {
     const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e/**/*.spec.ts'] })
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings.length).toBeGreaterThan(0)
+  })
+
+  describe('scoring', () => {
+    it('scores a clean, user-facing suite as 100/A', async () => {
+      const clean = [
+        "import { test } from '@playwright/test'",
+        "test('clean', async ({ page }) => {",
+        "  await page.getByRole('button', { name: 'Save' }).click()",
+        "  await page.getByLabel('Email').fill('x')",
+        '})',
+      ].join('\n')
+      writeFixture('tests/clean.spec.ts', clean)
+      const report = await analyze({ cwd: dir, config: config() })
+      expect(report.score.score).toBe(100)
+      expect(report.score.grade).toBe('A')
+      expect(report.score.callSites).toBe(2)
+    })
+
+    it('lowers the score for fragile locators with dimension breakdown', async () => {
+      writeFixture('tests/all.spec.ts', ALL_RULES)
+      const report = await analyze({ cwd: dir, config: config() })
+      // 8 call-sites; penalty 33 (5 errors × 5 + 4 warns × 2) / max 40 → 18 (F).
+      expect(report.score.callSites).toBe(8)
+      expect(report.score).toMatchObject({ score: 18, grade: 'F' })
+      expect(report.score.subScores.resilience).toEqual({ score: 30, grade: 'F' })
+      expect(report.score.subScores.flakiness).toEqual({ score: 88, grade: 'B' })
+      expect(report.score.subScores.accessibility.score).toBe(100)
+      expect(report.score.subScores.maintainability.score).toBe(100)
+    })
+
+    it('reflects rule severity overrides and off in the score', async () => {
+      writeFixture('tests/all.spec.ts', ALL_RULES)
+      const allOff = await analyze({
+        cwd: dir,
+        config: config({
+          rules: {
+            'no-xpath': 'off',
+            'no-css-class-selector': 'off',
+            'no-nth-child': 'off',
+            'no-deep-css-chain': 'off',
+            'prefer-user-facing-locator': 'off',
+            'no-hard-wait': 'off',
+          },
+        }),
+      })
+      expect(allOff.score.score).toBe(100)
+      expect(allOff.findings).toEqual([])
+    })
+
+    it('respects custom scoring weights', async () => {
+      writeFixture('tests/all.spec.ts', ALL_RULES)
+      const report = await analyze({
+        cwd: dir,
+        config: config({ scoring: { weights: { error: 5, warn: 0, info: 0 } } }),
+      })
+      // warns now cost nothing: penalty 25 / max 40 → 38 (F).
+      expect(report.score.score).toBe(38)
+    })
+
+    it('does not penalize the score for parse errors', async () => {
+      writeFixture('tests/broken.spec.ts', 'const = ;')
+      writeFixture('tests/clean.spec.ts', "page.getByRole('button')")
+      const report = await analyze({ cwd: dir, config: config() })
+      expect(report.summary.filesWithParseErrors).toBe(1)
+      expect(report.score.score).toBe(100)
+    })
   })
 })

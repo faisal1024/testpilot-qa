@@ -1,4 +1,8 @@
-import type { AnalysisReport } from '@testpilot/core'
+import type { AnalysisReport, ScoreBreakdown } from '@testpilot/core'
+
+function scoreLine(label: string, breakdown: ScoreBreakdown): string {
+  return `  ${label.padEnd(16)}${String(breakdown.score).padStart(3)}  ${breakdown.grade}`
+}
 
 /**
  * Renders a human-readable analysis report. Presentation only — kept in the CLI
@@ -6,12 +10,21 @@ import type { AnalysisReport } from '@testpilot/core'
  * a later milestone.
  */
 export function renderAnalysisText(report: AnalysisReport): string {
-  const { summary, findings, warnings, parseErrors } = report
+  const { summary, score, findings, warnings, parseErrors } = report
   const lines: string[] = []
 
   for (const warning of warnings) {
     lines.push(`⚠ ${warning.message}`)
   }
+
+  lines.push(
+    `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
+  )
+  lines.push(scoreLine('Resilience', score.subScores.resilience))
+  lines.push(scoreLine('Accessibility', score.subScores.accessibility))
+  lines.push(scoreLine('Maintainability', score.subScores.maintainability))
+  lines.push(scoreLine('Flakiness', score.subScores.flakiness))
+  lines.push('')
 
   if (findings.length === 0) {
     lines.push(`No locator issues found across ${summary.filesAnalyzed} file(s).`)
