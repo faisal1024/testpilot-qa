@@ -110,9 +110,14 @@ Playwright's own exit code.
 testpilot run
 testpilot run -- --project=chromium
 testpilot run -- tests/example.spec.ts
+testpilot run -- --workers=2              # Playwright parallelism, passed straight through
+testpilot run -- tests/ui --workers=2     # run only the UI tests, with 2 workers
 ```
 
-The generated project must still run with plain `npx playwright test`.
+Parallelism is **Playwright's** (`fullyParallel: true` + `--workers`), not TestPilot's — `run`
+forwards everything after `--` verbatim. The generated project must still run with plain
+`npx playwright test`, and exposes `test:e2e`, `test:e2e:ui`, `test:e2e:api`, `test:e2e:parallel`,
+and `test:e2e:headed` npm scripts.
 
 ---
 
