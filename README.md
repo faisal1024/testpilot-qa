@@ -62,9 +62,15 @@ Accessibility, Maintainability, and Flakiness sub-scores. Without `--min-score` 
 (exit 0); with `--min-score <n>` (or `scoring.minScore` in config — the flag wins) it exits non-zero
 when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware.
 
-**Available today:** `init` (scaffold), `run` (Playwright pass-through), and `analyze` (static
-Locator Intelligence). `doctor` and `explain` are registered but print a "not yet implemented"
-notice until their milestones.
+```bash
+# Understand any rule: why it matters, examples, and guidance
+npx testpilot-qa explain no-xpath
+npx testpilot-qa explain no-hard-wait --json
+```
+
+**Available today:** `init` (scaffold), `run` (Playwright pass-through), `analyze` (static
+Locator Intelligence), and `explain` (rule education). `doctor` is registered but prints a "not yet
+implemented" notice until its milestone.
 
 ---
 
@@ -120,7 +126,7 @@ See [Architecture §2](docs/Architecture.md) for the full set of challenged assu
 
 Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 
-- **Commands:** `init`, `run`, `analyze`, `doctor`, `explain`. (`init` + `run` are implemented; the rest are placeholders until their milestones.)
+- **Commands:** `init`, `run`, `analyze`, `explain` are implemented; `doctor` is a placeholder until its milestone.
 - **One template:** `ui-api-fullstack` (UI + API in a single TypeScript project).
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.

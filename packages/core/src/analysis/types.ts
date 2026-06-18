@@ -97,3 +97,21 @@ export interface AnalysisReport {
 
 /** Bumped on report-shape changes. 1.1 added warnings/parseErrors; 1.2 added `score`. */
 export const ANALYSIS_SCHEMA_VERSION = '1.2'
+
+/**
+ * Human + machine-readable education for a single rule (`testpilot explain`).
+ * Tier 1 / static: examples are self-contained illustrations and never claim
+ * knowledge of the user's actual DOM.
+ */
+export interface RuleExplanation {
+  id: string
+  category: RuleCategory
+  defaultSeverity: FindingSeverity
+  title: string
+  summary: string
+  whyItMatters: string
+  badExample: string
+  betterExample: string
+  guidance: string[]
+  docsUrl: string
+}

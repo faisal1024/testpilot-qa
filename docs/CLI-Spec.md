@@ -220,18 +220,24 @@ Reports: Node version, Playwright dependency presence & version vs supported ran
 
 ---
 
-### 3.5 `testpilot explain <ruleId>` *(MVP)*
+### 3.5 `testpilot explain <ruleId>` *(MVP — implemented in 4A)*
 
-Print a rule's rationale with a bad example, a better example, and a docs link — the terminal-side
-education surface that complements per-rule docs pages.
+Explain a rule: why it matters, a bad example, a better example, and guidance — the terminal-side
+education surface. Available for all six MVP Tier 1 rules.
 
 ```
 testpilot explain no-xpath
 testpilot explain prefer-user-facing-locator --json
 ```
 
-Output (human): rule id, category, severity, *why it matters*, ❌ bad snippet, ✅ better snippet,
-`docsUrl`. With `--json`: the same content as a structured object for agents.
+**Output (human):** rule id, default severity, category, title, summary, *why it matters*,
+✗ bad example, ✓ better example, guidance bullets, and `docsUrl`. With `--json`: the same fields as
+a stable object (`id`, `category`, `defaultSeverity`, `title`, `summary`, `whyItMatters`,
+`badExample`, `betterExample`, `guidance`, `docsUrl`).
+
+An unknown rule id prints a clear error listing the available rules and exits **2**. Examples are
+Tier 1 / static — self-contained illustrations that never claim knowledge of your DOM; no concrete
+DOM-derived replacements, auto-fix, or AI.
 
 ---
 
