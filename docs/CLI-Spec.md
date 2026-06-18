@@ -8,8 +8,10 @@
 > `fix`, `add`, and `list` are **deferred to V1**. `init` ships a **single** `ui-api-fullstack`
 > template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
-> **Implemented (Milestone 2.5):** `init` (scaffold) and `run` (a thin Playwright pass-through —
-> not a custom runner). `analyze`/`doctor`/`explain` are registered placeholders until their phases.
+> **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5),
+> `analyze` (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, and
+> `--min-score` gating; Milestones 3A–3C), and `explain` (rule education; 4A). `doctor` is a
+> registered placeholder until its phase.
 
 ---
 

@@ -18,7 +18,8 @@ export function explainCommand(ruleId: string, _options: unknown, command: Comma
 
   if (globals.json) {
     console.log(JSON.stringify(explanation))
-  } else {
+  } else if (!globals.quiet) {
+    // `--quiet` is errors-only: suppress the normal explanation output.
     console.log(renderExplanationText(explanation))
   }
 }
