@@ -35,8 +35,20 @@ finds the Playwright config, and forwards to your local Playwright, preserving i
 Delete `testpilot.config.ts` and the `testpilot-qa` dependency and you still have a working
 Playwright suite.
 
-**Available today:** `init` (scaffold) and `run` (Playwright pass-through). `analyze`, `doctor`,
-and `explain` are registered but print a "not yet implemented" notice until their milestones.
+```bash
+# Analyze locator quality in your existing tests (read-only)
+npx testpilot-qa analyze
+npx testpilot-qa analyze --json
+```
+
+`analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
+`no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
+`no-hard-wait` — as a human table or stable JSON. Severity is configurable per rule (`off` disables).
+It's reporting-only today (exit 0); score gating comes later.
+
+**Available today:** `init` (scaffold), `run` (Playwright pass-through), and `analyze` (static
+Locator Intelligence). `doctor` and `explain` are registered but print a "not yet implemented"
+notice until their milestones.
 
 ---
 
@@ -105,4 +117,5 @@ See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
 Active development. Milestone 1 (repo foundation) and Milestone 2 (CLI basics: global options + config
 loading) are merged. Milestone 2.5 implements `init` (scaffolding) and `run` (Playwright pass-through).
-Locator Intelligence (`analyze`) is next. See [Roadmap](docs/Roadmap.md).
+Locator Intelligence (`analyze`) ships its full MVP Tier 1 rule set (Milestone 3B); score gating is
+next. See [Roadmap](docs/Roadmap.md).

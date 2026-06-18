@@ -118,13 +118,23 @@ The generated project must still run with plain `npx playwright test`.
 
 ### 3.2 `testpilot analyze` *(MVP)*
 
-Run Locator Intelligence (and Health Rules) over test files. Read-only.
+Run Locator Intelligence over test files. Read-only.
 **MVP scope:** Tier 1 static analysis only; `table` + `json` reporters. `--dom`, `--baseline`,
 `sarif`/`html` reporters, and `--changed` land in V1+ (see tags below).
 
 ```
 testpilot analyze [globs...] [options]
 ```
+
+> **As implemented (Milestone 3B):** the full MVP Tier 1 rule set runs —
+> `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`,
+> `prefer-user-facing-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
+> positional globs, else `config.include` resolved under `config.testDir`. Output is the human
+> table (default) or stable `--json`. Per-rule **severity is config-driven** (`rules: { 'no-xpath':
+> 'warn' }`; `'off'` disables). Unknown rule ids in config surface as **warnings** (not failures).
+> Unparseable files are reported in `parseErrors` and skipped. **Reporting-only: exit code is 0**
+> even with findings or parse errors — `--min-score` / score gating arrives in Milestone 3C.
+> Rules give **category-level guidance only** (no concrete, DOM-derived rewrites).
 
 | Option | Description | Default | Version |
 |---|---|---|---|
@@ -271,30 +281,42 @@ export default defineConfig({
 
 ## 5. Output Contract (`--json`)
 
-Stable, versioned envelope so agents and CI can depend on it:
+Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
+**implemented `analyze` report (`schemaVersion` `1.1`)**. (`score` joins `summary` in Milestone 3C;
+DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "command": "analyze",
-  "summary": { "score": 78, "files": 42, "findings": 17,
-               "bySeverity": { "error": 3, "warn": 9, "info": 5 } },
+  "summary": {
+    "filesAnalyzed": 3,
+    "filesWithParseErrors": 0,
+    "findings": 9,
+    "bySeverity": { "info": 0, "warn": 4, "error": 5 }
+  },
   "findings": [
     {
       "ruleId": "no-css-class-selector",
-      "severity": "error",
       "category": "locator",
-      "message": "CSS class selector is fragile; class names change with styling.",
+      "severity": "error",
+      "message": "CSS class selectors are coupled to styling and change frequently.",
       "file": "tests/login.spec.ts",
-      "line": 14, "column": 18,
-      "raw": "page.locator('.btn-primary')",
-      "suggestion": { "kind": "category", "text": "Prefer getByRole('button', { name: ... })" },
-      "autoFixable": false,
+      "line": 3,
+      "column": 14,
+      "snippet": "page.locator('.btn-primary')",
+      "suggestion": "Prefer getByRole() or getByTestId() over class-based selectors.",
       "docsUrl": "https://testpilot.dev/rules/no-css-class-selector"
     }
-  ]
+  ],
+  "warnings": [
+    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." }
+  ],
+  "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }]
 }
 ```
+
+Findings are sorted by `(file, line, column, ruleId)`, so the report is deterministic and diffable.
 
 ---
 

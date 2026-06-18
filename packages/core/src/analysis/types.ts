@@ -10,7 +10,7 @@
 /** Severity of an emitted finding. (Config severities also include `off` to disable a rule.) */
 export type FindingSeverity = 'info' | 'warn' | 'error'
 
-/** Category a rule belongs to. Milestone 3A ships `locator` rules only. */
+/** Category a rule belongs to. */
 export type RuleCategory = 'locator' | 'flakiness' | 'accessibility' | 'maintainability'
 
 /** A single rule violation at a source location. */
@@ -32,8 +32,24 @@ export interface Finding {
   docsUrl: string
 }
 
+/** A non-fatal problem detected while analyzing (e.g. an unknown rule id in config). */
+export interface AnalysisWarning {
+  code: 'unknown-rule'
+  message: string
+  ruleId?: string
+}
+
+/** A file that could not be read or parsed. Reported, but does not fail the command. */
+export interface ParseError {
+  file: string
+  message: string
+}
+
 export interface AnalysisSummary {
+  /** Files matched for analysis (including any that failed to parse). */
   filesAnalyzed: number
+  /** Subset of matched files that could not be parsed. */
+  filesWithParseErrors: number
   findings: number
   bySeverity: Record<FindingSeverity, number>
 }
@@ -44,7 +60,9 @@ export interface AnalysisReport {
   command: 'analyze'
   summary: AnalysisSummary
   findings: Finding[]
+  warnings: AnalysisWarning[]
+  parseErrors: ParseError[]
 }
 
-/** Bumped only on breaking changes to the report shape. */
-export const ANALYSIS_SCHEMA_VERSION = '1.0'
+/** Bumped only on changes to the report shape. 1.1 added `warnings` + `parseErrors`. */
+export const ANALYSIS_SCHEMA_VERSION = '1.1'

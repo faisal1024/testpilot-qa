@@ -16,11 +16,6 @@ export async function analyzeCommand(
     cwd: globals.cwd,
     config,
     patterns: patterns.length > 0 ? patterns : undefined,
-    onParseError: (file) => {
-      if (!globals.quiet) {
-        console.error(`[testpilot] Skipped ${file}: could not parse.`)
-      }
-    },
   })
 
   if (globals.json) {
@@ -28,6 +23,6 @@ export async function analyzeCommand(
   } else if (!globals.quiet) {
     console.error(renderAnalysisText(report))
   }
-  // Milestone 3A is reporting-only; score gating (--min-score) arrives with the
-  // scoring model. Exit 0 on a successful analysis.
+  // Milestone 3B is reporting-only; score gating (--min-score) arrives in 3C.
+  // Exit 0 even when findings or parse errors are present.
 }

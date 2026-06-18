@@ -75,4 +75,27 @@ describe('extractLocators', () => {
   it('ignores non-locator method calls', () => {
     expect(extract("page.goto('/home')")).toHaveLength(0)
   })
+
+  it('extracts .nth() chains with a static numeric arg (not dynamic)', () => {
+    const contexts = extract("page.getByRole('list').nth(2)")
+    const nth = contexts.find((c) => c.apiCall === 'nth')
+    expect(nth).toBeDefined()
+    expect(nth?.isDynamic).toBe(false)
+    expect(nth?.selector).toBeUndefined()
+  })
+
+  it('extracts waitForTimeout hard waits', () => {
+    const contexts = extract('page.waitForTimeout(1000)')
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]?.apiCall).toBe('waitForTimeout')
+    expect(contexts[0]?.isDynamic).toBe(false)
+  })
+
+  it('points the location at the method name in a chain', () => {
+    // `page.getByRole('x').nth(1)` — `.nth` sits to the right of `getByRole`.
+    const contexts = extract("page.getByRole('x').nth(1)")
+    const role = contexts.find((c) => c.apiCall === 'getByRole')
+    const nth = contexts.find((c) => c.apiCall === 'nth')
+    expect(nth?.column).toBeGreaterThan(role?.column ?? 0)
+  })
 })

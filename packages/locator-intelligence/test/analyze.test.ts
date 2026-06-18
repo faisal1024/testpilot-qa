@@ -15,16 +15,21 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-const FIXTURE = [
+// A spec exercising all six MVP rules (plus clean cases that must not fire).
+const ALL_RULES = [
   "import { test } from '@playwright/test'",
-  "test('login', async ({ page }) => {",
-  "  await page.locator('.btn-primary').click()",
-  '  await page.locator(\'//button[@type="submit"]\').click()',
-  "  await page.getByRole('button', { name: 'Save' }).click()",
+  "test('violations', async ({ page }) => {",
+  "  await page.locator('.btn-primary').click()", // no-css-class-selector + prefer
+  "  await page.locator('//button').click()", // no-xpath
+  "  await page.locator('ul li:nth-child(2)').click()", // no-nth-child + prefer
+  "  await page.locator('header nav ul li a').click()", // no-deep-css-chain + prefer
+  "  await page.getByRole('list').nth(3).click()", // no-nth-child (.nth)
+  '  await page.waitForTimeout(1000)', // no-hard-wait
+  "  await page.getByRole('button', { name: 'Save' }).click()", // clean
   '})',
 ].join('\n')
 
-function writeFixture(relativePath: string, content = FIXTURE): void {
+function writeFixture(relativePath: string, content: string): void {
   const full = join(dir, relativePath)
   mkdirSync(join(full, '..'), { recursive: true })
   writeFileSync(full, content)
@@ -34,64 +39,115 @@ function config(overrides: Partial<TestPilotConfig> = {}): TestPilotConfig {
   return { ...defaultConfig, ...overrides }
 }
 
-describe('analyze', () => {
-  it('produces a stable report from configured test files', async () => {
-    writeFixture('tests/login.spec.ts')
-
+describe('analyze — Tier 1 rule set', () => {
+  it('detects all six MVP rules with a stable, JSON-serializable report', async () => {
+    writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.0')
-    expect(report.command).toBe('analyze')
-    expect(report.summary.filesAnalyzed).toBe(1)
-    expect(report.summary.findings).toBe(2)
-    expect(report.summary.bySeverity).toEqual({ error: 2, warn: 0, info: 0 })
+    expect(report.schemaVersion).toBe('1.1')
+    expect(report.summary).toEqual({
+      filesAnalyzed: 1,
+      filesWithParseErrors: 0,
+      findings: 9,
+      bySeverity: { error: 5, warn: 4, info: 0 },
+    })
 
-    const ruleIds = report.findings.map((f) => f.ruleId)
-    expect(ruleIds).toEqual(['no-css-class-selector', 'no-xpath'])
-    expect(report.findings[0]?.file).toBe('tests/login.spec.ts')
-    expect(report.findings[0]?.snippet).toContain('.btn-primary')
-    // getByRole produced no finding (no false positives).
-  })
+    const ids = [...new Set(report.findings.map((f) => f.ruleId))].sort()
+    expect(ids).toEqual([
+      'no-css-class-selector',
+      'no-deep-css-chain',
+      'no-hard-wait',
+      'no-nth-child',
+      'no-xpath',
+      'prefer-user-facing-locator',
+    ])
 
-  it('is JSON-serializable and round-trips', async () => {
-    writeFixture('tests/login.spec.ts')
-    const report = await analyze({ cwd: dir, config: config() })
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
   })
 
-  it('honors a severity override from config', async () => {
-    writeFixture('tests/login.spec.ts')
-    const report = await analyze({ cwd: dir, config: config({ rules: { 'no-xpath': 'warn' } }) })
-    const xpath = report.findings.find((f) => f.ruleId === 'no-xpath')
-    expect(xpath?.severity).toBe('warn')
-    expect(report.summary.bySeverity).toEqual({ error: 1, warn: 1, info: 0 })
+  it('produces identical output across runs (deterministic + sorted)', async () => {
+    writeFixture('tests/all.spec.ts', ALL_RULES)
+    const a = await analyze({ cwd: dir, config: config() })
+    const b = await analyze({ cwd: dir, config: config() })
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b))
   })
 
-  it('disables a rule set to off', async () => {
-    writeFixture('tests/login.spec.ts')
+  it('reports 0 findings for clean user-facing locators', async () => {
+    const clean = [
+      "import { test } from '@playwright/test'",
+      "test('clean', async ({ page }) => {",
+      "  await page.getByRole('button', { name: 'Save' }).click()",
+      "  await page.getByLabel('Email').fill('x')",
+      '})',
+    ].join('\n')
+    writeFixture('tests/clean.spec.ts', clean)
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.findings).toEqual([])
+    expect(report.summary.findings).toBe(0)
+  })
+
+  describe('config severity overrides and off', () => {
+    const single = [
+      "import { test } from '@playwright/test'",
+      "test('t', async ({ page }) => {",
+      "  await page.locator('//button').click()",
+      '  await page.waitForTimeout(5)',
+      '})',
+    ].join('\n')
+
+    it('honors a severity override for each rule', async () => {
+      writeFixture('tests/single.spec.ts', single)
+      const report = await analyze({
+        cwd: dir,
+        config: config({ rules: { 'no-xpath': 'warn', 'no-hard-wait': 'info' } }),
+      })
+      expect(report.findings.find((f) => f.ruleId === 'no-xpath')?.severity).toBe('warn')
+      expect(report.findings.find((f) => f.ruleId === 'no-hard-wait')?.severity).toBe('info')
+    })
+
+    it('disables each rule when set to off', async () => {
+      writeFixture('tests/single.spec.ts', single)
+      const report = await analyze({
+        cwd: dir,
+        config: config({ rules: { 'no-xpath': 'off', 'no-hard-wait': 'off' } }),
+      })
+      expect(report.findings).toEqual([])
+    })
+  })
+
+  it('warns about unknown rule ids without failing', async () => {
+    writeFixture('tests/single.spec.ts', "page.getByRole('button')")
     const report = await analyze({
       cwd: dir,
-      config: config({ rules: { 'no-css-class-selector': 'off' } }),
+      config: config({ rules: { 'made-up-rule': 'error', 'another-bad-id': 'warn' } }),
     })
-    expect(report.findings.map((f) => f.ruleId)).toEqual(['no-xpath'])
+    expect(report.warnings).toEqual([
+      {
+        code: 'unknown-rule',
+        ruleId: 'another-bad-id',
+        message: expect.stringContaining('another-bad-id'),
+      },
+      {
+        code: 'unknown-rule',
+        ruleId: 'made-up-rule',
+        message: expect.stringContaining('made-up-rule'),
+      },
+    ])
+  })
+
+  it('records parse errors in the report and keeps going', async () => {
+    writeFixture('tests/broken.spec.ts', 'const = ;')
+    writeFixture('tests/ok.spec.ts', "page.locator('//button')")
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesWithParseErrors).toBe(1)
+    expect(report.parseErrors[0]?.file).toBe('tests/broken.spec.ts')
+    expect(report.findings.some((f) => f.ruleId === 'no-xpath')).toBe(true)
   })
 
   it('accepts explicit glob patterns relative to cwd', async () => {
-    writeFixture('e2e/login.spec.ts')
+    writeFixture('e2e/login.spec.ts', "page.locator('.btn')")
     const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e/**/*.spec.ts'] })
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings.length).toBeGreaterThan(0)
-  })
-
-  it('reports unparseable files via onParseError and continues', async () => {
-    writeFixture('tests/broken.spec.ts', 'const = ;')
-    const errors: string[] = []
-    const report = await analyze({
-      cwd: dir,
-      config: config(),
-      onParseError: (file) => errors.push(file),
-    })
-    expect(errors).toEqual(['tests/broken.spec.ts'])
-    expect(report.findings).toEqual([])
   })
 })

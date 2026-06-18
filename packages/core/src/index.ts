@@ -12,8 +12,10 @@ export {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
   type AnalysisSummary,
+  type AnalysisWarning,
   type Finding,
   type FindingSeverity,
+  type ParseError,
   type RuleCategory,
 } from './analysis/types.js'
 
