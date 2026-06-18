@@ -1,9 +1,8 @@
 {
   "name": "@testpilot/locator-intelligence",
   "version": "0.0.0",
-  "description": "Locator Intelligence engine for TestPilot QA (reserved).",
+  "description": "Static locator analysis engine for TestPilot QA.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,5 +15,10 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsup"
+  },
+  "dependencies": {
+    "@testpilot/core": "workspace:*",
+    "@typescript-eslint/parser": "^8.18.0",
+    "tinyglobby": "^0.2.10"
   }
 }

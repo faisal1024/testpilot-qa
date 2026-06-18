@@ -1,10 +1,33 @@
+import { analyze } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { readGlobalOptions } from '../util/global-options.js'
-import { notImplemented } from '../util/not-implemented.js'
+import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
 
-export async function analyzeCommand(_options: unknown, command: Command): Promise<never> {
+export async function analyzeCommand(
+  patterns: string[],
+  _options: unknown,
+  command: Command,
+): Promise<void> {
   const globals = readGlobalOptions(command)
-  await resolveConfigOrExit(globals)
-  notImplemented('analyze', 'Milestone 4', globals)
+  const { config } = await resolveConfigOrExit(globals)
+
+  const report = await analyze({
+    cwd: globals.cwd,
+    config,
+    patterns: patterns.length > 0 ? patterns : undefined,
+    onParseError: (file) => {
+      if (!globals.quiet) {
+        console.error(`[testpilot] Skipped ${file}: could not parse.`)
+      }
+    },
+  })
+
+  if (globals.json) {
+    console.log(JSON.stringify(report))
+  } else if (!globals.quiet) {
+    console.error(renderAnalysisText(report))
+  }
+  // Milestone 3A is reporting-only; score gating (--min-score) arrives with the
+  // scoring model. Exit 0 on a successful analysis.
 }

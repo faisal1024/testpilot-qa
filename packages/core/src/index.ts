@@ -2,12 +2,20 @@
  * @testpilot/core — shared types and utilities.
  *
  * Milestone 2 added the configuration surface (schema, loader, helpers).
- * Milestone 2.5 adds project discovery and the Playwright pass-through runner.
- * Feature types (Finding, LocatorContext, Rule, Reporter, …) arrive in their
- * respective phases.
+ * Milestone 2.5 added project discovery and the Playwright pass-through runner.
+ * Milestone 3A adds the shared analysis contract (Finding, AnalysisReport).
  */
 
 export const VERSION = '0.0.0'
+
+export {
+  ANALYSIS_SCHEMA_VERSION,
+  type AnalysisReport,
+  type AnalysisSummary,
+  type Finding,
+  type FindingSeverity,
+  type RuleCategory,
+} from './analysis/types.js'
 
 export { defineConfig } from './config/define-config.js'
 export { ConfigError } from './config/errors.js'
