@@ -54,15 +54,46 @@ export interface AnalysisSummary {
   bySeverity: Record<FindingSeverity, number>
 }
 
+/** Letter grade band for a 0–100 score (A ≥90, B ≥80, C ≥70, D ≥60, F <60). */
+export type Grade = 'A' | 'B' | 'C' | 'D' | 'F'
+
+/** A 0–100 score with its letter grade. */
+export interface ScoreBreakdown {
+  score: number
+  grade: Grade
+}
+
+/** The dimensions a headline score decomposes into. */
+export interface SubScores {
+  resilience: ScoreBreakdown
+  accessibility: ScoreBreakdown
+  maintainability: ScoreBreakdown
+  flakiness: ScoreBreakdown
+}
+
+/**
+ * Deterministic, static (Tier 1) Locator Quality Score. The headline `score` is
+ * computed from all findings over the analyzed call-site count; `subScores` break
+ * the same penalty down by dimension. Not DOM-aware.
+ */
+export interface QualityScore {
+  score: number
+  grade: Grade
+  /** Analyzed call-sites — the scoring denominator basis. */
+  callSites: number
+  subScores: SubScores
+}
+
 /** The full, JSON-serializable analysis report (`testpilot analyze --json`). */
 export interface AnalysisReport {
   schemaVersion: string
   command: 'analyze'
   summary: AnalysisSummary
+  score: QualityScore
   findings: Finding[]
   warnings: AnalysisWarning[]
   parseErrors: ParseError[]
 }
 
-/** Bumped only on changes to the report shape. 1.1 added `warnings` + `parseErrors`. */
-export const ANALYSIS_SCHEMA_VERSION = '1.1'
+/** Bumped on report-shape changes. 1.1 added warnings/parseErrors; 1.2 added `score`. */
+export const ANALYSIS_SCHEMA_VERSION = '1.2'

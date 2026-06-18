@@ -39,12 +39,19 @@ Playwright suite.
 # Analyze locator quality in your existing tests (read-only)
 npx testpilot-qa analyze
 npx testpilot-qa analyze --json
+
+# Gate CI on a minimum Locator Quality Score (non-zero exit if below)
+npx testpilot-qa analyze --min-score 80
 ```
 
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
 `no-hard-wait` — as a human table or stable JSON. Severity is configurable per rule (`off` disables).
-It's reporting-only today (exit 0); score gating comes later.
+
+Every run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
+Accessibility, Maintainability, and Flakiness sub-scores. Without `--min-score` it's reporting-only
+(exit 0); with `--min-score <n>` (or `scoring.minScore` in config — the flag wins) it exits non-zero
+when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware.
 
 **Available today:** `init` (scaffold), `run` (Playwright pass-through), and `analyze` (static
 Locator Intelligence). `doctor` and `explain` are registered but print a "not yet implemented"
@@ -117,5 +124,5 @@ See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
 Active development. Milestone 1 (repo foundation) and Milestone 2 (CLI basics: global options + config
 loading) are merged. Milestone 2.5 implements `init` (scaffolding) and `run` (Playwright pass-through).
-Locator Intelligence (`analyze`) ships its full MVP Tier 1 rule set (Milestone 3B); score gating is
-next. See [Roadmap](docs/Roadmap.md).
+Locator Intelligence (`analyze`) ships its full MVP Tier 1 rule set plus the Locator Quality Score
+and `--min-score` CI gating (Milestones 3B–3C). See [Roadmap](docs/Roadmap.md).

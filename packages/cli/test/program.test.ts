@@ -33,4 +33,10 @@ describe('CLI program', () => {
       ]),
     )
   })
+
+  it('registers --min-score on the analyze command', () => {
+    const analyze = buildProgram().commands.find((command) => command.name() === 'analyze')
+    const longs = analyze?.options.map((option) => option.long) ?? []
+    expect(longs).toContain('--min-score')
+  })
 })

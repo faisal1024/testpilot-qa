@@ -15,8 +15,12 @@ export {
   type AnalysisWarning,
   type Finding,
   type FindingSeverity,
+  type Grade,
   type ParseError,
+  type QualityScore,
   type RuleCategory,
+  type ScoreBreakdown,
+  type SubScores,
 } from './analysis/types.js'
 
 export { defineConfig } from './config/define-config.js'

@@ -62,11 +62,11 @@ The credible core: scaffold a great project, detect the worst locators reliably,
 - **Success:** `npx testpilot-qa init demo --yes` → `npx playwright test` passes (verified: UI + API
   example tests green) → output is plain/ejectable Playwright; `testpilot run` delegates to it.
 
-### Phase 3 — Locator Intelligence Tier 1  *(Milestones 4–5)*
-- AST-based locator extraction; `LocatorContext` model; rules engine.
-- **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
-- `table` + `json` output.
-- **Locator Quality Score** + sub-scores: Resilience, Accessibility, Maintainability, Flakiness.
+### Phase 3 — Locator Intelligence Tier 1  *(Milestones 3A–3C — delivered)*
+- AST-based locator extraction; `LocatorContext` model; rules engine. *(3A)*
+- **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`. *(3B)*
+- `table` + `json` output; unknown-rule warnings; parse-error reporting. *(3B)*
+- **Locator Quality Score** + sub-scores (Resilience, Accessibility, Maintainability, Flakiness), letter grades, and **`--min-score` CI gating**. *(3C)*
 - **Constraint:** no fake concrete suggestions — category-level guidance only ("prefer `getByRole`/`getByLabel`/`getByTestId` where possible"), never `getByRole('button', { name: 'Save' })` without DOM context.
 
 ### Phase 4 — Doctor & Explain  *(MVP polish)*
@@ -80,7 +80,7 @@ The credible core: scaffold a great project, detect the worst locators reliably,
 Make it part of the everyday loop, the CI pipeline, and the agent ecosystem; then the docs portal and enhancements.
 
 ### Phase 5 — CI & Brownfield Adoption
-- SARIF reporter; `--min-score`; `--changed`; baseline support; official GitHub Action; PR-friendly output.
+- SARIF reporter; `--changed`; baseline support; official GitHub Action; PR-friendly output. (`--min-score` gating already shipped in 3C.)
 - *Why early in V1:* most teams adopt in an **existing** repo, not from a clean scaffold.
 
 ### Phase 6 — AI-Agent Integration (full)
