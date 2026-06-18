@@ -8,8 +8,8 @@ import { runCommand } from './commands/run.js'
 
 /**
  * Builds the TestPilot CLI program. `init` (scaffolding), `run` (Playwright
- * pass-through), and `analyze` (static locator analysis, Milestone 3A) are
- * implemented; `doctor` and `explain` remain placeholders until their phases.
+ * pass-through), `analyze` (static locator analysis), and `explain` (rule
+ * education) are implemented; `doctor` remains a placeholder until its phase.
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -49,7 +49,7 @@ export function buildProgram(): Command {
 
   program
     .command('explain <ruleId>')
-    .description('Explain a locator rule (Phase 4).')
+    .description('Explain a rule: why it matters, examples, and guidance.')
     .action(explainCommand)
 
   return program

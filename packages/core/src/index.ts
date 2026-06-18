@@ -19,6 +19,7 @@ export {
   type ParseError,
   type QualityScore,
   type RuleCategory,
+  type RuleExplanation,
   type ScoreBreakdown,
   type SubScores,
 } from './analysis/types.js'

@@ -6,6 +6,7 @@
  * unknown-rule warnings and parse-error reporting to the report envelope.
  */
 export { analyze, type AnalyzeOptions } from './analyze.js'
+export { explanationIds, getExplanation, ruleExplanations } from './explanations.js'
 export { extractLocators, inferEngine } from './extractor.js'
 export type {
   AnalyzedApi,
