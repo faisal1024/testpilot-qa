@@ -8,8 +8,6 @@ export const ExitCode = {
   CONFIG: 3,
   ENV: 4,
   INTERNAL: 5,
-  /** Temporary — placeholder commands during Milestone 1. */
-  NOT_IMPLEMENTED: 64,
 } as const
 
 export type ExitCodeName = keyof typeof ExitCode
