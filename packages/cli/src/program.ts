@@ -7,9 +7,9 @@ import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
 
 /**
- * Builds the TestPilot CLI program. Milestone 2.5 implements `init`
- * (scaffolding) and `run` (a thin Playwright pass-through); `analyze`, `doctor`
- * and `explain` remain placeholders until their phases.
+ * Builds the TestPilot CLI program. `init` (scaffolding), `run` (Playwright
+ * pass-through), and `analyze` (static locator analysis, Milestone 3A) are
+ * implemented; `doctor` and `explain` remain placeholders until their phases.
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -38,8 +38,8 @@ export function buildProgram(): Command {
     .action(runCommand)
 
   program
-    .command('analyze')
-    .description('Analyze locator quality (Milestone 4).')
+    .command('analyze [patterns...]')
+    .description('Analyze locator quality in test files.')
     .action(analyzeCommand)
 
   program.command('doctor').description('Diagnose the project (Phase 4).').action(doctorCommand)

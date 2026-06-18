@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@testpilot/core": "workspace:*",
+    "@testpilot/locator-intelligence": "workspace:*",
     "@testpilot/scaffold": "workspace:*",
     "commander": "^12.1.0"
   }

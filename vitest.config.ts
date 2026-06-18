@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@testpilot/core': pkg('core'),
+      '@testpilot/locator-intelligence': pkg('locator-intelligence'),
       '@testpilot/scaffold': pkg('scaffold'),
       '@testpilot/templates': pkg('templates'),
     },
