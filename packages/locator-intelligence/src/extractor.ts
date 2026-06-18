@@ -1,4 +1,4 @@
-import type { LocatorApi, LocatorContext, SelectorEngine } from './locator-context.js'
+import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './locator-context.js'
 import { type AstNode, walk } from './parser.js'
 
 const LOCATOR_METHODS = new Set<LocatorApi>([
@@ -11,28 +11,33 @@ const LOCATOR_METHODS = new Set<LocatorApi>([
   'getByAltText',
   'getByTitle',
   'getByTestId',
+  'nth',
 ])
 
-const STRING_ARG_APIS = new Set<LocatorApi>(['locator', 'frameLocator'])
+const HARD_WAIT_METHODS = new Set<string>(['waitForTimeout'])
+
+/** APIs whose first string argument is a selector to be engine-classified. */
+const SELECTOR_ARG_APIS = new Set<LocatorApi>(['locator', 'frameLocator'])
 
 interface Position {
   line: number
   column: number
 }
 
-interface NodeWithLoc extends AstNode {
+interface WithLoc {
   loc: { start: Position; end: Position }
   range: [number, number]
 }
 
-function isMemberExpression(node: AstNode): boolean {
-  return node.type === 'MemberExpression'
-}
-
-function propertyName(member: AstNode): string | null {
-  const property = member.property as AstNode | undefined
-  if (property && property.type === 'Identifier' && typeof property.name === 'string') {
-    return property.name
+function propertyNode(member: AstNode): (AstNode & WithLoc) | null {
+  const property = member.property as (AstNode & Partial<WithLoc>) | undefined
+  if (
+    property &&
+    property.type === 'Identifier' &&
+    typeof property.name === 'string' &&
+    property.loc
+  ) {
+    return property as AstNode & WithLoc
   }
   return null
 }
@@ -42,8 +47,13 @@ function readStringArg(arg: AstNode | undefined): { value?: string; isDynamic: b
   if (!arg) {
     return { isDynamic: false }
   }
-  if (arg.type === 'Literal' && typeof arg.value === 'string') {
-    return { value: arg.value, isDynamic: false }
+  if (arg.type === 'Literal') {
+    // Only string literals carry a selector; numeric/boolean literals (e.g.
+    // `.nth(2)`, `waitForTimeout(1000)`) are static but have no string value.
+    if (typeof arg.value === 'string') {
+      return { value: arg.value, isDynamic: false }
+    }
+    return { isDynamic: false }
   }
   if (arg.type === 'TemplateLiteral') {
     const expressions = arg.expressions as unknown[]
@@ -72,9 +82,10 @@ export function inferEngine(selector: string | undefined): SelectorEngine | unde
 }
 
 /**
- * Extracts every recognized Playwright locator call-site from a parsed program.
- * Receiver types are not analyzed — call-sites are matched by method name, which
- * is the pragmatic, dependency-free signal a static pass can rely on.
+ * Extracts every recognized Playwright call-site (locators, `.nth()`, and hard
+ * waits) from a parsed program. Receiver types are not analyzed — call-sites are
+ * matched by method name, the pragmatic, dependency-free signal a static pass
+ * can rely on. Locations point at the method name for precision in chains.
  */
 export function extractLocators(code: string, program: AstNode): LocatorContext[] {
   const contexts: LocatorContext[] = []
@@ -84,28 +95,38 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
       return
     }
     const callee = node.callee as AstNode | undefined
-    if (!callee || !isMemberExpression(callee)) {
+    if (!callee || callee.type !== 'MemberExpression') {
       return
     }
-    const name = propertyName(callee)
-    if (!name || !LOCATOR_METHODS.has(name as LocatorApi)) {
+    const property = propertyNode(callee)
+    if (!property) {
+      return
+    }
+    const name = property.name as string
+    const isLocator = LOCATOR_METHODS.has(name as LocatorApi)
+    const isHardWait = HARD_WAIT_METHODS.has(name)
+    if (!isLocator && !isHardWait) {
       return
     }
 
-    const apiCall = name as LocatorApi
+    const apiCall = name as AnalyzedApi
     const args = (node.arguments as AstNode[]) ?? []
-    const { value, isDynamic } = readStringArg(args[0])
-    const selectorEngine = STRING_ARG_APIS.has(apiCall) ? inferEngine(value) : undefined
+    const { value, isDynamic } = isLocator
+      ? readStringArg(args[0])
+      : { value: undefined, isDynamic: false }
+    const selectorEngine = SELECTOR_ARG_APIS.has(name as LocatorApi)
+      ? inferEngine(value)
+      : undefined
 
-    const withLoc = node as NodeWithLoc
+    const call = node as unknown as WithLoc
     contexts.push({
       apiCall,
       selector: value,
       selectorEngine,
       isDynamic,
-      raw: code.slice(withLoc.range[0], withLoc.range[1]),
-      line: withLoc.loc.start.line,
-      column: withLoc.loc.start.column + 1,
+      raw: code.slice(call.range[0], call.range[1]),
+      line: property.loc.start.line,
+      column: property.loc.start.column + 1,
     })
   })
 

@@ -6,22 +6,37 @@ import type { AnalysisReport } from '@testpilot/core'
  * a later milestone.
  */
 export function renderAnalysisText(report: AnalysisReport): string {
-  const { summary, findings } = report
+  const { summary, findings, warnings, parseErrors } = report
+  const lines: string[] = []
 
-  if (findings.length === 0) {
-    return `No locator issues found across ${summary.filesAnalyzed} file(s).`
+  for (const warning of warnings) {
+    lines.push(`⚠ ${warning.message}`)
   }
 
-  const lines = findings.map((finding) => {
-    const location = `${finding.file}:${finding.line}:${finding.column}`
-    return `  ${location}  ${finding.severity.toUpperCase()}  ${finding.ruleId}  ${finding.message}`
-  })
+  if (findings.length === 0) {
+    lines.push(`No locator issues found across ${summary.filesAnalyzed} file(s).`)
+  } else {
+    for (const finding of findings) {
+      const location = `${finding.file}:${finding.line}:${finding.column}`
+      lines.push(
+        `  ${location}  ${finding.severity.toUpperCase()}  ${finding.ruleId}  ${finding.message}`,
+      )
+    }
+    const { error, warn, info } = summary.bySeverity
+    lines.push('')
+    lines.push(
+      `${summary.findings} finding(s) in ${summary.filesAnalyzed} file(s) — ` +
+        `${error} error, ${warn} warn, ${info} info.`,
+    )
+  }
 
-  const { error, warn, info } = summary.bySeverity
-  lines.push('')
-  lines.push(
-    `${summary.findings} finding(s) in ${summary.filesAnalyzed} file(s) — ` +
-      `${error} error, ${warn} warn, ${info} info.`,
-  )
+  if (parseErrors.length > 0) {
+    lines.push('')
+    lines.push(`Could not parse ${parseErrors.length} file(s):`)
+    for (const parseError of parseErrors) {
+      lines.push(`  ${parseError.file}`)
+    }
+  }
+
   return lines.join('\n')
 }

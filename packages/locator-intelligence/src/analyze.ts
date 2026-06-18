@@ -3,14 +3,16 @@ import { relative } from 'node:path'
 import {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
+  type AnalysisWarning,
   type Finding,
   type FindingSeverity,
+  type ParseError,
   type TestPilotConfig,
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
 import { resolveTestFiles } from './resolve-files.js'
-import { builtinRules } from './rules/index.js'
+import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 
 export interface AnalyzeOptions {
@@ -20,8 +22,6 @@ export interface AnalyzeOptions {
   config: TestPilotConfig
   /** Explicit globs (CLI positional args). Falls back to `config.include`. */
   patterns?: string[]
-  /** Notified (instead of throwing) when a file cannot be parsed. */
-  onParseError?: (file: string, error: unknown) => void
 }
 
 interface EnabledRule {
@@ -29,17 +29,32 @@ interface EnabledRule {
   severity: FindingSeverity
 }
 
-/** Resolves which rules run and at what severity, honoring config overrides and `off`. */
-function enabledRules(config: TestPilotConfig): EnabledRule[] {
-  const enabled: EnabledRule[] = []
+/** Resolves which rules run and at what severity, plus warnings for unknown ids. */
+function resolveRules(config: TestPilotConfig): {
+  rules: EnabledRule[]
+  warnings: AnalysisWarning[]
+} {
+  const warnings: AnalysisWarning[] = []
+  for (const id of Object.keys(config.rules)) {
+    if (!builtinRuleIds.has(id)) {
+      warnings.push({
+        code: 'unknown-rule',
+        ruleId: id,
+        message: `Unknown rule "${id}" in config — ignored.`,
+      })
+    }
+  }
+  warnings.sort((a, b) => (a.ruleId ?? '').localeCompare(b.ruleId ?? ''))
+
+  const rules: EnabledRule[] = []
   for (const rule of builtinRules) {
     const override = config.rules[rule.id]
     if (override === 'off') {
       continue
     }
-    enabled.push({ rule, severity: override ?? rule.defaultSeverity })
+    rules.push({ rule, severity: override ?? rule.defaultSeverity })
   }
-  return enabled
+  return { rules, warnings }
 }
 
 function toPosix(path: string): string {
@@ -58,11 +73,14 @@ function compareFindings(a: Finding, b: Finding): number {
 /**
  * Runs static locator analysis over the configured files and returns a stable,
  * JSON-serializable report. Deterministic: same inputs → identical output.
+ * Parse failures are reported (not thrown) and never fail the command.
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const files = await resolveTestFiles(options.cwd, options.patterns, options.config)
-  const rules = enabledRules(options.config)
+  const { rules, warnings } = resolveRules(options.config)
+
   const findings: Finding[] = []
+  const parseErrors: ParseError[] = []
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(options.cwd, absolute))
@@ -70,7 +88,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     try {
       code = readFileSync(absolute, 'utf8')
     } catch (error) {
-      options.onParseError?.(relativePath, error)
+      parseErrors.push({ file: relativePath, message: errorMessage(error) })
       continue
     }
 
@@ -78,7 +96,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     try {
       program = parseSource(code, absolute)
     } catch (error) {
-      options.onParseError?.(relativePath, error)
+      parseErrors.push({ file: relativePath, message: errorMessage(error) })
       continue
     }
 
@@ -105,6 +123,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   }
 
   findings.sort(compareFindings)
+  parseErrors.sort((a, b) => a.file.localeCompare(b.file))
 
   const bySeverity: Record<FindingSeverity, number> = { info: 0, warn: 0, error: 0 }
   for (const finding of findings) {
@@ -116,9 +135,16 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     command: 'analyze',
     summary: {
       filesAnalyzed: files.length,
+      filesWithParseErrors: parseErrors.length,
       findings: findings.length,
       bySeverity,
     },
     findings,
+    warnings,
+    parseErrors,
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
