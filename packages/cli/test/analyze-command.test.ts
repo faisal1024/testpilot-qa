@@ -182,4 +182,11 @@ describe('analyze --baseline / --update-baseline', () => {
     expect(exitCode).toBe(2)
     expect(stderr).toContain('Unsupported baseline schema')
   })
+
+  it('errors (exit 2) on a baseline with no schema version', async () => {
+    writeFileSync(baselinePath(), JSON.stringify({ entries: [] }))
+    const { exitCode, stderr } = await runAnalyze(['--baseline', baselinePath()])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('got none')
+  })
 })

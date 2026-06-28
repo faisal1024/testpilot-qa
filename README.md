@@ -69,9 +69,11 @@ npx testpilot-qa analyze --baseline testpilot-baseline.json
 ```
 
 A finding's baseline identity is its rule + file + code snippet — independent of line number,
-severity, and snippet formatting (whitespace and indentation are normalized) — so moving code around,
-re-grading a rule, or reformatting with a code formatter never resurfaces an already-accepted finding.
-Commit the baseline file and shrink it over time as you fix the debt.
+severity, and formatting (whitespace *outside* string literals is normalized, so re-indentation and
+line wraps don't matter) — so moving code around, re-grading a rule, or reformatting with a code
+formatter never resurfaces an already-accepted finding. Text *inside* a locator's string stays
+significant, so a genuinely different selector is still caught. Commit the baseline file and shrink it
+over time as you fix the debt.
 
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and

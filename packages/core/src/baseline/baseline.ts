@@ -30,14 +30,41 @@ export interface BaselineComparison {
 }
 
 /**
- * Normalizes a snippet for identity matching by removing all whitespace. This
- * keeps a finding "baselined" across formatting-only edits — re-indentation,
- * line wraps, or a formatter adding/removing spaces inside a call — so a benign
- * reformat never resurfaces an already-accepted finding as a regression. Only
- * whitespace is dropped; quote style and every other character stay significant.
+ * Normalizes a snippet for identity matching by removing whitespace that sits
+ * *outside* string literals. This keeps a finding "baselined" across
+ * formatting-only edits — re-indentation, line wraps, or a formatter
+ * adding/removing spaces around tokens — so a benign reformat never resurfaces an
+ * already-accepted finding as a regression.
+ *
+ * Whitespace *inside* a string/template literal is preserved verbatim, because it
+ * is meaningful selector/text content: `getByText('Log in')` and
+ * `getByText('Login')` must stay distinct identities, or a genuinely new finding
+ * could be silently grandfathered in. Quote style and all other characters also
+ * stay significant.
  */
 function normalizeSnippet(snippet: string): string {
-  return snippet.replace(/\s+/g, '')
+  let out = ''
+  let quote: string | null = null
+  for (let i = 0; i < snippet.length; i++) {
+    const ch = snippet[i] as string
+    if (quote) {
+      out += ch
+      if (ch === '\\' && i + 1 < snippet.length) {
+        // Keep the escaped character verbatim (e.g. \' inside a string).
+        i += 1
+        out += snippet[i] as string
+      } else if (ch === quote) {
+        quote = null
+      }
+    } else if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch
+      out += ch
+    } else if (!/\s/.test(ch)) {
+      out += ch
+    }
+    // Whitespace outside a literal is dropped.
+  }
+  return out
 }
 
 /** Stable identity key for baseline matching (line/column/formatting independent). */
