@@ -31,31 +31,27 @@ describe('findingKey', () => {
     expect(findingKey(finding({ snippet: 'other' }))).not.toBe(base)
   })
 
-  it('ignores whitespace outside string literals (indentation, line wraps, spacing)', () => {
+  it('absorbs formatter whitespace noise (indentation, tabs, doubled spaces)', () => {
     const base = findingKey(finding({ snippet: "page.locator('//button')" }))
-    // Leading/trailing indentation.
+    // Leading/trailing indentation is trimmed.
     expect(findingKey(finding({ snippet: "    page.locator('//button')  " }))).toBe(base)
-    // A line-wrapped call.
-    expect(findingKey(finding({ snippet: "page.locator(\n  '//button'\n)" }))).toBe(base)
-    // Formatter-added spaces around tokens.
-    expect(findingKey(finding({ snippet: "page.locator( '//button' )" }))).toBe(base)
+    // Tabs and doubled spaces collapse to a single space.
+    expect(findingKey(finding({ snippet: "page.locator('a',\t\t{ x: 1 })" }))).toBe(
+      findingKey(finding({ snippet: "page.locator('a',  { x: 1 })" })),
+    )
     // Quote style is meaningful content, not whitespace — still distinct.
     expect(findingKey(finding({ snippet: 'page.locator("//button")' }))).not.toBe(base)
   })
 
-  it('preserves whitespace INSIDE string literals (distinct selector text stays distinct)', () => {
-    // Different visible text must not collapse to one identity, or a real new
-    // finding could be silently grandfathered in.
+  it('never collapses distinct content into one identity (no silent regression masking)', () => {
+    // Different visible text must stay distinct, or a real new finding could be
+    // silently grandfathered in.
     expect(findingKey(finding({ snippet: "page.getByText('Log in')" }))).not.toBe(
       findingKey(finding({ snippet: "page.getByText('Login')" })),
     )
-    // A trailing space inside the literal is meaningful content.
-    expect(findingKey(finding({ snippet: "page.getByText('Login ')" }))).not.toBe(
-      findingKey(finding({ snippet: "page.getByText('Login')" })),
-    )
-    // Escaped quotes inside the literal are handled without breaking parsing.
-    expect(findingKey(finding({ snippet: "page.getByText('it\\'s here')" }))).toBe(
-      findingKey(finding({ snippet: "  page.getByText( 'it\\'s here' )  " })),
+    // A space inside a regex selector is meaningful (matches different text).
+    expect(findingKey(finding({ snippet: 'page.getByText(/a b/)' }))).not.toBe(
+      findingKey(finding({ snippet: 'page.getByText(/ab/)' })),
     )
   })
 })

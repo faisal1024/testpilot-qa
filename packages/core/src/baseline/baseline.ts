@@ -30,41 +30,23 @@ export interface BaselineComparison {
 }
 
 /**
- * Normalizes a snippet for identity matching by removing whitespace that sits
- * *outside* string literals. This keeps a finding "baselined" across
- * formatting-only edits — re-indentation, line wraps, or a formatter
- * adding/removing spaces around tokens — so a benign reformat never resurfaces an
- * already-accepted finding as a regression.
+ * Normalizes a snippet for identity matching by collapsing every run of
+ * whitespace to a single space and trimming the ends. This absorbs the common
+ * formatter noise — re-indentation, tabs vs spaces, doubled spaces — so a benign
+ * reformat does not resurface an already-accepted finding as a regression.
  *
- * Whitespace *inside* a string/template literal is preserved verbatim, because it
- * is meaningful selector/text content: `getByText('Log in')` and
- * `getByText('Login')` must stay distinct identities, or a genuinely new finding
- * could be silently grandfathered in. Quote style and all other characters also
- * stay significant.
+ * Deliberately *not* "strip all whitespace": that would collapse distinct
+ * content — `getByText('Log in')` vs `getByText('Login')`, or a regex `/a b/`
+ * vs `/ab/` — into one identity and could silently grandfather in a genuinely
+ * new finding (a masked regression is the worst failure for a baseline). Keeping
+ * a single space preserves the presence of intra-content whitespace, so distinct
+ * selector text stays distinct. The accepted cost is that a hard line-wrapped
+ * call site (whose wrap inserts a space where the inline form had none) may
+ * register as new until the baseline is refreshed — a visible, safe miss rather
+ * than a silent one.
  */
 function normalizeSnippet(snippet: string): string {
-  let out = ''
-  let quote: string | null = null
-  for (let i = 0; i < snippet.length; i++) {
-    const ch = snippet[i] as string
-    if (quote) {
-      out += ch
-      if (ch === '\\' && i + 1 < snippet.length) {
-        // Keep the escaped character verbatim (e.g. \' inside a string).
-        i += 1
-        out += snippet[i] as string
-      } else if (ch === quote) {
-        quote = null
-      }
-    } else if (ch === '"' || ch === "'" || ch === '`') {
-      quote = ch
-      out += ch
-    } else if (!/\s/.test(ch)) {
-      out += ch
-    }
-    // Whitespace outside a literal is dropped.
-  }
-  return out
+  return snippet.replace(/\s+/g, ' ').trim()
 }
 
 /** Stable identity key for baseline matching (line/column/formatting independent). */
