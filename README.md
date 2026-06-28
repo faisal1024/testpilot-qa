@@ -74,6 +74,43 @@ around or re-grading a rule never resurfaces an already-accepted finding. Distin
 distinct (`getByText('Log in')` ≠ `getByText('Login')`), so a genuinely new finding is never silently
 grandfathered in. Commit the baseline file and shrink it over time as you fix the debt.
 
+### Run it in pull requests (SARIF + GitHub code scanning)
+
+`analyze` can emit **SARIF 2.1.0** so findings show up inline on the **Files changed** tab as code-scanning
+annotations — pointing at the exact file and line.
+
+```bash
+# Write a SARIF report (pairs with --baseline and --min-score)
+npx testpilot-qa analyze --reporter sarif --output testpilot.sarif
+```
+
+The bundled GitHub Action wraps the CLI (it does not duplicate analysis logic), runs the gate, writes
+SARIF, and adds the human report to the job summary. Pair it with GitHub's `upload-sarif` to publish
+the annotations:
+
+```yaml
+# .github/workflows/testpilot.yml
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF
+jobs:
+  testpilot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: faisal1024/testpilot-qa/action@v0
+        with:
+          min-score: 80
+          baseline: testpilot-baseline.json
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()             # upload even when the gate fails
+        with:
+          sarif_file: testpilot.sarif
+```
+
+The CLI is fully usable without GitHub — SARIF is just one more `--reporter`. (The Action runs the
+published `testpilot-qa` package via `npx`.)
+
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
 `no-hard-wait` — as a human table or stable JSON. Severity is configurable per rule (`off` disables).
@@ -173,7 +210,7 @@ Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.
 - **Internal interfaces only** — no public plugin system yet.
-- **Deferred:** `fix`, ESLint plugin, CI/SARIF, DOM-aware suggestions, MCP, LLM features, and the docs portal.
+- **Deferred:** `fix`, ESLint plugin, HTML report, DOM-aware suggestions, MCP, LLM features, and the docs portal.
 
 See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
@@ -188,17 +225,17 @@ TestPilot generates is plain, ejectable Playwright.
 - `init` — scaffold a TypeScript Playwright project (UI + API examples) **+ AI agent guidance files**
 - `run` — thin Playwright pass-through (not a custom runner)
 - `analyze` — static Tier 1 locator analysis (six rules) + Locator Quality Score + `--min-score` gating
+- **brownfield baseline** — record known findings and gate CI on *new* ones only (`--baseline`)
+- **SARIF report + GitHub Action** — `--reporter sarif` for GitHub code scanning, plus a wrapper Action
 - `doctor` — project-readiness diagnostics + AI guidance drift detection
 - `explain` — rule education
 
 **Intentionally *not* in the alpha** (planned, not done): auto-fix, DOM-aware/concrete locator
-suggestions, baseline/`--changed` brownfield gating, SARIF/HTML reports, a GitHub Action, dashboards,
-MCP, and any LLM calls.
+suggestions, `--changed` diff scoping, an HTML report, dashboards, MCP, and any LLM calls.
 
 **Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile
 suites, and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents
-to write resilient Playwright. **Brownfield CI features (baseline / no-regression / PR integration)
-are next — not done yet.**
+to write resilient Playwright.
 
 See [docs/Adoption-Plan.md](docs/Adoption-Plan.md) for the sequencing, the [Roadmap](docs/Roadmap.md)
 for the full plan, and [docs/Release-Checklist.md](docs/Release-Checklist.md) for the release gate.

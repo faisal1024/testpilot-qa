@@ -1,12 +1,12 @@
 # TestPilot QA — Adapted Adoption Plan
 
-> Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening) and 5D (dependency
-> PR cleanup) are merged.
-> **Milestone 6A (brownfield baseline & output) is the active milestone** — `analyze` now supports
-> `--output <path>` (write the JSON report to a file) and a `--baseline`/`--update-baseline`
-> no-regression gate that fails only on *new* findings. Runtime/toolchain dependency majors
-> (`commander`, `zod`, `typescript`, `@biomejs/biome`) remain deferred to their own PRs (see
-> `docs/Release-Checklist.md`).
+> Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening), 5D (dependency
+> PR cleanup), and 6A (brownfield baseline & output) are merged.
+> **Milestone 6B (CI & PR integration) is the active milestone** — `analyze` gains
+> `--reporter <table|json|sarif>` (SARIF 2.1.0 for GitHub code scanning), and a composite GitHub
+> Action (`faisal1024/testpilot-qa/action@v0`) wraps the CLI to run the gate, write SARIF, and post a
+> PR job summary. Runtime/toolchain dependency majors (`commander`, `zod`, `typescript`,
+> `@biomejs/biome`) remain deferred to their own PRs (see `docs/Release-Checklist.md`).
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 
@@ -254,8 +254,8 @@ After Milestone 5B:
 1. **5C — Public alpha hardening (merged):** package smoke (`smoke:package`), `examples/fragile-suite`,
    README alpha positioning, dependency-PR strategy. The CLI now bundles `@testpilot/*` so the
    published `testpilot-qa` is a single self-contained package.
-2. **6A — Brownfield baseline (active):** baseline file, no-regression gate, output file support.
-3. **6B — PR integration:** SARIF/GitHub Action/PR summary.
+2. **6A — Brownfield baseline (merged):** baseline file, no-regression gate, output file support.
+3. **6B — PR integration (active):** SARIF reporter, GitHub Action wrapper, PR job summary.
 4. **6C — Guidance regeneration:** `testpilot add ai` with safe drift-aware behavior.
 5. **7A — HTML report:** local static report for sharing and demos.
 

@@ -83,6 +83,41 @@ describe('analyze --output', () => {
   })
 })
 
+describe('analyze --reporter', () => {
+  it('rejects an unknown reporter (exit 2)', async () => {
+    const { exitCode, stderr } = await runAnalyze(['--reporter', 'xml'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('--reporter must be one of')
+  })
+
+  it('prints SARIF to stdout with --reporter sarif', async () => {
+    const { stdout } = await runAnalyze(['--reporter', 'sarif'])
+    const sarif = JSON.parse(stdout)
+    expect(sarif.version).toBe('2.1.0')
+    expect(sarif.runs[0].results.some((r: { ruleId: string }) => r.ruleId === 'no-xpath')).toBe(
+      true,
+    )
+  })
+
+  it('writes a parseable SARIF file with --reporter sarif --output', async () => {
+    const out = join(dir, 'tp.sarif')
+    const { stdout } = await runAnalyze(['--reporter', 'sarif', '--output', out])
+    expect(stdout).toContain('Report written to')
+    const sarif = JSON.parse(readFileSync(out, 'utf8'))
+    expect(sarif.version).toBe('2.1.0')
+    const result = sarif.runs[0].results.find((r: { ruleId: string }) => r.ruleId === 'no-xpath')
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toContain('a.spec.ts')
+  })
+
+  it('writes the human report to a file with --reporter table --output', async () => {
+    const out = join(dir, 'report.txt')
+    await runAnalyze(['--reporter', 'table', '--output', out])
+    const text = readFileSync(out, 'utf8')
+    expect(text).toContain('Locator Quality Score')
+    expect(text).toContain('no-xpath')
+  })
+})
+
 describe('analyze --baseline / --update-baseline', () => {
   const baselinePath = () => join(dir, 'baseline.json')
 

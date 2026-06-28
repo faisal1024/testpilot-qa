@@ -174,11 +174,22 @@ testpilot analyze [globs...] [options]
 > that path and exits **0** without gating. When `--baseline` is active the JSON report gains a
 > `baseline` block (`{ path, newFindings, baselinedFindings }`). Missing/malformed baseline files and
 > unwritable `--output`/`--baseline` paths exit **2** (usage) with a clear message.
+>
+> **Reporters & CI integration (6B):** **`--reporter <table|json|sarif>`** chooses the output format
+> for both stdout and `--output`. `table` is the human report; `json` is the stable machine report;
+> `sarif` emits a **SARIF 2.1.0** log so findings appear as GitHub code-scanning annotations at the
+> exact file/line. An unknown reporter exits **2**. Back-compat: with no `--reporter`, `--json` or a
+> bare `--output` still imply `json`, and interactive runs default to `table`. SARIF results carry a
+> `partialFingerprints['testpilotIdentity/v1']` equal to the baseline identity, so code scanning does
+> not re-report a finding that merely moved lines. A composite **GitHub Action**
+> (`faisal1024/testpilot-qa/action@v0`) wraps the CLI — it runs `analyze`, writes SARIF, and posts the
+> human report to the job summary; it duplicates no analysis logic. Pair it with
+> `github/codeql-action/upload-sarif` to publish annotations. The CLI works fully without GitHub.
 
 | Option | Description | Default | Version |
 |---|---|---|---|
-| `--reporter <fmt>` | `table` \| `json` (MVP); `html` \| `sarif` (V1). Repeatable. | `table` | MVP / V1 |
-| `--output <path>` | Write the JSON report to a file. | stdout | MVP (6A) |
+| `--reporter <fmt>` | `table` \| `json` \| `sarif` (`html` planned). | `table` | MVP / 6B |
+| `--output <path>` | Write the report (in `--reporter` format) to a file. | stdout | MVP (6A) |
 | `--min-score <n>` | Fail if project score `< n` (0–100). | none | MVP |
 | `--baseline <path>` | Compare to a saved baseline; gate on *new* findings only. | none | MVP (6A) |
 | `--update-baseline` | Record current findings to `--baseline` (no gate). | off | MVP (6A) |
@@ -192,8 +203,8 @@ testpilot analyze [globs...] [options]
 # Default human report over the suite
 testpilot analyze "tests/**/*.spec.ts"
 
-# CI gate: machine output + SARIF for GitHub code scanning + score threshold
-testpilot analyze --changed --reporter sarif --output tp.sarif --min-score 80 --json
+# CI gate: SARIF for GitHub code scanning + baseline (new findings only) + score threshold
+testpilot analyze --reporter sarif --output testpilot.sarif --baseline testpilot-baseline.json --min-score 80
 
 # Tier 2: concrete suggestions from a Playwright trace
 testpilot analyze tests/login.spec.ts --dom ./test-results/login/trace.zip
@@ -409,6 +420,13 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
 against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.
+
+**SARIF (`--reporter sarif`)** is a derived view of the same findings, not a second contract: each
+distinct `ruleId` becomes a SARIF reporting descriptor (with its `helpUri`), and each finding becomes a
+result whose `level` maps from severity (`error`→`error`, `warn`→`warning`, `info`→`note`) at its
+`physicalLocation` (file URI + 1-based line/column + snippet). Each result carries
+`partialFingerprints['testpilotIdentity/v1']` (the baseline identity) so code scanning tracks a finding
+across line moves.
 
 ---
 

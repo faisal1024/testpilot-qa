@@ -1,0 +1,94 @@
+name: 'TestPilot QA'
+description: 'Analyze Playwright locator quality and emit SARIF for GitHub code scanning.'
+author: 'faisal1024'
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+# This action is a thin wrapper around the `testpilot-qa` CLI — it does not
+# duplicate any analysis logic. It runs `testpilot analyze` with your inputs,
+# writes a SARIF file (so findings appear as code-scanning annotations), and
+# adds the human report to the job summary. Pair it with
+# github/codeql-action/upload-sarif to publish the annotations (see README).
+#
+# Note: this runs the published `testpilot-qa` package via npx, so it needs the
+# package to be available on npm. For unpublished/local use, call the CLI directly.
+
+inputs:
+  version:
+    description: 'testpilot-qa version or npm dist-tag to run.'
+    required: false
+    default: 'latest'
+  patterns:
+    description: 'Optional space-separated glob(s) to analyze. Defaults to the configured test dir.'
+    required: false
+    default: ''
+  min-score:
+    description: 'Fail if the Locator Quality Score is below this value (0-100).'
+    required: false
+    default: ''
+  baseline:
+    description: 'Path to a baseline file; fail only on new findings.'
+    required: false
+    default: ''
+  output:
+    description: 'SARIF output path.'
+    required: false
+    default: 'testpilot.sarif'
+  working-directory:
+    description: 'Directory to run in.'
+    required: false
+    default: '.'
+  node-version:
+    description: 'Node.js version to set up before running.'
+    required: false
+    default: '20'
+
+outputs:
+  sarif:
+    description: 'Path to the generated SARIF file.'
+    value: ${{ steps.analyze.outputs.sarif }}
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    - id: analyze
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TP_VERSION: ${{ inputs.version }}
+        TP_PATTERNS: ${{ inputs.patterns }}
+        TP_MIN_SCORE: ${{ inputs.min-score }}
+        TP_BASELINE: ${{ inputs.baseline }}
+        TP_OUTPUT: ${{ inputs.output }}
+      run: |
+        set -uo pipefail
+
+        # Build the analyze argument list from the provided inputs.
+        args=(analyze)
+        # shellcheck disable=SC2206 # intentional word-splitting for multiple globs
+        [ -n "${TP_PATTERNS}" ] && args+=(${TP_PATTERNS})
+        [ -n "${TP_BASELINE}" ] && args+=(--baseline "${TP_BASELINE}")
+        [ -n "${TP_MIN_SCORE}" ] && args+=(--min-score "${TP_MIN_SCORE}")
+        args+=(--reporter sarif --output "${TP_OUTPUT}")
+
+        echo "sarif=${TP_OUTPUT}" >> "${GITHUB_OUTPUT}"
+
+        # Run the gate. SARIF is written even when the gate fails; keep the exit code.
+        npx --yes "testpilot-qa@${TP_VERSION}" "${args[@]}"
+        code=$?
+
+        # PR-friendly summary: the human report. Never fails the build.
+        {
+          echo "## TestPilot QA"
+          echo ""
+          echo '```'
+          # shellcheck disable=SC2086 # intentional word-splitting for multiple globs
+          npx --yes "testpilot-qa@${TP_VERSION}" analyze ${TP_PATTERNS} 2>&1 || true
+          echo '```'
+        } >> "${GITHUB_STEP_SUMMARY}"
+
+        exit $code

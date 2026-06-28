@@ -116,6 +116,24 @@ check('analyze --output writes a report file', () => {
   })
 })
 
+check('analyze --reporter sarif writes a valid SARIF file', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'fragile.spec.ts'), "page.locator('//button')\n")
+    const out = join(dir, 'testpilot.sarif')
+    const { status } = cli(['analyze', '--reporter', 'sarif', '--output', out, '--cwd', dir])
+    assert(status === 0, `exit ${status}`)
+    const sarif = JSON.parse(readFileSync(out, 'utf8'))
+    assert(sarif.version === '2.1.0', `unexpected SARIF version ${sarif.version}`)
+    const result = sarif.runs?.[0]?.results?.find((r) => r.ruleId === 'no-xpath')
+    assert(result, 'SARIF is missing the no-xpath result')
+    assert(
+      result.locations?.[0]?.physicalLocation?.artifactLocation?.uri?.includes('fragile.spec.ts'),
+      'SARIF result is missing the source location',
+    )
+  })
+})
+
 check('analyze --baseline gates only on new findings', () => {
   withTempDir((dir) => {
     mkdirSync(join(dir, 'tests'), { recursive: true })
