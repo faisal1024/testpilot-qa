@@ -34,12 +34,12 @@ Findings are weighted by severity. The defaults:
 | Severity | Default weight | Meaning |
 |---|---:|---|
 | `error` | **5** | A fragile pattern that should be fixed (e.g. an XPath or CSS-class selector, or a hard wait). |
-| `warn`  | **2** | A risky pattern worth revisiting (e.g. a non-user-facing locator). |
+| `warn`  | **2** | A risky pattern worth revisiting (e.g. a deep CSS chain or a non-user-facing locator). |
 | `info`  | **0.5** | A minor nudge. |
 
-The shipped defaults are: `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, and
-`no-hard-wait` are **`error`**; `prefer-user-facing-locator` is **`warn`**. (There are no `info` rules
-by default — `info` exists for rules you downgrade.)
+The shipped default severities are: **`error`** — `no-xpath`, `no-css-class-selector`, `no-nth-child`,
+`no-hard-wait`; **`warn`** — `no-deep-css-chain`, `prefer-user-facing-locator`. (There are no `info`
+rules by default — `info` exists for rules you downgrade.)
 
 Weights are configurable in `testpilot.config.ts` under `scoring.weights`, and **per-rule severity** is
 configurable under `rules` (setting a rule to `off` removes its findings from the score entirely):

@@ -1,5 +1,6 @@
 import type { Finding, FindingSeverity, RuleCategory } from '@testpilot/core'
 import { describe, expect, it } from 'vitest'
+import { builtinRules } from '../src/rules/index.js'
 import { type ScoringWeights, computeScore } from '../src/score.js'
 
 // The default weights documented in docs/Scoring.md (config `scoring.weights`).
@@ -49,6 +50,19 @@ describe('docs/Scoring.md worked examples', () => {
       score: 0,
       grade: 'F',
     })
+  })
+
+  it('default severities match the docs/Scoring.md "shipped defaults" list', () => {
+    const bySeverity = (sev: FindingSeverity) =>
+      builtinRules
+        .filter((r) => r.defaultSeverity === sev)
+        .map((r) => r.id)
+        .sort()
+    expect(bySeverity('error')).toEqual(
+      ['no-css-class-selector', 'no-hard-wait', 'no-nth-child', 'no-xpath'].sort(),
+    )
+    expect(bySeverity('warn')).toEqual(['no-deep-css-chain', 'prefer-user-facing-locator'].sort())
+    expect(bySeverity('info')).toEqual([]) // no info rules by default
   })
 
   it('sub-score penalties split by category and sum to the headline', () => {
