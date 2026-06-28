@@ -62,17 +62,17 @@ Open, failing dependency PRs make an early public repo look unmaintained. Strate
   outdated dependency.
 - Dependency PRs are **not** merged on feature/milestone branches.
 
-| PR | Bump | Risk | Handling |
-|---|---|---|---|
-| pnpm/action-setup 4→6 | GitHub Action (major) | Low | Merge once CI `verify` passes. |
-| actions/setup-node 4→6 | GitHub Action (major) | Low | Merge once CI passes. |
-| actions/checkout 4→7 | GitHub Action (major) | Low | Merge once CI passes. |
-| @types/node 22→25 | dev type (major) | Medium | Likely safe; run `typecheck` on the PR first. |
-| commander 12→15 | **runtime** (major) | Medium–High | Own PR: CLI arg parsing — run every command, the command-level tests, `smoke:mvp` + `smoke:package`. |
-| typescript 5.9→6.0 | toolchain (major) | Medium–High | Own PR: re-run `typecheck` and `build` (tsup/dts). |
-| @biomejs/biome 1.9→2.5 | toolchain (major) | High | Own PR: Biome 2.x changed the config schema — migrate `biome.json` (`biome migrate`) or lint/format breaks. |
-| zod 3.25→4.x | **runtime** (major) | High | Own PR: zod v4 API/behavior changes — our config schema relies on `.strict()`/`.default()`/`.record()`/optional; re-run config + analyze tests. |
+### Status (Milestone 5D)
 
-> Because the CLI now **bundles** `@testpilot/*` and declares its real deps (`commander`, `zod`,
-> `jiti`, `tinyglobby`, `@typescript-eslint/parser`), runtime-dep bumps must be validated with
-> `smoke:package`, not just `smoke:mvp`.
+| PR | Bump | Risk | Status |
+|---|---|---|---|
+| pnpm/action-setup 4→6 | GitHub Action (major) | Low | **Done (5D)** — bumped in-repo; Dependabot's red PR (#1) was stale-base only. |
+| actions/setup-node 4→6 | GitHub Action (major) | Low | **Done (5D)** — bumped in-repo; #2's red CI was stale base. |
+| actions/checkout 4→7 | GitHub Action (major) | Low | **Done (5D)** — bumped in-repo (#17). |
+| @types/node 22→25 | dev type (major) | Medium | **Done (5D)** — typecheck + build clean. |
+| commander 12→15 | **runtime** (major) | Medium–High | **Deferred** — own PR. CI green on Dependabot #4, but per policy a runtime major gets its own PR + manual parse checks (globals before/after command, `run -- <args>`, `--quiet`, `--json`) + `smoke:package`. |
+| typescript 5.9→6.0 | toolchain (major) | Medium–High | **Deferred** — own PR; Dependabot #6 fails CI (real). Re-run `typecheck`/`build` (tsup/dts). |
+| @biomejs/biome 1.9→2.5 | toolchain (major) | High | **Deferred** — own PR; #7 fails (Biome 2.x config schema change → `biome migrate` `biome.json`). |
+| zod 3.25→4.x | **runtime** (major) | High | **Deferred** — own PR; #10 fails (zod v4 API/behavior). Config schema relies on `.strict()`/`.default()`/`.record()`/optional. |
+
+The deferred runtime/toolchain majors are intentionally **not** blocking the public alpha — each will get its own PR + full gate when tackled. Because the CLI **bundles** `@testpilot/*` and declares its real deps (`commander`, `zod`, `jiti`, `tinyglobby`, `@typescript-eslint/parser`), runtime-dep bumps must be validated with `smoke:package`, not just `smoke:mvp`.

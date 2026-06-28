@@ -1,8 +1,9 @@
 # TestPilot QA — Adapted Adoption Plan
 
-> Status: Product-owner plan after MVP/5A/5B review. **Milestone 5C (public alpha hardening) is the
-> active milestone** — package smoke (`smoke:package`), `examples/fragile-suite`, alpha positioning,
-> and the dependency-PR strategy are landing.
+> Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening) is merged.
+> **Milestone 5D (dependency PR cleanup) is the active milestone** — safe bumps (GitHub Actions +
+> `@types/node`) landed; runtime/toolchain majors (`commander`, `zod`, `typescript`, `@biomejs/biome`)
+> are deferred to their own PRs (see `docs/Release-Checklist.md`).
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 
