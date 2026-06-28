@@ -73,9 +73,10 @@ npx testpilot-qa doctor --json
 ```
 
 `doctor` checks Node version, `package.json`, a local Playwright install, Playwright/TestPilot
-config validity, the test directory, and project structure — printing a pass/warn/fail report with
-remediation. It's read-only and offline; exit codes are CI-friendly (`0` healthy, `3` invalid
-config, `4` setup problems).
+config validity, the test directory, project structure, and **AI guidance-file drift** (missing /
+user-edited / stale per selected agent) — printing a pass/warn/fail report with remediation. It's
+read-only and offline; exit codes are CI-friendly (`0` healthy, `3` invalid config, `4` setup
+problems). Guidance drift is a **warning only** — it never fails the command on its own.
 
 ### AI agent guidance
 

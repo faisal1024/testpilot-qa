@@ -58,6 +58,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@testpilot/ai':
+        specifier: workspace:*
+        version: link:../ai
       jiti:
         specifier: ^2.4.2
         version: 2.7.0

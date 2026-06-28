@@ -12,9 +12,13 @@
 > (`CANONICAL_GUIDANCE`) and deterministically generates `CLAUDE.md`, `AGENTS.md`,
 > `.github/copilot-instructions.md`, and `.cursor/rules/testpilot-playwright.mdc`. `testpilot init`
 > writes them by default (selectable via `config.ai.agents`), with the standard overwrite protection
-> (`--force`). Each file carries a `version + sha256` marker (`@testpilot/guidance …`) and exported
-> helpers (`parseGuidanceMarker`, `isGuidancePristine`) so **5B** can add `doctor` drift detection
-> cleanly. The guidance is honest about Tier 1 limits (no DOM-aware suggestions, no auto-fix, no LLM).
+> (`--force`). Each file carries a `version + sha256` marker (`@testpilot/guidance …`).
+
+> **Implemented (Milestone 5B):** `testpilot doctor` detects guidance drift. For the agents selected
+> by `config.ai.agents`, it classifies each file as `current` / `missing` / `edited` / `stale` /
+> `no-marker` (via `@testpilot/ai`'s `classifyGuidanceFile`), surfaced as the `ai-guidance` check
+> with structured `details.files`. **Detection only** — read-only, deterministic, never regenerates;
+> drift is a warning, never a hard failure. Regeneration (`testpilot add ai`) is still V1.
 
 ---
 

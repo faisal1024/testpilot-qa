@@ -155,6 +155,17 @@ check('init scaffolds a complete project and protects existing files', () => {
   })
 })
 
+check('doctor reports AI guidance as current for a fresh scaffold', () => {
+  withTempDir((dir) => {
+    cli(['init', 'demo', '--yes', '--cwd', dir])
+    const { stdout } = cli(['doctor', '--json', '--cwd', join(dir, 'demo')])
+    const report = JSON.parse(stdout)
+    const ai = report.checks.find((check) => check.id === 'ai-guidance')
+    assert(ai !== undefined, 'doctor is missing the ai-guidance check')
+    assert(ai.status === 'pass', `ai-guidance status was ${ai.status}, expected pass`)
+  })
+})
+
 console.log('')
 if (failures > 0) {
   console.error(`smoke:mvp FAILED — ${failures} check(s) failed.`)
