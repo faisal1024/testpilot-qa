@@ -1,17 +1,20 @@
 # TestPilot QA — Adapted Adoption Plan
 
-> Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening), 5D (dependency
-> PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub Action),
-> 6C (safe AI guidance regeneration: `testpilot add ai`), 7A (local HTML report), and 7B (score
-> calibration docs) are merged.
-> **Milestone 8A (safe mechanical fix preview) is the active milestone** — `testpilot fix` applies
-> behavior-preserving, mechanical locator rewrites (today: `locator('text=…')` → `getByText(…)`),
-> dry-run by default with a unified diff, `--write` to apply; it never touches application code, never
-> inspects the DOM, and leaves anything ambiguous untouched. Runtime/toolchain dependency majors
-> (`commander`, `zod`, `typescript`, `@biomejs/biome`) remain deferred to their own PRs (see
-> `docs/Release-Checklist.md`).
+> Status: Product-owner plan after MVP/5A/5B review. **Merged:** 5C (public alpha hardening), 5D
+> (dependency PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub
+> Action), 6C (safe AI guidance regeneration: `testpilot add ai`), 7A (local HTML report), 7B (score
+> calibration docs), and 8A (safe mechanical fix preview: `testpilot fix`).
+> **Next active focus: public-alpha readiness** — finish the remaining dependency cleanup
+> (runtime/toolchain majors `commander`, `zod`, `typescript`, `@biomejs/biome` are still deferred to
+> their own PRs, see `docs/Release-Checklist.md`) and release hardening before the soft public alpha.
+> No new feature milestone is in progress.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
+>
+> **Positioning (unchanged):** TestPilot QA is an **AI-agent-ready Playwright quality toolkit** — not a
+> Playwright replacement. It does **not** do DOM-aware healing, broad auto-fix, dashboards, MCP, or
+> LLM-powered execution. The `fix` command is a deliberately narrow, safe mechanical preview (dry-run by
+> default), not general auto-fix.
 
 ---
 
@@ -262,7 +265,9 @@ After Milestone 5B:
 4. **6C — Guidance regeneration (merged):** `testpilot add ai` with safe drift-aware behavior.
 5. **7A — HTML report (merged):** local static report for sharing and demos.
 6. **7B — Scoring docs (merged):** [`docs/Scoring.md`](Scoring.md) — calibrate trust in the score.
-7. **8A — Safe fix preview (active):** `testpilot fix` — dry-run mechanical locator rewrites.
+7. **8A — Safe fix preview (merged):** `testpilot fix` — dry-run mechanical locator rewrites.
+8. **Public-alpha readiness (active):** finish deferred dependency majors, run the release gate
+   (`docs/Release-Checklist.md`), and do the soft public alpha. No new feature milestone in progress.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 
