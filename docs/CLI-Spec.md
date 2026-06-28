@@ -4,14 +4,15 @@
 > Binary name: `testpilot` (alias `tpq`)
 > Bootstrap: `npx testpilot-qa` / `npm create testpilot-qa@latest`
 
-> **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`.
-> `fix`, `add`, and `list` are **deferred to V1**. `init` ships a **single** `ui-api-fullstack`
-> template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
+> **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`. `fix` and `list` are
+> **deferred to V1**; of `add`, only the `add ai` subcommand is implemented (6C). `init` ships a
+> **single** `ui-api-fullstack` template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
-> **Implemented today (all five MVP commands):** `init` (scaffold, 2.5), `run` (thin Playwright
-> pass-through, 2.5), `analyze` (static Locator Intelligence — six Tier 1 rules, Locator Quality
-> Score, and `--min-score` gating; 3A–3C), `doctor` (project diagnostics; 4B), and `explain` (rule
-> education; 4A).
+> **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5), `analyze`
+> (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, `--min-score` gating,
+> `--baseline` no-regression gate, `--reporter table|json|sarif`; 3A–3C, 6A–6B), `doctor` (project
+> diagnostics + AI guidance drift; 4B, 5B), `explain` (rule education; 4A), and `add ai` (safe AI
+> guidance regeneration; 6C).
 
 ---
 
@@ -309,25 +310,41 @@ DOM-derived replacements, auto-fix, or AI.
 
 ---
 
-### 3.6 `testpilot add` *(V1 — deferred)*
+### 3.6 `testpilot add` *(`add ai` implemented in 6C; other subcommands V1 — deferred)*
 
-Add capabilities to an existing TestPilot project.
+Add or regenerate capabilities in an existing TestPilot project.
 
 ```
 testpilot add <thing> [options]
 ```
 
-| `thing` | Effect |
-|---|---|
-| `ai <agent>` | (Re)generate `claude`\|`codex`\|`cursor`\|`copilot`\|`all` context files. |
-| `ci <provider>` | Add a `github`\|`gitlab` workflow. |
-| `template <id>` | Layer another template pack (e.g. add `api` onto a UI project). |
-| `rule-pack <pkg>` | Install & register a third-party rule pack. |
-| `fixture <name>` | Generate a typed fixture stub. |
+| `thing` | Effect | Status |
+|---|---|---|
+| `ai [agent]` | Regenerate AI guidance files: `claude`\|`codex`\|`cursor`\|`copilot`\|`all`. | **6C** |
+| `ci <provider>` | Add a `github`\|`gitlab` workflow. | V1 |
+| `template <id>` | Layer another template pack (e.g. add `api` onto a UI project). | V1 |
+| `rule-pack <pkg>` | Install & register a third-party rule pack. | V1 |
+| `fixture <name>` | Generate a typed fixture stub. | V1 |
+
+#### `testpilot add ai [agent]` *(6C)*
+
+Regenerates **only** the AI guidance files — never scaffold or test files, and no LLM. Reuses the same
+drift classification as `doctor`'s `ai-guidance` check.
+
+> **Dry run by default.** With no `--write`/`--force` it previews and writes nothing. `--write` applies
+> create/update actions; `--force` implies `--write` **and** also overwrites files edited after
+> generation. Per-file outcomes: **missing → create**, **stale (older guidance version) → update**,
+> **current → unchanged**, **edited / unmarked → kept** (only overwritten with `--force`). User edits
+> are never clobbered by default. (A file is `stale` only after the bundled `GUIDANCE_VERSION` is
+> bumped in a TestPilot release — until then a generated file is `current`.) `[agent]` is one id or
+> `all`; omitted, it uses `config.ai.agents` (an empty list reports "nothing to regenerate" and exits
+> 0). An unknown agent exits **2**. Writes are best-effort per file: a failure is reported and the run
+> continues, exiting **2** at the end. `--json` emits `{ command:'add', resource:'ai', dryRun, files[], summary }`.
 
 ```bash
-testpilot add ai claude
-testpilot add template api
+testpilot add ai                 # preview all configured agents
+testpilot add ai --write         # create missing + refresh stale
+testpilot add ai claude --force  # regenerate CLAUDE.md even if hand-edited
 ```
 
 ---

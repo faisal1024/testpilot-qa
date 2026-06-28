@@ -55,10 +55,10 @@ function check(name, fn) {
 
 console.log('smoke:mvp — verifying the built CLI\n')
 
-check('--help lists every MVP command', () => {
+check('--help lists every command', () => {
   const { status, stdout } = cli(['--help'])
   assert(status === 0, `exit ${status}`)
-  for (const command of ['init', 'run', 'analyze', 'doctor', 'explain']) {
+  for (const command of ['init', 'run', 'analyze', 'doctor', 'explain', 'add']) {
     assert(stdout.includes(command), `help is missing "${command}"`)
   }
 })
@@ -206,6 +206,30 @@ check('init scaffolds a complete project and protects existing files', () => {
     const reRun = JSON.parse(second.stdout)
     assert(reRun.created.length === 0, 'second init unexpectedly created files')
     assert(reRun.skipped.length > 0, 'second init did not skip existing files')
+  })
+})
+
+check('add ai regenerates guidance files (dry-run by default, --write applies)', () => {
+  withTempDir((dir) => {
+    // Dry-run on an empty dir: previews, writes nothing.
+    const preview = cli(['add', 'ai', 'claude', '--cwd', dir])
+    assert(preview.status === 0, `exit ${preview.status}`)
+    assert(/would create/.test(preview.stdout), 'dry-run did not preview a create')
+    assert(!existsSync(join(dir, 'CLAUDE.md')), 'dry-run unexpectedly wrote a file')
+
+    // --write creates it; a second run reports it current and is idempotent.
+    const written = cli(['add', 'ai', 'claude', '--write', '--cwd', dir])
+    assert(written.status === 0, `exit ${written.status}`)
+    assert(existsSync(join(dir, 'CLAUDE.md')), 'CLAUDE.md was not created')
+    const first = readFileSync(join(dir, 'CLAUDE.md'), 'utf8')
+    cli(['add', 'ai', 'claude', '--write', '--cwd', dir])
+    assert(
+      readFileSync(join(dir, 'CLAUDE.md'), 'utf8') === first,
+      'second --write was not idempotent',
+    )
+
+    const rerun = cli(['add', 'ai', 'claude', '--json', '--cwd', dir])
+    assert(JSON.parse(rerun.stdout).summary.unchanged === 1, 'expected the file to be current')
   })
 })
 

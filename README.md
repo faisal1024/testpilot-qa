@@ -148,12 +148,30 @@ problems). Guidance drift is a **warning only** — it never fails the command o
 LLM): `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, and
 `.cursor/rules/testpilot-playwright.mdc`. They teach agents the locator hierarchy, web-first
 assertions, no-hard-waits, API conventions, and the TestPilot commands — and stay honest about Tier
-1 limits (no DOM-aware suggestions). Each carries a `version + sha256` marker for future drift
-detection. Existing files are never overwritten without `--force`.
+1 limits (no DOM-aware suggestions). Each carries a `version + sha256` marker so drift is detectable.
 
-**Available today (all five MVP commands):** `init` (scaffold + AI guidance), `run` (Playwright
-pass-through), `analyze` (static Locator Intelligence), `doctor` (project diagnostics), and `explain`
-(rule education).
+**Regenerate guidance safely** with `add ai` — it touches *only* the guidance files (never your tests
+or scaffold), and is a **dry-run preview by default**:
+
+```bash
+# Preview what would change (writes nothing)
+npx testpilot-qa add ai
+
+# Apply: create missing files and refresh stale ones
+npx testpilot-qa add ai --write
+
+# Just one agent, or every supported agent
+npx testpilot-qa add ai claude --write
+npx testpilot-qa add ai all --write
+```
+
+It reuses `doctor`'s drift detection: missing files are **created**, stale ones (older guidance
+version) **updated**, and up-to-date ones left alone. A file you've hand-edited is **never overwritten**
+unless you pass `--force`, so your customizations are safe.
+
+**Available today:** `init` (scaffold + AI guidance), `run` (Playwright pass-through), `analyze`
+(static Locator Intelligence + baseline + SARIF), `doctor` (project diagnostics + guidance drift),
+`explain` (rule education), and `add ai` (safe guidance regeneration).
 
 ---
 

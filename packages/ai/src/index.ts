@@ -8,9 +8,12 @@
  */
 export { CANONICAL_GUIDANCE } from './guidance.js'
 export {
+  actionWrites,
   type AgentGuidanceStatus,
   classifyGuidanceFile,
+  type GuidanceAction,
   type GuidanceFileState,
+  resolveGuidanceAction,
   selectedAgents,
 } from './drift.js'
 export {

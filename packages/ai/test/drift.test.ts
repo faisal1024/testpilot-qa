@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { classifyGuidanceFile, selectedAgents } from '../src/drift.js'
+import {
+  type GuidanceFileState,
+  actionWrites,
+  classifyGuidanceFile,
+  resolveGuidanceAction,
+  selectedAgents,
+} from '../src/drift.js'
 import { generateAgentFiles } from '../src/generators.js'
 
 const claudeContent = generateAgentFiles(['claude'])[0]?.content ?? ''
@@ -46,5 +52,35 @@ describe('selectedAgents', () => {
 
   it('filters to the requested agents, preserving canonical order', () => {
     expect(selectedAgents(['copilot', 'claude'])).toEqual(['claude', 'copilot'])
+  })
+})
+
+describe('resolveGuidanceAction', () => {
+  it('creates missing, updates stale, leaves current alone', () => {
+    expect(resolveGuidanceAction('missing', false)).toBe('create')
+    expect(resolveGuidanceAction('stale', false)).toBe('update')
+    expect(resolveGuidanceAction('current', false)).toBe('skip-current')
+  })
+
+  it('never overwrites edited or unmarked files without force', () => {
+    expect(resolveGuidanceAction('edited', false)).toBe('skip-edited')
+    expect(resolveGuidanceAction('no-marker', false)).toBe('skip-edited')
+    expect(resolveGuidanceAction('edited', true)).toBe('overwrite')
+    expect(resolveGuidanceAction('no-marker', true)).toBe('overwrite')
+  })
+
+  it('force does not change create/update/current outcomes', () => {
+    expect(resolveGuidanceAction('missing', true)).toBe('create')
+    expect(resolveGuidanceAction('stale', true)).toBe('update')
+    expect(resolveGuidanceAction('current', true)).toBe('skip-current')
+  })
+
+  it('actionWrites is true only for create/update/overwrite', () => {
+    const writes: GuidanceFileState[] = ['missing', 'stale', 'edited']
+    for (const state of writes) {
+      expect(actionWrites(resolveGuidanceAction(state, true))).toBe(true)
+    }
+    expect(actionWrites('skip-current')).toBe(false)
+    expect(actionWrites('skip-edited')).toBe(false)
   })
 })

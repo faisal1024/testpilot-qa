@@ -28,6 +28,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@testpilot/ai": "workspace:*",
     "@testpilot/core": "workspace:*",
     "@testpilot/locator-intelligence": "workspace:*",
     "@testpilot/scaffold": "workspace:*"
