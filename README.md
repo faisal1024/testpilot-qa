@@ -174,9 +174,9 @@ npx testpilot-qa fix --write
 ```
 
 Today it rewrites `page.locator('text=Foo')` → `page.getByText('Foo')` (equivalent matching) and leaves
-anything ambiguous untouched. It edits only your test files, never application code, and never inspects
-the DOM — it will **not** turn a CSS/XPath selector into a role locator (that needs DOM evidence
-TestPilot doesn't use). Fixes are idempotent.
+anything ambiguous untouched. It edits only your test files — never application code — makes **no LLM
+calls** and **never inspects the DOM**, so it will **not** turn a CSS/XPath selector into a role locator
+(that needs DOM evidence TestPilot doesn't use). It is **not** broad auto-fix. Fixes are idempotent.
 
 ## Understand a rule — `explain`
 
@@ -275,8 +275,8 @@ TestPilot generates is plain, ejectable Playwright.
 - `explain` — rule education
 
 **Intentionally *not* in the alpha** (planned, not done): DOM-aware/concrete locator suggestions and
-DOM-backed rewrites, broader auto-fix beyond the safe mechanical set, `--changed` diff scoping,
-dashboards, MCP, and any LLM calls.
+DOM-backed healing, broader auto-fix beyond the safe mechanical set, `--changed` diff scoping,
+dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 
 **Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile suites,
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write

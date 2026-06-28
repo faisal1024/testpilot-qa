@@ -130,8 +130,10 @@ and `test:e2e:headed` npm scripts.
 ### 3.2 `testpilot analyze` *(MVP)*
 
 Run Locator Intelligence over test files. Read-only.
-**MVP scope:** Tier 1 static analysis only; `table` + `json` reporters. `--dom`, `--baseline`,
-`sarif`/`html` reporters, and `--changed` land in V1+ (see tags below).
+**Implemented:** Tier 1 static analysis with `--min-score` gating (MVP), the
+`--baseline`/`--update-baseline` no-regression gate and `--output` (6A), and the `sarif` (6B) and
+`html` (7A) reporters on top of `table`/`json`. **Still V2:** `--dom` (DOM-aware enrichment) and
+`--changed` (diff scoping) — see tags below.
 
 ```
 testpilot analyze [globs...] [options]
@@ -483,15 +485,33 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 
 ---
 
-## 8. Future Command Roadmap
+## 8. Command Surface
+
+### 8.1 Current command surface (implemented)
+
+What exists today — see the per-command sections above for details:
+
+| Command | Status | Summary |
+|---|---|---|
+| `testpilot init` | MVP (2.5) | Scaffold a TypeScript Playwright project + AI guidance files. |
+| `testpilot run` | MVP (2.5) | Thin pass-through to the project's local Playwright. |
+| `testpilot analyze` | MVP + 6A/6B/7A | Static Tier 1 analysis; `--min-score` gate; `--baseline`/`--update-baseline` no-regression gate; `--output`; `--reporter table\|json\|sarif\|html`. |
+| `testpilot fix` | 8A | Safe, behavior-preserving mechanical rewrites. **Dry-run by default; `--write` to apply.** Not DOM-aware, not broad auto-fix. |
+| `testpilot add ai` | 6C | Regenerate AI guidance files (dry-run by default; `--write`/`--force`). Other `add` subcommands remain V1. |
+| `testpilot doctor` | MVP (4B) + 5B | Project-readiness diagnostics + AI guidance drift. |
+| `testpilot explain` | MVP (4A) | Explain a rule with bad/good examples. |
+
+Brownfield "snapshot only-new-issues" adoption is delivered by **`testpilot analyze --baseline` /
+`--update-baseline`** (6A) — there is no separate `testpilot baseline` command planned.
+
+### 8.2 Future roadmap
 
 | Command | Version | Purpose |
 |---|---|---|
 | `testpilot score --watch` | V1 | Live quality score in the terminal during development. |
-| `testpilot baseline` | V1 | Snapshot current findings so only *new* issues fail CI (brownfield adoption). |
 | `testpilot review` | V1 | Emit findings as a GitHub PR review/annotations (pairs with the Action). |
-| `testpilot fix` | V1 | Apply safe auto-fixes (deferred until static analysis is proven). |
-| `testpilot add` / `testpilot list` | V1 | Layer capabilities / discover templates & rules. |
+| `testpilot add` (`ci`/`template`/…) / `testpilot list` | V1 | Layer further capabilities / discover templates & rules (`add ai` already shipped in 6C). |
+| `fix --dom` / `fix -i` / `fix --rules` | V1+ | Extend the existing `fix` with interactive approval, rule filters, and (V2) DOM-backed rewrites. |
 | `testpilot record` | V2 | Wrap `playwright codegen` and post-process output through Locator Intelligence so recorded tests are good by default. |
 | `testpilot heal` | V2 | Tier-2 DOM-aware suggestions for locators that broke after a UI change. |
 | `testpilot migrate` | V2 | Codemod legacy suites (e.g. Cypress/Selenium → Playwright) through the rules engine. |

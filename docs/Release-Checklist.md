@@ -1,7 +1,10 @@
 # TestPilot QA — Release Checklist
 
-> Status: Public-alpha readiness (Milestone 5C).
-> This is the gate to run before tagging an alpha / publishing.
+> Status: **Public-alpha readiness is the active focus.** All feature milestones through 8A are merged
+> (6A baseline/output, 6B SARIF + GitHub Action, 6C `add ai`, 7A HTML report, 7B scoring docs, 8A
+> `fix` preview). **Remaining before a public alpha:** the deferred runtime/toolchain dependency majors
+> (`commander`, `zod`, `typescript`, `@biomejs/biome` — see triage below) and a clean run of this gate.
+> Not yet released. This is the gate to run before tagging an alpha / publishing.
 
 ## Pre-release verification
 
