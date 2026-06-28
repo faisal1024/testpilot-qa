@@ -21,7 +21,7 @@
 
 1. **Guessable.** Verbs are obvious: `init`, `analyze`, `fix`, `add`, `doctor`.
 2. **Non-destructive by default.** Anything that writes shows a plan and asks, unless `--yes`. Anything that mutates user test code requires explicit `fix --write`.
-3. **Machine-readable on demand.** Every command supports `--json`. Human output is the derived view.
+3. **Machine-readable on demand.** Every command supports `--json` (except `run`, a Playwright pass-through). Human output is the derived view.
 4. **CI-friendly exit codes.** Deterministic, documented (§7).
 5. **Offline by default.** No network or LLM unless a flag opts in.
 6. **Composable.** Commands do one thing; output of `analyze` feeds `fix`.
