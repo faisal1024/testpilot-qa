@@ -33,9 +33,13 @@ Findings are weighted by severity. The defaults:
 
 | Severity | Default weight | Meaning |
 |---|---:|---|
-| `error` | **5** | A fragile pattern that should be fixed (e.g. an XPath or CSS-class selector). |
-| `warn`  | **2** | A risky pattern worth revisiting (e.g. a hard wait, a non-user-facing locator). |
+| `error` | **5** | A fragile pattern that should be fixed (e.g. an XPath or CSS-class selector, or a hard wait). |
+| `warn`  | **2** | A risky pattern worth revisiting (e.g. a non-user-facing locator). |
 | `info`  | **0.5** | A minor nudge. |
+
+The shipped defaults are: `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, and
+`no-hard-wait` are **`error`**; `prefer-user-facing-locator` is **`warn`**. (There are no `info` rules
+by default — `info` exists for rules you downgrade.)
 
 Weights are configurable in `testpilot.config.ts` under `scoring.weights`, and **per-rule severity** is
 configurable under `rules` (setting a rule to `off` removes its findings from the score entirely):
@@ -52,13 +56,13 @@ could be." That's why the score answers: *how close is this suite to worst-case 
 
 ### Grades
 
-| Grade | Score |
-|---|---|
-| **A** | ≥ 90 |
-| **B** | ≥ 80 |
-| **C** | ≥ 70 |
-| **D** | ≥ 60 |
-| **F** | < 60 |
+| Grade | Score | Roughly signals |
+|---|---|---|
+| **A** | ≥ 90 | Healthy — fragile locators are rare. |
+| **B** | ≥ 80 | Good — a few patterns worth tidying. |
+| **C** | ≥ 70 | Mixed — noticeable fragility. |
+| **D** | ≥ 60 | Shaky — fragile locators are common. |
+| **F** | < 60 | Fragile — locator quality needs real work. |
 
 ---
 
@@ -134,7 +138,8 @@ penalty:
 | **Accessibility** | *(no rules yet)* | reserved — stays 100 |
 | **Maintainability** | *(no rules yet)* | reserved — stays 100 |
 
-Example — 4 call-sites with one locator `error` (5) and one flakiness `warn` (2):
+Example — 4 call-sites with one locator `error` (5) and one flakiness `warn` (2) — the flakiness
+finding is a `warn` here because `no-hard-wait` has been downgraded from its `error` default:
 
 ```
 headline:     round(100 × (1 − 7/20)) = 65
