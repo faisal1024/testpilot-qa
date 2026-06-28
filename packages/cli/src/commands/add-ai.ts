@@ -139,7 +139,13 @@ export async function addAiCommand(
 function reportEmpty(dryRun: boolean, globals: GlobalOptions): void {
   if (globals.json) {
     console.log(
-      JSON.stringify({ command: 'add', resource: 'ai', dryRun, files: [], summary: summarize([]) }),
+      JSON.stringify({
+        command: 'add',
+        resource: 'ai',
+        dryRun,
+        files: [],
+        summary: summarize([], dryRun),
+      }),
     )
   } else if (!globals.quiet) {
     console.log('No AI agents configured in config.ai.agents — nothing to regenerate.')
@@ -163,16 +169,9 @@ const ACTION_LABEL: Record<GuidanceAction, { applied: string; planned: string; s
 }
 
 function report(results: AddAiFileResult[], dryRun: boolean, globals: GlobalOptions): void {
+  const summary = summarize(results, dryRun)
   if (globals.json) {
-    console.log(
-      JSON.stringify({
-        command: 'add',
-        resource: 'ai',
-        dryRun,
-        files: results,
-        summary: summarize(results),
-      }),
-    )
+    console.log(JSON.stringify({ command: 'add', resource: 'ai', dryRun, files: results, summary }))
     return
   }
   if (globals.quiet) {
@@ -184,10 +183,9 @@ function report(results: AddAiFileResult[], dryRun: boolean, globals: GlobalOpti
     console.log(`  ${label.symbol} ${file.path} (${dryRun ? label.planned : label.applied})`)
   }
 
-  const summary = summarize(results)
-  const pending = summary.created + summary.updated
   console.log('')
   if (dryRun) {
+    const pending = summary.created + summary.updated
     if (pending > 0) {
       console.log(`${pending} file(s) would change. Re-run with --write to apply.`)
     } else {
@@ -196,6 +194,9 @@ function report(results: AddAiFileResult[], dryRun: boolean, globals: GlobalOpti
   } else {
     const changed = summary.created + summary.updated + summary.overwritten
     console.log(`${changed} file(s) written, ${summary.unchanged} already current.`)
+    if (summary.failed > 0) {
+      console.log(`${summary.failed} file(s) could not be written.`)
+    }
   }
   if (summary.skipped > 0) {
     console.log(
@@ -204,10 +205,17 @@ function report(results: AddAiFileResult[], dryRun: boolean, globals: GlobalOpti
   }
 }
 
-function summarize(results: AddAiFileResult[]) {
-  const summary = { created: 0, updated: 0, overwritten: 0, unchanged: 0, skipped: 0 }
+/**
+ * Counts outcomes. On an applied run, a file whose write failed is counted as
+ * `failed` (not as its intended create/update/overwrite), so the headline reflects
+ * what actually happened on disk rather than what was planned.
+ */
+function summarize(results: AddAiFileResult[], dryRun: boolean) {
+  const summary = { created: 0, updated: 0, overwritten: 0, unchanged: 0, skipped: 0, failed: 0 }
   for (const file of results) {
-    if (file.action === 'create') summary.created += 1
+    if (!dryRun && actionWrites(file.action) && !file.written) {
+      summary.failed += 1
+    } else if (file.action === 'create') summary.created += 1
     else if (file.action === 'update') summary.updated += 1
     else if (file.action === 'overwrite') summary.overwritten += 1
     else if (file.action === 'skip-current') summary.unchanged += 1

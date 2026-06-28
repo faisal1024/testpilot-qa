@@ -175,9 +175,10 @@ describe('add ai — output modes & errors', () => {
     // A file where the `.cursor` directory should be blocks the cursor write,
     // but later agents (copilot) must still be written.
     writeFileSync(join(dir, '.cursor'), 'x')
-    const { exitCode, stderr } = await runAddAi(['all', '--write'])
+    const { exitCode, stdout, stderr } = await runAddAi(['all', '--write'])
     expect(exitCode).toBe(2)
     expect(stderr).toContain('Could not write')
+    expect(stdout).toContain('could not be written') // headline reflects the failure
     expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
     expect(existsSync(join(dir, '.github/copilot-instructions.md'))).toBe(true) // wrote past the failure
   })
