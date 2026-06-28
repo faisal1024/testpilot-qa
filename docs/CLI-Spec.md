@@ -176,22 +176,23 @@ testpilot analyze [globs...] [options]
 > `baseline` block (`{ path, newFindings, baselinedFindings }`). Missing/malformed baseline files and
 > unwritable `--output`/`--baseline` paths exit **2** (usage) with a clear message.
 >
-> **Reporters & CI integration (6B):** **`--reporter <table|json|sarif>`** chooses the output format
-> for both stdout and `--output`. `table` is the human report; `json` is the stable machine report;
-> `sarif` emits a **SARIF 2.1.0** log so findings appear as GitHub code-scanning annotations at the
-> exact file/line. An unknown reporter exits **2**. Back-compat: with no `--reporter`, `--json` or a
+> **Reporters & CI integration (6B, html in 7A):** **`--reporter <table|json|sarif|html>`** chooses the
+> output format for both stdout and `--output`. `table` is the human report; `json` is the stable
+> machine report; `sarif` emits a **SARIF 2.1.0** log so findings appear as GitHub code-scanning
+> annotations at the exact file/line; `html` writes a **self-contained static HTML report** (inline
+> CSS, no external assets, scripts, or tracking) for sharing/scanning. An unknown reporter exits **2**. Back-compat: with no `--reporter`, `--json` or a
 > bare `--output` still imply `json`, and interactive runs default to `table`. SARIF results carry a
 > `partialFingerprints['testpilotIdentity/v1']` equal to the baseline identity, so code scanning does
-> not re-report a finding that merely moved lines. With `--baseline`, the **SARIF and table outputs are
-> scoped to the new findings only** (matching what the gate fails on); the JSON report stays whole and
-> carries the `baseline` summary. A composite **GitHub Action**
+> not re-report a finding that merely moved lines. With `--baseline`, the **gate-facing `sarif` and
+> `table` outputs are scoped to the new findings only** (matching what the gate fails on), while the
+> **comprehensive `json` and `html` outputs stay whole** and carry the `baseline` summary. A composite **GitHub Action**
 > (`faisal1024/testpilot-qa/action@v0`) wraps the CLI — it runs `analyze`, writes SARIF, and posts the
 > human report to the job summary; it duplicates no analysis logic. Pair it with
 > `github/codeql-action/upload-sarif` to publish annotations. The CLI works fully without GitHub.
 
 | Option | Description | Default | Version |
 |---|---|---|---|
-| `--reporter <fmt>` | `table` \| `json` \| `sarif` (`html` planned). | `table` | MVP / 6B |
+| `--reporter <fmt>` | `table` \| `json` \| `sarif` \| `html`. | `table` | MVP / 6B / 7A |
 | `--output <path>` | Write the report (in `--reporter` format) to a file. | stdout | MVP (6A) |
 | `--min-score <n>` | Fail if project score `< n` (0–100). | none | MVP |
 | `--baseline <path>` | Compare to a saved baseline; gate on *new* findings only. | none | MVP (6A) |

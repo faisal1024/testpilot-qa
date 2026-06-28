@@ -82,7 +82,13 @@ annotations — pointing at the exact file and line.
 ```bash
 # Write a SARIF report (pairs with --baseline and --min-score)
 npx testpilot-qa analyze --reporter sarif --output testpilot.sarif
+
+# Or a shareable, self-contained HTML report (open it in any browser)
+npx testpilot-qa analyze --reporter html --output testpilot-report.html
 ```
+
+The **HTML report** is a single static file — score, sub-scores, and findings grouped by file, with no
+external assets, scripts, or tracking. Good for sharing a snapshot or scanning a suite at a glance.
 
 The bundled GitHub Action wraps the CLI (it does not duplicate analysis logic), runs the gate, writes
 SARIF, and adds the human report to the job summary. Pair it with GitHub's `upload-sarif` to publish
@@ -234,7 +240,7 @@ Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.
 - **Internal interfaces only** — no public plugin system yet.
-- **Deferred:** `fix`, ESLint plugin, HTML report, DOM-aware suggestions, MCP, LLM features, and the docs portal.
+- **Deferred:** `fix`, ESLint plugin, DOM-aware suggestions, MCP, LLM features, and the docs portal.
 
 See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
@@ -250,12 +256,13 @@ TestPilot generates is plain, ejectable Playwright.
 - `run` — thin Playwright pass-through (not a custom runner)
 - `analyze` — static Tier 1 locator analysis (six rules) + Locator Quality Score + `--min-score` gating
 - **brownfield baseline** — record known findings and gate CI on *new* ones only (`--baseline`)
-- **SARIF report + GitHub Action** — `--reporter sarif` for GitHub code scanning, plus a wrapper Action
+- **reporters** — `--reporter table|json|sarif|html`: SARIF for GitHub code scanning, a shareable HTML report, plus a wrapper GitHub Action
+- `add ai` — safely regenerate AI guidance files (dry-run by default)
 - `doctor` — project-readiness diagnostics + AI guidance drift detection
 - `explain` — rule education
 
 **Intentionally *not* in the alpha** (planned, not done): auto-fix, DOM-aware/concrete locator
-suggestions, `--changed` diff scoping, an HTML report, dashboards, MCP, and any LLM calls.
+suggestions, `--changed` diff scoping, dashboards, MCP, and any LLM calls.
 
 **Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile
 suites, and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents

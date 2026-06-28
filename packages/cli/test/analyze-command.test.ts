@@ -117,6 +117,22 @@ describe('analyze --reporter', () => {
     expect(text).toContain('no-xpath')
   })
 
+  it('writes a self-contained HTML report with --reporter html --output', async () => {
+    const out = join(dir, 'report.html')
+    const { stdout } = await runAnalyze(['--reporter', 'html', '--output', out])
+    expect(stdout).toContain('Report written to')
+    const html = readFileSync(out, 'utf8')
+    expect(html.startsWith('<!doctype html>')).toBe(true)
+    expect(html).toContain('no-xpath')
+    expect(html).toContain('Locator Quality')
+    expect(html).not.toMatch(/<script/i)
+  })
+
+  it('prints HTML to stdout with --reporter html', async () => {
+    const { stdout } = await runAnalyze(['--reporter', 'html'])
+    expect(stdout.startsWith('<!doctype html>')).toBe(true)
+  })
+
   it('scopes SARIF to NEW findings when a baseline is active', async () => {
     const baseline = join(dir, 'baseline.json')
     // Record the existing finding (a.spec.ts no-xpath) as accepted.

@@ -134,6 +134,21 @@ check('analyze --reporter sarif writes a valid SARIF file', () => {
   })
 })
 
+check('analyze --reporter html writes a self-contained report', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'fragile.spec.ts'), "page.locator('//button')\n")
+    const out = join(dir, 'report.html')
+    const { status } = cli(['analyze', '--reporter', 'html', '--output', out, '--cwd', dir])
+    assert(status === 0, `exit ${status}`)
+    const html = readFileSync(out, 'utf8')
+    assert(html.startsWith('<!doctype html>'), 'not an HTML document')
+    assert(html.includes('no-xpath'), 'HTML is missing the finding')
+    assert(!/<script/i.test(html), 'HTML must not contain scripts')
+    assert(!/https?:\/\/(?!testpilot\.dev)/.test(html), 'HTML must not reference external assets')
+  })
+})
+
 check('analyze --baseline gates only on new findings', () => {
   withTempDir((dir) => {
     mkdirSync(join(dir, 'tests'), { recursive: true })

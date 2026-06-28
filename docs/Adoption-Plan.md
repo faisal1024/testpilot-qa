@@ -1,13 +1,13 @@
 # TestPilot QA — Adapted Adoption Plan
 
 > Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening), 5D (dependency
-> PR cleanup), 6A (brownfield baseline & output), and 6B (CI & PR integration: SARIF + GitHub Action)
-> are merged.
-> **Milestone 6C (safe AI guidance regeneration) is the active milestone** — `testpilot add ai
-> [agent]` regenerates only the AI guidance files (dry-run by default; `--write`/`--force`), reusing
-> `doctor`'s drift classification and never overwriting hand-edited files without `--force`.
-> Runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`) remain
-> deferred to their own PRs (see `docs/Release-Checklist.md`).
+> PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub Action), and
+> 6C (safe AI guidance regeneration: `testpilot add ai`) are merged.
+> **Milestone 7A (local HTML report) is the active milestone** — `analyze --reporter html` writes a
+> self-contained static HTML report (score, sub-scores, findings grouped by file; no external assets,
+> scripts, or tracking) for sharing and scanning. Runtime/toolchain dependency majors (`commander`,
+> `zod`, `typescript`, `@biomejs/biome`) remain deferred to their own PRs (see
+> `docs/Release-Checklist.md`).
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 
@@ -257,8 +257,8 @@ After Milestone 5B:
    published `testpilot-qa` is a single self-contained package.
 2. **6A — Brownfield baseline (merged):** baseline file, no-regression gate, output file support.
 3. **6B — PR integration (merged):** SARIF reporter, GitHub Action wrapper, PR job summary.
-4. **6C — Guidance regeneration (active):** `testpilot add ai` with safe drift-aware behavior.
-5. **7A — HTML report:** local static report for sharing and demos.
+4. **6C — Guidance regeneration (merged):** `testpilot add ai` with safe drift-aware behavior.
+5. **7A — HTML report (active):** local static report for sharing and demos.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 
