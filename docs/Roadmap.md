@@ -2,6 +2,8 @@
 
 > Status: Approved — aligned to *Updated Plan After Claude Review*
 > This roadmap adopts the approved **Phase 0–10** structure and maps each phase to a release version.
+> See [Adoption-Plan.md](Adoption-Plan.md) for the product-owner sequencing that turns the MVP into
+> a public alpha and then a CI-adoptable tool.
 
 ---
 
@@ -92,7 +94,8 @@ Make it part of the everyday loop, the CI pipeline, and the agent ecosystem; the
 ### Phase 6 — AI-Agent Integration (full)
 - ✅ **Canonical guidance source** (`@testpilot/ai` `CANONICAL_GUIDANCE`) as the single source. *(5A)*
 - ✅ Generated `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, Cursor rules — written by `init` by default, with `version + sha256` markers. *(5A)*
-- ⏳ Drift detection in `doctor`; `testpilot add ai` regeneration. *(5B — marker helpers already exported)*
+- ✅ Drift detection in `doctor` — per-agent `current`/`missing`/`edited`/`stale`/`no-marker`, warning-only. *(5B)*
+- ⏳ `testpilot add ai` regeneration. *(V1)*
 - **No LLM calls** — this is agent *readiness*, not AI-generated tests.
 
 ### Phase 7 — Documentation Portal (Docusaurus)

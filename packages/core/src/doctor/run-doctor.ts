@@ -1,5 +1,14 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import {
+  AGENT_FILE_PATHS,
+  type AgentGuidanceStatus,
+  type AgentId,
+  GUIDANCE_VERSION,
+  type GuidanceFileState,
+  classifyGuidanceFile,
+  selectedAgents,
+} from '@testpilot/ai'
 import { ConfigError } from '../config/errors.js'
 import { loadConfig } from '../config/load-config.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
@@ -27,6 +36,8 @@ export interface DoctorCheck {
   status: CheckStatus
   message: string
   remediation?: string
+  /** Optional structured detail (e.g. per-file AI guidance status). Backwards-compatible. */
+  details?: Record<string, unknown>
 }
 
 export interface DoctorReport {
@@ -198,14 +209,66 @@ function checkProjectStructure(
       }
 }
 
-function checkAiGuidance(): DoctorCheck {
-  return {
+function readFileOrNull(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+const STATE_LABEL: Record<Exclude<GuidanceFileState, 'current'>, string> = {
+  missing: 'missing',
+  edited: 'user-edited',
+  stale: 'stale',
+  'no-marker': 'unmarked',
+}
+
+function describeIssues(issues: AgentGuidanceStatus[]): string {
+  const order: Array<Exclude<GuidanceFileState, 'current'>> = [
+    'missing',
+    'edited',
+    'stale',
+    'no-marker',
+  ]
+  return order
+    .map((state) => {
+      const paths = issues.filter((issue) => issue.state === state).map((issue) => issue.path)
+      return paths.length > 0 ? `${paths.length} ${STATE_LABEL[state]} (${paths.join(', ')})` : null
+    })
+    .filter((part): part is string => part !== null)
+    .join(', ')
+}
+
+/**
+ * Detection only: inspects the AI guidance files selected by `config.ai.agents`
+ * and reports drift. Never fails (warn at most) — guidance drift is not a hard
+ * problem — and never regenerates or overwrites anything.
+ */
+function checkAiGuidance(projectRoot: string, agents: AgentId[]): DoctorCheck {
+  const files = agents.map((agent) =>
+    classifyGuidanceFile(agent, readFileOrNull(join(projectRoot, AGENT_FILE_PATHS[agent]))),
+  )
+  const issues = files.filter((file) => file.state !== 'current')
+
+  const check: DoctorCheck = {
     id: 'ai-guidance',
     title: 'AI guidance files',
     category: 'project',
-    status: 'pass',
-    message: 'Not checked yet — AI guidance generation arrives in a later milestone.',
+    status: issues.length === 0 ? 'pass' : 'warn',
+    message:
+      issues.length === 0
+        ? `Agent guidance: all ${files.length} file(s) current (v${GUIDANCE_VERSION}).`
+        : `Agent guidance: ${files.length - issues.length}/${files.length} current — ${describeIssues(issues)}.`,
+    details: { version: GUIDANCE_VERSION, files },
   }
+  if (issues.length > 0) {
+    // Intentionally not `init --force` — that reruns the whole scaffold and could
+    // overwrite unrelated files. A guidance-only regeneration command lands in V1.
+    check.remediation =
+      'Review the affected guidance files; guidance-only regeneration (`testpilot add ai`) lands in a later milestone.'
+  }
+  return check
 }
 
 function overallStatus(checks: DoctorCheck[]): CheckStatus {
@@ -278,7 +341,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     checkTestDirectory(config.testDir, testDirExists),
     checkIncludeGlobs(config.include),
     checkProjectStructure(configFilePresent, playwrightConfigPath !== null, testDirExists),
-    checkAiGuidance(),
+    checkAiGuidance(projectRoot, selectedAgents(config.ai.agents)),
   ]
 
   return {

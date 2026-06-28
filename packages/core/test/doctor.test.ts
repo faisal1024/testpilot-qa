@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type DoctorReport, runDoctor } from '../src/index.js'
 
@@ -16,7 +17,16 @@ afterEach(() => {
 
 const PLAYWRIGHT_BIN = process.platform === 'win32' ? 'playwright.cmd' : 'playwright'
 
-/** Lays down a complete, healthy TestPilot project. */
+/** Writes the current AI guidance files into the project (so they are pristine/current). */
+function writeAgentFiles(): void {
+  for (const file of generateAgentFiles()) {
+    const dest = join(dir, file.path)
+    mkdirSync(dirname(dest), { recursive: true })
+    writeFileSync(dest, file.content)
+  }
+}
+
+/** Lays down a complete, healthy TestPilot project (including AI guidance files). */
 function writeHealthyProject(): void {
   writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
   mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true })
@@ -24,6 +34,7 @@ function writeHealthyProject(): void {
   writeFileSync(join(dir, 'playwright.config.ts'), 'export default {}\n')
   mkdirSync(join(dir, 'tests'), { recursive: true })
   writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+  writeAgentFiles()
 }
 
 function checkById(report: DoctorReport, id: string) {
@@ -110,11 +121,82 @@ describe('runDoctor', () => {
     expect(report.status).toBe('pass')
   })
 
-  it('does not fake AI guidance drift detection', async () => {
-    writeHealthyProject()
-    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
-    const ai = checkById(report, 'ai-guidance')
-    expect(ai?.status).toBe('pass')
-    expect(ai?.message.toLowerCase()).toContain('not checked yet')
+  describe('AI guidance drift', () => {
+    function aiCheck(report: DoctorReport) {
+      return checkById(report, 'ai-guidance')
+    }
+    function claudePath() {
+      return join(dir, 'CLAUDE.md')
+    }
+
+    it('passes when all generated files are current', async () => {
+      writeHealthyProject()
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('pass')
+      expect(aiCheck(report)?.message).toContain('current')
+      expect(report.status).toBe('pass')
+    })
+
+    it('warns when a selected guidance file is missing', async () => {
+      writeHealthyProject()
+      rmSync(claudePath())
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('warn')
+      expect(aiCheck(report)?.message).toContain('missing')
+      // A warning must not flip the project to a hard failure.
+      expect(report.status).toBe('warn')
+    })
+
+    it('warns when a generated file was user-edited', async () => {
+      writeHealthyProject()
+      writeFileSync(claudePath(), `${readFileSync(claudePath(), 'utf8')}\nhand edit\n`)
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('warn')
+      expect(aiCheck(report)?.message).toContain('user-edited')
+    })
+
+    it('warns when a marker version is stale', async () => {
+      writeHealthyProject()
+      writeFileSync(claudePath(), readFileSync(claudePath(), 'utf8').replace(' v1 ', ' v0 '))
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('warn')
+      expect(aiCheck(report)?.message).toContain('stale')
+    })
+
+    it('warns when a file has no marker', async () => {
+      writeHealthyProject()
+      writeFileSync(claudePath(), '# my own notes\n')
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('warn')
+      expect(aiCheck(report)?.message).toContain('unmarked')
+    })
+
+    it('only checks the agents selected by config.ai.agents', async () => {
+      writeHealthyProject()
+      // Keep only CLAUDE.md; remove the others.
+      for (const file of ['AGENTS.md', '.github/copilot-instructions.md']) {
+        rmSync(join(dir, file))
+      }
+      rmSync(join(dir, '.cursor', 'rules', 'testpilot-playwright.mdc'))
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { ai: { agents: ['claude'] } }\n",
+      )
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      expect(aiCheck(report)?.status).toBe('pass')
+      const files = (aiCheck(report)?.details?.files as Array<{ agent: string }>) ?? []
+      expect(files.map((f) => f.agent)).toEqual(['claude'])
+    })
+
+    it('includes structured per-file details', async () => {
+      writeHealthyProject()
+      rmSync(claudePath())
+      const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+      const files = aiCheck(report)?.details?.files as Array<Record<string, unknown>>
+      const claude = files.find((f) => f.agent === 'claude')
+      expect(claude).toMatchObject({ agent: 'claude', path: 'CLAUDE.md', state: 'missing' })
+      expect(claude).toHaveProperty('reason')
+      expect(claude).toHaveProperty('expectedVersion')
+    })
   })
 })

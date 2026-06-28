@@ -224,11 +224,18 @@ testpilot doctor --quiet  # no output; exit code only
 
 **Checks (MVP):** Node.js version, `package.json` presence, local Playwright install, Playwright
 config discovery, `testpilot.config.ts` validity, test-directory existence, include-pattern sanity,
-and TestPilot project-structure (when scaffolded). AI guidance-file drift is reported as *not
-checked yet* (the generator lands later) — no faked drift detection.
+TestPilot project-structure (when scaffolded), and **AI guidance-file drift** (5B).
+
+**AI guidance drift (`ai-guidance`):** for the agents selected by `config.ai.agents` (default: all),
+checks each expected file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`,
+`.cursor/rules/testpilot-playwright.mdc`). State per file: `current`, `missing`, `edited`
+(user-modified), `stale` (older marker version), or `no-marker`. **Detection only** — read-only,
+deterministic, never regenerates or overwrites. Drift is a **warning, never a hard failure**, so it
+does not by itself change the exit code. The structured per-file detail is in `check.details.files`.
 
 **Output:** an overall status (`pass`/`warn`/`fail`), each check (`id`, `title`, `category`,
-`status`, `message`, optional `remediation`), and deduped `nextActions`. `--json` envelope:
+`status`, `message`, optional `remediation`, optional `details`), and deduped `nextActions`. `--json`
+envelope:
 
 ```json
 {

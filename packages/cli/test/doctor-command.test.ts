@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildProgram } from '../src/program.js'
 
@@ -23,6 +24,11 @@ function writeHealthyProject(): void {
   writeFileSync(join(dir, 'playwright.config.ts'), 'export default {}\n')
   mkdirSync(join(dir, 'tests'), { recursive: true })
   writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+  for (const file of generateAgentFiles()) {
+    const dest = join(dir, file.path)
+    mkdirSync(dirname(dest), { recursive: true })
+    writeFileSync(dest, file.content)
+  }
 }
 
 async function runDoctorCli(extraArgs: string[] = []) {
@@ -97,5 +103,19 @@ describe('doctor command', () => {
     )
     const { exitCode } = await runDoctorCli()
     expect(exitCode).toBe(3)
+  })
+
+  it('keeps exit code 0 when AI guidance drifts (warning only)', async () => {
+    writeHealthyProject()
+    rmSync(join(dir, 'CLAUDE.md'))
+    const { stdout, exitCode } = await runDoctorCli(['--json'])
+    expect(exitCode).toBe(0)
+    const report = JSON.parse(stdout)
+    expect(report.status).toBe('warn')
+    const ai = report.checks.find((c: { id: string }) => c.id === 'ai-guidance')
+    expect(ai.status).toBe('warn')
+    expect(ai.details.files.find((f: { agent: string }) => f.agent === 'claude').state).toBe(
+      'missing',
+    )
   })
 })
