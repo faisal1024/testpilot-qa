@@ -84,6 +84,15 @@ export interface QualityScore {
   subScores: SubScores
 }
 
+/** Baseline comparison summary, present only when `--baseline` was used. */
+export interface BaselineReport {
+  path: string
+  /** Findings not covered by the baseline (the regression set that gates CI). */
+  newFindings: number
+  /** Findings absorbed by the baseline (tolerated legacy debt). */
+  baselinedFindings: number
+}
+
 /** The full, JSON-serializable analysis report (`testpilot analyze --json`). */
 export interface AnalysisReport {
   schemaVersion: string
@@ -93,10 +102,12 @@ export interface AnalysisReport {
   findings: Finding[]
   warnings: AnalysisWarning[]
   parseErrors: ParseError[]
+  /** Present only when analyzed with `--baseline`. */
+  baseline?: BaselineReport
 }
 
-/** Bumped on report-shape changes. 1.1 added warnings/parseErrors; 1.2 added `score`. */
-export const ANALYSIS_SCHEMA_VERSION = '1.2'
+/** Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline. */
+export const ANALYSIS_SCHEMA_VERSION = '1.3'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

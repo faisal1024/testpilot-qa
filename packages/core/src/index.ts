@@ -13,6 +13,7 @@ export {
   type AnalysisReport,
   type AnalysisSummary,
   type AnalysisWarning,
+  type BaselineReport,
   type Finding,
   type FindingSeverity,
   type Grade,
@@ -23,6 +24,15 @@ export {
   type ScoreBreakdown,
   type SubScores,
 } from './analysis/types.js'
+export {
+  type Baseline,
+  BASELINE_SCHEMA_VERSION,
+  type BaselineComparison,
+  type BaselineEntry,
+  buildBaseline,
+  compareToBaseline,
+  findingKey,
+} from './baseline/baseline.js'
 
 export { defineConfig } from './config/define-config.js'
 export { ConfigError } from './config/errors.js'
