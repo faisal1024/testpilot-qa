@@ -169,7 +169,8 @@ testpilot analyze [globs...] [options]
 > distinct selector text such as `getByText('Log in')` vs `getByText('Login')` stays a separate
 > identity so a real new finding is never silently masked), so moving code or re-grading a rule does
 > not create a regression; duplicate findings are counted, so an *extra* occurrence beyond the baseline
-> count is treated as new. **`--update-baseline`** (requires `--baseline`) records the current findings to
+> count is treated as new. A call site that gets hard line-wrapped across physical lines may register
+> as new until you refresh the baseline — a deliberate, visible miss rather than a silent one. **`--update-baseline`** (requires `--baseline`) records the current findings to
 > that path and exits **0** without gating. When `--baseline` is active the JSON report gains a
 > `baseline` block (`{ path, newFindings, baselinedFindings }`). Missing/malformed baseline files and
 > unwritable `--output`/`--baseline` paths exit **2** (usage) with a clear message.
