@@ -265,7 +265,9 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   }
 
   const playwrightConfigPath = findPlaywrightConfig(projectRoot, config.playwrightConfig)
-  const testDirExists = isDirectory(join(cwd, config.testDir))
+  // Resolve testDir against the discovered project root (not the invocation cwd)
+  // so running `doctor` from a subdirectory doesn't falsely report it missing.
+  const testDirExists = isDirectory(join(projectRoot, config.testDir))
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),

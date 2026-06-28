@@ -100,6 +100,16 @@ describe('runDoctor', () => {
     expect(report.nextActions.length).toBeGreaterThan(0)
   })
 
+  it('resolves the test directory from the project root, not the invocation cwd', async () => {
+    writeHealthyProject()
+    const nested = join(dir, 'src', 'features')
+    mkdirSync(nested, { recursive: true })
+    const report = await runDoctor({ cwd: nested, nodeVersion: NODE_OK })
+    expect(checkById(report, 'test-directory')?.status).toBe('pass')
+    expect(checkById(report, 'project-structure')?.status).toBe('pass')
+    expect(report.status).toBe('pass')
+  })
+
   it('does not fake AI guidance drift detection', async () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
