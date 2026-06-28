@@ -30,6 +30,18 @@ describe('findingKey', () => {
     expect(findingKey(finding({ file: 'tests/b.spec.ts' }))).not.toBe(base)
     expect(findingKey(finding({ snippet: 'other' }))).not.toBe(base)
   })
+
+  it('is independent of snippet formatting (indentation, line wraps, interior spacing)', () => {
+    const base = findingKey(finding({ snippet: "page.locator('//button')" }))
+    // Leading/trailing indentation.
+    expect(findingKey(finding({ snippet: "    page.locator('//button')  " }))).toBe(base)
+    // A line-wrapped call.
+    expect(findingKey(finding({ snippet: "page.locator(\n  '//button'\n)" }))).toBe(base)
+    // Formatter-added interior spaces.
+    expect(findingKey(finding({ snippet: "page.locator( '//button' )" }))).toBe(base)
+    // Quote style is meaningful content, not whitespace — still distinct.
+    expect(findingKey(finding({ snippet: 'page.locator("//button")' }))).not.toBe(base)
+  })
 })
 
 describe('buildBaseline', () => {

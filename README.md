@@ -68,8 +68,9 @@ npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
 npx testpilot-qa analyze --baseline testpilot-baseline.json
 ```
 
-A finding's baseline identity is its rule + file + code snippet — independent of line number and
-severity — so moving code around or re-grading a rule never resurfaces an already-accepted finding.
+A finding's baseline identity is its rule + file + code snippet — independent of line number,
+severity, and snippet formatting (whitespace and indentation are normalized) — so moving code around,
+re-grading a rule, or reformatting with a code formatter never resurfaces an already-accepted finding.
 Commit the baseline file and shrink it over time as you fix the debt.
 
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,

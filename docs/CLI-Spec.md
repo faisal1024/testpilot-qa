@@ -164,9 +164,10 @@ testpilot analyze [globs...] [options]
 > parent directories) instead of stdout. **`--baseline <path>`** compares the current findings to a
 > saved baseline and gates on *new* findings only — exit **1** when a regression appears, exit **0**
 > when every current finding is grandfathered in. A finding's baseline identity is `ruleId + file +
-> snippet` (line/column/severity-independent), so moving code or re-grading a rule never resurfaces an
-> accepted finding; duplicate findings are counted, so an *extra* occurrence beyond the baseline count
-> is treated as new. **`--update-baseline`** (requires `--baseline`) records the current findings to
+> snippet` (line/column/severity-independent; snippet whitespace is normalized so reformatting never
+> resurfaces an accepted finding), so moving code, re-grading a rule, or running a formatter does not
+> create a regression; duplicate findings are counted, so an *extra* occurrence beyond the baseline
+> count is treated as new. **`--update-baseline`** (requires `--baseline`) records the current findings to
 > that path and exits **0** without gating. When `--baseline` is active the JSON report gains a
 > `baseline` block (`{ path, newFindings, baselinedFindings }`). Missing/malformed baseline files and
 > unwritable `--output`/`--baseline` paths exit **2** (usage) with a clear message.

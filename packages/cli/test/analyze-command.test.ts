@@ -134,4 +134,52 @@ describe('analyze --baseline / --update-baseline', () => {
     expect(report.baseline).toMatchObject({ newFindings: 0 })
     expect(report.baseline.baselinedFindings).toBeGreaterThan(0)
   })
+
+  it('still fails the score gate (exit 1) when the baseline passes', async () => {
+    await runAnalyze(['--baseline', baselinePath(), '--update-baseline'])
+    // No new findings, but the score is well below 100.
+    const { exitCode, stderr } = await runAnalyze([
+      '--baseline',
+      baselinePath(),
+      '--min-score',
+      '100',
+    ])
+    expect(exitCode).toBe(1)
+    expect(stderr).toContain('below the required minimum')
+  })
+
+  it('reports both gates (exit 1) when score and baseline both fail', async () => {
+    await runAnalyze(['--baseline', baselinePath(), '--update-baseline'])
+    writeFileSync(join(dir, 'tests', 'b.spec.ts'), 'page.waitForTimeout(1000)\n')
+    const { exitCode, stderr } = await runAnalyze([
+      '--baseline',
+      baselinePath(),
+      '--min-score',
+      '100',
+    ])
+    expect(exitCode).toBe(1)
+    expect(stderr).toContain('new finding(s) vs baseline')
+    expect(stderr).toContain('below the required minimum')
+  })
+
+  it('errors (exit 2) on an unparseable baseline file', async () => {
+    writeFileSync(baselinePath(), '{ not valid json')
+    const { exitCode, stderr } = await runAnalyze(['--baseline', baselinePath()])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Could not parse baseline file')
+  })
+
+  it('errors (exit 2) on a baseline missing its entries array', async () => {
+    writeFileSync(baselinePath(), JSON.stringify({ schemaVersion: '1.0' }))
+    const { exitCode, stderr } = await runAnalyze(['--baseline', baselinePath()])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('missing an "entries" array')
+  })
+
+  it('errors (exit 2) on an unsupported baseline schema version', async () => {
+    writeFileSync(baselinePath(), JSON.stringify({ schemaVersion: '0.9', entries: [] }))
+    const { exitCode, stderr } = await runAnalyze(['--baseline', baselinePath()])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Unsupported baseline schema')
+  })
 })

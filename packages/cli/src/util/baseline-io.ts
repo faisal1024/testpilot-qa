@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import type { Baseline } from '@testpilot/core'
+import { BASELINE_SCHEMA_VERSION, type Baseline } from '@testpilot/core'
 import { writeJsonFile } from './output.js'
 
 /** Raised when a baseline file is missing, unreadable, or malformed. */
@@ -34,6 +34,14 @@ export function loadBaseline(absolutePath: string, displayPath: string): Baselin
     !Array.isArray((parsed as { entries?: unknown }).entries)
   ) {
     throw new BaselineError(`Invalid baseline file ${displayPath}: missing an "entries" array.`)
+  }
+  const version = (parsed as { schemaVersion?: unknown }).schemaVersion
+  if (version !== BASELINE_SCHEMA_VERSION) {
+    throw new BaselineError(
+      `Unsupported baseline schema in ${displayPath}: expected ${BASELINE_SCHEMA_VERSION}, ` +
+        `got ${version === undefined ? 'none' : JSON.stringify(version)}. ` +
+        `Re-record it: testpilot analyze --baseline ${displayPath} --update-baseline`,
+    )
   }
   return parsed as Baseline
 }
