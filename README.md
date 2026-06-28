@@ -25,9 +25,10 @@ still have a working suite. Zero lock-in.
 | `fix` | Apply safe, behavior-preserving locator rewrites. **Dry-run by default.** |
 | `add ai` | Regenerate the AI agent guidance files. **Dry-run by default.** |
 | `doctor` | Diagnose project readiness, setup problems, and AI-guidance drift. |
-| `explain` | Explain a rule: why it matters, with good/bad examples. |
+| `explain` | Explain a rule: why it matters, with bad/good examples. |
 
-Every command supports `--json` (stable machine output), `--quiet`, and `--cwd <dir>`.
+All commands accept `--quiet` and `--cwd <dir>`, and emit stable `--json` output — except `run`, which
+is a pass-through and forwards everything to Playwright.
 
 ---
 
@@ -159,7 +160,7 @@ your repo root, or set `upload-sarif`'s `checkout_path`/`sourceRoot`, so the fil
 
 ---
 
-## Fix issues — safely
+## Fix locators — `fix`
 
 `fix` applies **behavior-preserving, syntactic** locator rewrites, and is a **dry-run by default** (it
 prints a unified diff and writes nothing until you pass `--write`).
@@ -202,7 +203,7 @@ fails the command on its own.
 
 ---
 
-## Keep AI agents aligned
+## Keep AI agents aligned — `add ai`
 
 `init` generates agent-context files from a **single canonical guidance source** (offline, no LLM):
 `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, and
