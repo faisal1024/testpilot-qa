@@ -104,6 +104,7 @@ This repository currently contains the architecture discovery phase. Start here:
 | [Locator Intelligence Design](docs/Locator-Intelligence-Design.md) | Locator hierarchy, rules engine, scoring model, suggestions, future AI enhancements. |
 | [AI Agent Integration](docs/AI-Agent-Integration.md) | Claude/Codex/Cursor/Copilot support, single-source guidance, MCP, recommended repo structure. |
 | [Roadmap](docs/Roadmap.md) | MVP → V1 → V2 → V3, with sequencing rationale. |
+| [Adoption Plan](docs/Adoption-Plan.md) | Public-alpha readiness, brownfield adoption, CI surfaces, and sequencing tradeoffs. |
 | [GitHub Issues](docs/GitHub-Issues.md) | Prioritized backlog: Epics → Stories → Tasks, with suggested labels. |
 
 ---

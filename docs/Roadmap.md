@@ -2,6 +2,8 @@
 
 > Status: Approved — aligned to *Updated Plan After Claude Review*
 > This roadmap adopts the approved **Phase 0–10** structure and maps each phase to a release version.
+> See [Adoption-Plan.md](Adoption-Plan.md) for the product-owner sequencing that turns the MVP into
+> a public alpha and then a CI-adoptable tool.
 
 ---
 
