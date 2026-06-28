@@ -39,19 +39,23 @@ Six discovery documents produced and reviewed; approved with simplifications (si
 
 ---
 
-## MVP — Phases 1–4
+## MVP — Phases 1–4  ✅ **complete (release-candidate)**
 
 The credible core: scaffold a great project, detect the worst locators reliably, diagnose and educate. **Offline. No LLM. No auto-fix. No MCP. No DOM tier. One template.**
 
-### Phase 1 — Foundation & CLI Shell  *(Milestones 1–2)*
+> **Status (Milestone 4C):** Phases 1–4 are delivered and merged. All five MVP commands
+> (`init`, `run`, `analyze`, `doctor`, `explain`) are implemented, gated by CI, and covered by a
+> `pnpm smoke:mvp` script. See [Release-Checklist.md](Release-Checklist.md).
+
+### Phase 1 — Foundation & CLI Shell  *(Milestones 1–2 — delivered)*
 - pnpm workspace; TypeScript config; package boundaries (`core`, `cli`, `locator-intelligence`, `scaffold`, `templates`, `ai`, `reporters`).
 - lint / typecheck / test / build scripts; CI on PRs; release tooling.
 - CLI shell: `testpilot --help`, `testpilot --version`, global options.
-- **Empty/placeholder command handlers** for `init`, `analyze`, `doctor`, `explain`.
+- Command shell with placeholder handlers for `init`, `analyze`, `doctor`, `explain` *(all implemented in Phases 2–4)*.
 - Config loading (`testpilot.config.ts` + zod) wired but minimal.
 - *Not built:* `fix`, `heal`, MCP, DOM-aware suggestions, docs portal, AI generation.
 
-### Phase 2 — Project Scaffolding MVP  *(Milestone 2.5)*
+### Phase 2 — Project Scaffolding MVP  *(Milestone 2.5 — delivered)*
 - `testpilot init` with **one** `ui-api-fullstack` TypeScript template.
 - UI example test + API example test + `playwright.config.ts` + `testpilot.config.ts`.
 - GitHub Actions template + README template; overwrite protection (`--force`).
