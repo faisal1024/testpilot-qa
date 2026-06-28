@@ -153,7 +153,8 @@ testpilot analyze [globs...] [options]
 > 100 until such rules exist). **Score model:** `penalty = Σ severity weight`,
 > `maxPenalty = analyzed call-sites × error weight`, `score = clamp(round(100 × (1 − penalty/maxPenalty)), 0, 100)`;
 > weights come from `config.scoring.weights`. **Zero call-sites → 100/A** (no detectable debt).
-> Parse errors are reported but **do not** affect the score yet.
+> Parse errors are reported but **do not** affect the score yet. See **[Scoring.md](Scoring.md)** for the
+> full model with worked examples (pinned by a test).
 >
 > **`--min-score <n>`** gates CI: if the score is below `n`, the command exits **1** with a clear
 > message; otherwise (and whenever no threshold is set) it exits **0**. **Precedence:** the

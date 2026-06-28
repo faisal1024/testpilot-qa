@@ -130,7 +130,8 @@ files in the PR.
 Every run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
 Accessibility, Maintainability, and Flakiness sub-scores. Without `--min-score` it's reporting-only
 (exit 0); with `--min-score <n>` (or `scoring.minScore` in config — the flag wins) it exits non-zero
-when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware.
+when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware. See
+**[docs/Scoring.md](docs/Scoring.md)** for exactly how the score is computed, with worked examples.
 
 ```bash
 # Understand any rule: why it matters, examples, and guidance
@@ -191,6 +192,7 @@ sequencing). Start here:
 | [Architecture](docs/Architecture.md) | System architecture, components, package boundaries, dependency & extension strategy — plus **challenged assumptions**. |
 | [CLI Spec](docs/CLI-Spec.md) | Commands, arguments, examples, exit codes, future command roadmap. |
 | [Locator Intelligence Design](docs/Locator-Intelligence-Design.md) | Locator hierarchy, rules engine, scoring model, suggestions, future AI enhancements. |
+| [Scoring](docs/Scoring.md) | How the Locator Quality Score is computed — formula, weights, grades, and worked examples. |
 | [AI Agent Integration](docs/AI-Agent-Integration.md) | Claude/Codex/Cursor/Copilot support, single-source guidance, MCP, recommended repo structure. |
 | [Roadmap](docs/Roadmap.md) | MVP → V1 → V2 → V3, with sequencing rationale. |
 | [Adoption Plan](docs/Adoption-Plan.md) | Public-alpha readiness, brownfield adoption, CI surfaces, and sequencing tradeoffs. |
