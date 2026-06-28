@@ -2,11 +2,13 @@
 
 > Status: Product-owner plan after MVP/5A/5B review. 5C (public alpha hardening), 5D (dependency
 > PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub Action),
-> 6C (safe AI guidance regeneration: `testpilot add ai`), and 7A (local HTML report) are merged.
-> **Milestone 7B (score calibration docs) is the active milestone** — [`docs/Scoring.md`](Scoring.md)
-> explains the Locator Quality Score (formula, weights, grades, sub-scores, zero-call-site behavior)
-> with worked examples that are pinned by a test. Runtime/toolchain dependency majors (`commander`,
-> `zod`, `typescript`, `@biomejs/biome`) remain deferred to their own PRs (see
+> 6C (safe AI guidance regeneration: `testpilot add ai`), 7A (local HTML report), and 7B (score
+> calibration docs) are merged.
+> **Milestone 8A (safe mechanical fix preview) is the active milestone** — `testpilot fix` applies
+> behavior-preserving, mechanical locator rewrites (today: `locator('text=…')` → `getByText(…)`),
+> dry-run by default with a unified diff, `--write` to apply; it never touches application code, never
+> inspects the DOM, and leaves anything ambiguous untouched. Runtime/toolchain dependency majors
+> (`commander`, `zod`, `typescript`, `@biomejs/biome`) remain deferred to their own PRs (see
 > `docs/Release-Checklist.md`).
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
@@ -259,7 +261,8 @@ After Milestone 5B:
 3. **6B — PR integration (merged):** SARIF reporter, GitHub Action wrapper, PR job summary.
 4. **6C — Guidance regeneration (merged):** `testpilot add ai` with safe drift-aware behavior.
 5. **7A — HTML report (merged):** local static report for sharing and demos.
-6. **7B — Scoring docs (active):** [`docs/Scoring.md`](Scoring.md) — calibrate trust in the score.
+6. **7B — Scoring docs (merged):** [`docs/Scoring.md`](Scoring.md) — calibrate trust in the score.
+7. **8A — Safe fix preview (active):** `testpilot fix` — dry-run mechanical locator rewrites.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 

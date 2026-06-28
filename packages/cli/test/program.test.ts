@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { buildProgram } from '../src/program.js'
 
 describe('CLI program', () => {
-  it('registers the MVP commands plus `add`', () => {
+  it('registers the MVP commands plus `fix` and `add`', () => {
     const program = buildProgram()
     const names = program.commands.map((command) => command.name())
-    expect(names).toEqual(['init', 'run', 'analyze', 'doctor', 'explain', 'add'])
+    expect(names).toEqual(['init', 'run', 'analyze', 'fix', 'doctor', 'explain', 'add'])
   })
 
   it('registers the `add ai` subcommand', () => {

@@ -7,6 +7,13 @@
  */
 export { analyze, type AnalyzeOptions } from './analyze.js'
 export { explanationIds, getExplanation, ruleExplanations } from './explanations.js'
+export {
+  computeFixes,
+  type FileFixResult,
+  type FixEdit,
+  type FixKind,
+  plainTextSelectorValue,
+} from './fix.js'
 export { extractLocators, inferEngine } from './extractor.js'
 export type {
   AnalyzedApi,
