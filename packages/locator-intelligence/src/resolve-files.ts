@@ -1,12 +1,24 @@
-import { join } from 'node:path'
-import type { TestPilotConfig } from '@testpilot/core'
+import { resolve } from 'node:path'
+import { type TestPilotConfig, isDirectory } from '@testpilot/core'
 import { glob } from 'tinyglobby'
+
+/** Expands any pattern that is an existing directory into that directory's test-file globs. */
+function expandDirectoryPatterns(cwd: string, patterns: string[], include: string[]): string[] {
+  return patterns.flatMap((pattern) => {
+    if (isDirectory(resolve(cwd, pattern))) {
+      const dir = pattern.replace(/[/\\]+$/, '')
+      return include.map((suffix) => `${dir}/${suffix}`)
+    }
+    return [pattern]
+  })
+}
 
 /**
  * Resolves the set of files to analyze, as sorted absolute paths.
  *
  * - When `patterns` are given (e.g. CLI positional globs), they are resolved
- *   relative to `cwd`.
+ *   relative to `cwd`. A pattern that is a directory expands to that directory's
+ *   test files (using `config.include`), so `analyze examples/fragile-suite` works.
  * - Otherwise `config.include` is resolved relative to `cwd/config.testDir`.
  */
 export async function resolveTestFiles(
@@ -15,8 +27,10 @@ export async function resolveTestFiles(
   config: TestPilotConfig,
 ): Promise<string[]> {
   const usingPatterns = patterns !== undefined && patterns.length > 0
-  const globs = usingPatterns ? patterns : config.include
-  const base = usingPatterns ? cwd : join(cwd, config.testDir)
+  const globs = usingPatterns
+    ? expandDirectoryPatterns(cwd, patterns, config.include)
+    : config.include
+  const base = usingPatterns ? cwd : resolve(cwd, config.testDir)
 
   const matches = await glob(globs, {
     cwd: base,

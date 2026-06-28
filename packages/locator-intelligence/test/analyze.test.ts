@@ -151,6 +151,14 @@ describe('analyze — Tier 1 rule set', () => {
     expect(report.findings.length).toBeGreaterThan(0)
   })
 
+  it('expands a directory pattern into its test files', async () => {
+    writeFixture('e2e/login.spec.ts', "page.locator('//button')")
+    // A bare directory (e.g. `analyze examples/fragile-suite`) is expanded.
+    const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e'] })
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings.some((f) => f.ruleId === 'no-xpath')).toBe(true)
+  })
+
   describe('scoring', () => {
     it('scores a clean, user-facing suite as 100/A', async () => {
       const clean = [

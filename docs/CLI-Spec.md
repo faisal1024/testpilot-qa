@@ -138,7 +138,9 @@ testpilot analyze [globs...] [options]
 > **As implemented (Milestone 3B–3C):** the full MVP Tier 1 rule set runs —
 > `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`,
 > `prefer-user-facing-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
-> positional globs, else `config.include` resolved under `config.testDir`. Output is the human
+> positional globs (a positional that is a **directory** is expanded into its test files, so
+> `analyze examples/fragile-suite` works), else `config.include` resolved under `config.testDir`.
+> Output is the human
 > table (default) or stable `--json`. Per-rule **severity is config-driven** (`rules: { 'no-xpath':
 > 'warn' }`; `'off'` disables). Unknown rule ids in config surface as **warnings** (not failures).
 > Unparseable files are reported in `parseErrors` and skipped. Rules give **category-level guidance
