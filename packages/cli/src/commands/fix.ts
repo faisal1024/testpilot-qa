@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { relative } from 'node:path'
 import { type FixEdit, computeFixes, resolveTestFiles } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
@@ -51,26 +51,29 @@ export async function fixCommand(
 
   const results: FileFixSummary[] = []
   const diffs: string[] = []
+  let skipped = 0
   for (const absolute of files) {
     const display = relative(globals.cwd, absolute) || absolute
     let code: string
     try {
       code = readFileSync(absolute, 'utf8')
     } catch {
-      continue // unreadable file — analyze reports these; fix just skips
+      skipped += 1 // unreadable — skip untouched (analyze reports these separately)
+      continue
     }
 
     let result: ReturnType<typeof computeFixes>
     try {
       result = computeFixes(code, absolute)
     } catch {
-      continue // parse error — don't touch a file we can't parse
+      skipped += 1 // parse error — never touch a file we can't parse
+      continue
     }
     if (result.fixes.length === 0) continue
 
     if (write && result.output !== code) {
       try {
-        writeTextFile(resolve(globals.cwd, absolute), result.output)
+        writeTextFile(absolute, result.output)
       } catch (error) {
         if (error instanceof OutputError) {
           fail(globals, error.message, ExitCode.USAGE)
@@ -84,7 +87,7 @@ export async function fixCommand(
     }
   }
 
-  report(results, diffs, write, globals)
+  report(results, diffs, write, skipped, globals)
 }
 
 function totalFixes(results: FileFixSummary[]): number {
@@ -95,6 +98,7 @@ function report(
   results: FileFixSummary[],
   diffs: string[],
   write: boolean,
+  skipped: number,
   globals: GlobalOptions,
 ): void {
   if (globals.json) {
@@ -103,7 +107,7 @@ function report(
         command: 'fix',
         dryRun: !write,
         files: results.map((r) => ({ file: r.file, written: r.written, fixes: r.fixes })),
-        summary: { files: results.length, fixes: totalFixes(results) },
+        summary: { files: results.length, fixes: totalFixes(results), skipped },
       }),
     )
     return
@@ -115,10 +119,7 @@ function report(
   const count = totalFixes(results)
   if (count === 0) {
     console.log('No mechanical fixes available.')
-    return
-  }
-
-  if (!write) {
+  } else if (!write) {
     for (const diff of diffs) {
       if (diff) console.log(diff)
     }
@@ -132,5 +133,10 @@ function report(
     }
     console.log('')
     console.log(`Applied ${count} fix(es) across ${results.length} file(s).`)
+  }
+
+  // Non-fatal heads-up so "fix did nothing" is never ambiguous.
+  if (skipped > 0) {
+    console.error(`Skipped ${skipped} file(s) that could not be read or parsed.`)
   }
 }

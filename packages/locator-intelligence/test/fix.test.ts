@@ -78,6 +78,22 @@ describe('computeFixes', () => {
     expect(output).toContain("getByRole('list').getByText('Two')")
   })
 
+  it('preserves CRLF line endings on untouched lines', () => {
+    const code =
+      "import { test } from '@playwright/test'\r\nawait page.locator('text=Go').click()\r\n"
+    const { output } = computeFixes(code, FILE)
+    expect(output).toBe(
+      "import { test } from '@playwright/test'\r\nawait page.getByText('Go').click()\r\n",
+    )
+  })
+
+  it('applies two fixes on the same line correctly', () => {
+    const code = "await page.locator('text=A').or(page.locator('text=B')).click()\n"
+    const { output, fixes } = computeFixes(code, FILE)
+    expect(fixes).toHaveLength(2)
+    expect(output).toBe("await page.getByText('A').or(page.getByText('B')).click()\n")
+  })
+
   it('throws on a parse error (caller skips the file)', () => {
     expect(() => computeFixes('const x = (', FILE)).toThrow()
   })
