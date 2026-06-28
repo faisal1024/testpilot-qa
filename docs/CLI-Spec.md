@@ -181,7 +181,9 @@ testpilot analyze [globs...] [options]
 > exact file/line. An unknown reporter exits **2**. Back-compat: with no `--reporter`, `--json` or a
 > bare `--output` still imply `json`, and interactive runs default to `table`. SARIF results carry a
 > `partialFingerprints['testpilotIdentity/v1']` equal to the baseline identity, so code scanning does
-> not re-report a finding that merely moved lines. A composite **GitHub Action**
+> not re-report a finding that merely moved lines. With `--baseline`, the **SARIF and table outputs are
+> scoped to the new findings only** (matching what the gate fails on); the JSON report stays whole and
+> carries the `baseline` summary. A composite **GitHub Action**
 > (`faisal1024/testpilot-qa/action@v0`) wraps the CLI — it runs `analyze`, writes SARIF, and posts the
 > human report to the job summary; it duplicates no analysis logic. Pair it with
 > `github/codeql-action/upload-sarif` to publish annotations. The CLI works fully without GitHub.

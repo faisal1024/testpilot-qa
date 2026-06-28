@@ -22,6 +22,44 @@ function reportWith(findings: Finding[]): AnalysisReport {
   return { findings } as AnalysisReport
 }
 
+const LEVELS = ['error', 'warning', 'note']
+
+/**
+ * Asserts the structural invariants GitHub's code-scanning ingestion relies on.
+ * Cheaper than vendoring the full SARIF 2.1.0 JSON schema, and covers the fields
+ * a malformed reporter would actually break: rule/result alignment, level enums,
+ * and 1-based physical locations with a repo-relative URI.
+ */
+function assertValidSarif(log: ReturnType<typeof toSarif>): void {
+  expect(log.version).toBe('2.1.0')
+  expect(typeof log.$schema).toBe('string')
+  expect(log.runs.length).toBeGreaterThan(0)
+  for (const run of log.runs) {
+    expect(run.tool.driver.name).toBeTruthy()
+    expect(run.tool.driver.version).toBeTruthy()
+    const rules = run.tool.driver.rules
+    for (const rule of rules) {
+      expect(rule.id).toBeTruthy()
+      expect(LEVELS).toContain(rule.defaultConfiguration.level)
+    }
+    for (const result of run.results) {
+      expect(result.ruleId).toBeTruthy()
+      expect(result.ruleIndex).toBeGreaterThanOrEqual(0)
+      expect(result.ruleIndex).toBeLessThan(rules.length)
+      expect(rules[result.ruleIndex]?.id).toBe(result.ruleId)
+      expect(LEVELS).toContain(result.level)
+      expect(result.message.text).toBeTruthy()
+      expect(result.locations.length).toBeGreaterThan(0)
+      const region = result.locations[0]?.physicalLocation.region
+      const uri = result.locations[0]?.physicalLocation.artifactLocation.uri
+      expect(uri).toBeTruthy()
+      expect(uri?.startsWith('/')).toBe(false) // repo-relative, not absolute
+      expect(region?.startLine).toBeGreaterThanOrEqual(1)
+      expect(region?.startColumn).toBeGreaterThanOrEqual(1)
+    }
+  }
+}
+
 describe('toSarif', () => {
   it('produces a well-formed SARIF 2.1.0 envelope', () => {
     const sarif = toSarif(reportWith([finding()]))
@@ -80,5 +118,23 @@ describe('toSarif', () => {
     const sarif = toSarif(reportWith([]))
     expect(sarif.runs[0]?.results).toEqual([])
     expect(sarif.runs[0]?.tool.driver.rules).toEqual([])
+    assertValidSarif(sarif)
+  })
+
+  it('produces structurally valid SARIF across mixed severities and rules', () => {
+    assertValidSarif(
+      toSarif(
+        reportWith([
+          finding({ severity: 'error' }),
+          finding({ ruleId: 'no-hard-wait', severity: 'warn', docsUrl: '' }),
+          finding({
+            ruleId: 'prefer-user-facing-locator',
+            severity: 'info',
+            suggestion: undefined,
+          }),
+          finding({ ruleId: 'no-hard-wait', severity: 'warn', line: 40 }),
+        ]),
+      ),
+    )
   })
 })

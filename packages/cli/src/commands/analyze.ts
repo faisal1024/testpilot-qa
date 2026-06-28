@@ -101,11 +101,16 @@ export async function analyzeCommand(
   }
 
   // --- Output ---
+  // In baseline mode the SARIF annotations and the human table are scoped to the
+  // *new* findings (so a brownfield PR is not flooded with pre-existing debt).
+  // The JSON report is left whole — it carries the full findings plus the
+  // `baseline` summary, which is its stable contract.
   const reporter = resolveReporter(options, globals)
+  const sarifReport = newFindings === undefined ? report : { ...report, findings: newFindings }
   if (options.output) {
     try {
       if (reporter === 'sarif') {
-        writeJsonFile(resolve(globals.cwd, options.output), toSarif(report))
+        writeJsonFile(resolve(globals.cwd, options.output), toSarif(sarifReport))
       } else if (reporter === 'table') {
         writeTextFile(
           resolve(globals.cwd, options.output),
@@ -124,7 +129,7 @@ export async function analyzeCommand(
       console.log(`Report written to ${options.output}.`)
     }
   } else if (reporter === 'sarif') {
-    console.log(JSON.stringify(toSarif(report), null, 2))
+    console.log(JSON.stringify(toSarif(sarifReport), null, 2))
   } else if (reporter === 'json') {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {

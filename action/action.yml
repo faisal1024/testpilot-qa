@@ -36,7 +36,11 @@ inputs:
     required: false
     default: 'testpilot.sarif'
   working-directory:
-    description: 'Directory to run in.'
+    description: >-
+      Directory to run in. NOTE: SARIF file paths are emitted relative to this
+      directory. For code-scanning annotations to land on the right files, keep
+      this at the repo root, or pass a matching `checkout_path`/`sourceRoot` to
+      github/codeql-action/upload-sarif.
     required: false
     default: '.'
   node-version:
@@ -66,29 +70,27 @@ runs:
         TP_OUTPUT: ${{ inputs.output }}
       run: |
         set -uo pipefail
-
-        # Build the analyze argument list from the provided inputs.
-        args=(analyze)
-        # shellcheck disable=SC2206 # intentional word-splitting for multiple globs
-        [ -n "${TP_PATTERNS}" ] && args+=(${TP_PATTERNS})
-        [ -n "${TP_BASELINE}" ] && args+=(--baseline "${TP_BASELINE}")
-        [ -n "${TP_MIN_SCORE}" ] && args+=(--min-score "${TP_MIN_SCORE}")
-        args+=(--reporter sarif --output "${TP_OUTPUT}")
-
         echo "sarif=${TP_OUTPUT}" >> "${GITHUB_OUTPUT}"
 
-        # Run the gate. SARIF is written even when the gate fails; keep the exit code.
-        npx --yes "testpilot-qa@${TP_VERSION}" "${args[@]}"
-        code=$?
+        # The inputs shared by both runs (the baseline scopes the report to new findings).
+        common=(analyze)
+        # shellcheck disable=SC2206 # intentional word-splitting for multiple globs
+        [ -n "${TP_PATTERNS}" ] && common+=(${TP_PATTERNS})
+        [ -n "${TP_BASELINE}" ] && common+=(--baseline "${TP_BASELINE}")
 
-        # PR-friendly summary: the human report. Never fails the build.
+        # PR-friendly summary first — the human report. Never fails the build.
         {
           echo "## TestPilot QA"
           echo ""
           echo '```'
-          # shellcheck disable=SC2086 # intentional word-splitting for multiple globs
-          npx --yes "testpilot-qa@${TP_VERSION}" analyze ${TP_PATTERNS} 2>&1 || true
+          npx --yes "testpilot-qa@${TP_VERSION}" "${common[@]}" 2>&1 || true
           echo '```'
         } >> "${GITHUB_STEP_SUMMARY}"
 
-        exit $code
+        # The gate last: writes SARIF and enforces the score threshold. Its exit
+        # code becomes the step's exit code (SARIF is written even when it fails,
+        # so a later upload-sarif step with `if: always()` still works).
+        gate=("${common[@]}")
+        [ -n "${TP_MIN_SCORE}" ] && gate+=(--min-score "${TP_MIN_SCORE}")
+        gate+=(--reporter sarif --output "${TP_OUTPUT}")
+        npx --yes "testpilot-qa@${TP_VERSION}" "${gate[@]}"

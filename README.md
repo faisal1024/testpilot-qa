@@ -108,8 +108,14 @@ jobs:
           sarif_file: testpilot.sarif
 ```
 
+With `--baseline`, the SARIF annotations (and the human table) are scoped to the **new** findings only,
+so a brownfield PR isn't buried under pre-existing debt. The JSON report still carries every finding
+plus the baseline summary.
+
 The CLI is fully usable without GitHub — SARIF is just one more `--reporter`. (The Action runs the
-published `testpilot-qa` package via `npx`.)
+published `testpilot-qa` package via `npx`.) Keep the Action at your repo root, or set
+`upload-sarif`'s `checkout_path`/`sourceRoot`, so the file paths in the SARIF resolve to the right
+files in the PR.
 
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and

@@ -116,6 +116,20 @@ describe('analyze --reporter', () => {
     expect(text).toContain('Locator Quality Score')
     expect(text).toContain('no-xpath')
   })
+
+  it('scopes SARIF to NEW findings when a baseline is active', async () => {
+    const baseline = join(dir, 'baseline.json')
+    // Record the existing finding (a.spec.ts no-xpath) as accepted.
+    await runAnalyze(['--baseline', baseline, '--update-baseline'])
+    // Add a brand-new finding in another file.
+    writeFileSync(join(dir, 'tests', 'b.spec.ts'), 'page.waitForTimeout(1000)\n')
+    const out = join(dir, 'tp.sarif')
+    await runAnalyze(['--baseline', baseline, '--reporter', 'sarif', '--output', out])
+    const sarif = JSON.parse(readFileSync(out, 'utf8'))
+    const ruleIds = sarif.runs[0].results.map((r: { ruleId: string }) => r.ruleId)
+    // Only the new no-hard-wait finding is annotated; the baselined no-xpath is not.
+    expect(ruleIds).toEqual(['no-hard-wait'])
+  })
 })
 
 describe('analyze --baseline / --update-baseline', () => {
