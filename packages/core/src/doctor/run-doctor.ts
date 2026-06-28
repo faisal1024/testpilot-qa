@@ -263,7 +263,10 @@ function checkAiGuidance(projectRoot: string, agents: AgentId[]): DoctorCheck {
     details: { version: GUIDANCE_VERSION, files },
   }
   if (issues.length > 0) {
-    check.remediation = 'Regenerate the affected guidance files (e.g. `testpilot init --force`).'
+    // Intentionally not `init --force` — that reruns the whole scaffold and could
+    // overwrite unrelated files. A guidance-only regeneration command lands in V1.
+    check.remediation =
+      'Review the affected guidance files; guidance-only regeneration (`testpilot add ai`) lands in a later milestone.'
   }
   return check
 }
