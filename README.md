@@ -13,6 +13,33 @@ It's **local-first, deterministic, and offline** — no network, no API key, no 
 generates is **ejectable plain Playwright**: delete `testpilot.config.ts` and the dependency and you
 still have a working suite. Zero lock-in.
 
+> **Alpha.** TestPilot QA is in public alpha. It does **not** do DOM-aware healing, broad auto-fix,
+> dashboards, MCP, AI-generated tests, or LLM-powered execution — see [Status](#status--public-alpha).
+
+---
+
+## Try it in 2 minutes
+
+**New here?** Scaffold a project and see a locator-quality report in your browser:
+
+```bash
+npx testpilot-qa init demo --yes
+cd demo
+npx testpilot-qa analyze tests --reporter html   # writes an HTML report to open
+```
+
+**Already have a Playwright project?** `analyze` is read-only — just point it at your tests:
+
+```bash
+npx testpilot-qa analyze tests                    # human table (add --json for CI)
+
+# Adopting on an existing suite? Record a baseline, then gate CI on NEW findings only:
+npx testpilot-qa analyze tests --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa analyze tests --baseline testpilot-baseline.json
+```
+
+That's it. The rest of this README goes deeper on each command.
+
 ---
 
 ## Commands at a glance
@@ -281,6 +308,9 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 **Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile suites,
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
+
+The alpha launches on the current pinned dependencies once the release gate passes; the deferred
+dependency majors are post-alpha hardening. See the **[public alpha launch gate](docs/Release-Checklist.md#public-alpha-launch-gate)**.
 
 ---
 

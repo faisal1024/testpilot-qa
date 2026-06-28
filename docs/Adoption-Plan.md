@@ -4,17 +4,19 @@
 > (dependency PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub
 > Action), 6C (safe AI guidance regeneration: `testpilot add ai`), 7A (local HTML report), 7B (score
 > calibration docs), and 8A (safe mechanical fix preview: `testpilot fix`).
-> **Next active focus: public-alpha readiness** — finish the remaining dependency cleanup
-> (runtime/toolchain majors `commander`, `zod`, `typescript`, `@biomejs/biome` are still deferred to
-> their own PRs, see `docs/Release-Checklist.md`) and release hardening before the soft public alpha.
-> No new feature milestone is in progress.
+> **Next active focus: public-alpha release readiness.** The alpha can launch on the **current pinned
+> dependencies** — release readiness is a clean run of the [release gate](Release-Checklist.md), an npm
+> alpha publish (`--tag alpha`), a README sanity check, and launch positioning. The remaining
+> runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`) are
+> **post-alpha hardening** — each in its own PR with full validation — and are **not** launch blockers
+> unless one is actively breaking the gate. No new feature milestone is in progress.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 >
 > **Positioning (unchanged):** TestPilot QA is an **AI-agent-ready Playwright quality toolkit** — not a
-> Playwright replacement. It does **not** do DOM-aware healing, broad auto-fix, dashboards, MCP, or
-> LLM-powered execution. The `fix` command is a deliberately narrow, safe mechanical preview (dry-run by
-> default), not general auto-fix.
+> Playwright replacement. It does **not** do DOM-aware healing, broad auto-fix, dashboards, MCP,
+> AI-generated tests, or LLM-powered execution. The `fix` command is a deliberately narrow, safe
+> mechanical preview (dry-run by default), not general auto-fix.
 
 ---
 
@@ -266,8 +268,10 @@ After Milestone 5B:
 5. **7A — HTML report (merged):** local static report for sharing and demos.
 6. **7B — Scoring docs (merged):** [`docs/Scoring.md`](Scoring.md) — calibrate trust in the score.
 7. **8A — Safe fix preview (merged):** `testpilot fix` — dry-run mechanical locator rewrites.
-8. **Public-alpha readiness (active):** finish deferred dependency majors, run the release gate
-   (`docs/Release-Checklist.md`), and do the soft public alpha. No new feature milestone in progress.
+8. **Public-alpha readiness (active):** run the release gate ([`docs/Release-Checklist.md`](Release-Checklist.md)),
+   npm alpha publish, README sanity check, and launch the soft public alpha — on the current pinned
+   dependencies. Deferred dependency majors are **post-alpha hardening**, not launch blockers. No new
+   feature milestone in progress.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 
