@@ -66,11 +66,20 @@ when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware
 # Understand any rule: why it matters, examples, and guidance
 npx testpilot-qa explain no-xpath
 npx testpilot-qa explain no-hard-wait --json
+
+# Diagnose project readiness and common setup issues
+npx testpilot-qa doctor
+npx testpilot-qa doctor --json
 ```
 
-**Available today:** `init` (scaffold), `run` (Playwright pass-through), `analyze` (static
-Locator Intelligence), and `explain` (rule education). `doctor` is registered but prints a "not yet
-implemented" notice until its milestone.
+`doctor` checks Node version, `package.json`, a local Playwright install, Playwright/TestPilot
+config validity, the test directory, and project structure — printing a pass/warn/fail report with
+remediation. It's read-only and offline; exit codes are CI-friendly (`0` healthy, `3` invalid
+config, `4` setup problems).
+
+**Available today (all five MVP commands):** `init` (scaffold), `run` (Playwright pass-through),
+`analyze` (static Locator Intelligence), `doctor` (project diagnostics), and `explain` (rule
+education).
 
 ---
 
@@ -126,7 +135,7 @@ See [Architecture §2](docs/Architecture.md) for the full set of challenged assu
 
 Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 
-- **Commands:** `init`, `run`, `analyze`, `explain` are implemented; `doctor` is a placeholder until its milestone.
+- **Commands:** `init`, `run`, `analyze`, `doctor`, `explain` — all five MVP commands are implemented.
 - **One template:** `ui-api-fullstack` (UI + API in a single TypeScript project).
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.

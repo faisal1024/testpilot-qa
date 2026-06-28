@@ -43,6 +43,15 @@ export {
   type TestPilotConfigInput,
 } from './config/schema.js'
 export {
+  type CheckStatus,
+  DOCTOR_SCHEMA_VERSION,
+  type DoctorCategory,
+  type DoctorCheck,
+  type DoctorOptions,
+  type DoctorReport,
+  runDoctor,
+} from './doctor/run-doctor.js'
+export {
   findPlaywrightConfig,
   findProjectRoot,
   findUp,

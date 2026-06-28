@@ -8,10 +8,10 @@
 > `fix`, `add`, and `list` are **deferred to V1**. `init` ships a **single** `ui-api-fullstack`
 > template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
-> **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5),
-> `analyze` (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, and
-> `--min-score` gating; Milestones 3A–3C), and `explain` (rule education; 4A). `doctor` is a
-> registered placeholder until its phase.
+> **Implemented today (all five MVP commands):** `init` (scaffold, 2.5), `run` (thin Playwright
+> pass-through, 2.5), `analyze` (static Locator Intelligence — six Tier 1 rules, Locator Quality
+> Score, and `--min-score` gating; 3A–3C), `doctor` (project diagnostics; 4B), and `explain` (rule
+> education; 4A).
 
 ---
 
@@ -210,15 +210,41 @@ testpilot fix "tests/**/*.spec.ts" --write -i # apply, approving each
 
 ---
 
-### 3.4 `testpilot doctor` *(MVP)*
+### 3.4 `testpilot doctor` *(MVP — implemented in 4B)*
 
-Diagnose the project: Playwright version drift, missing config, flaky-pattern hotspots, TestPilot self-check.
+Diagnose project readiness and common setup issues. Read-only, offline, deterministic.
 
 ```
-testpilot doctor [options]
+testpilot doctor          # human report
+testpilot doctor --json   # stable machine-readable report
+testpilot doctor --quiet  # no output; exit code only
 ```
 
-Reports: Node version, Playwright dependency presence & version vs supported range, config validity, test-directory presence, AI guidance-file drift, top fragile files, suggested next actions. Exit non-zero on hard problems.
+**Checks (MVP):** Node.js version, `package.json` presence, local Playwright install, Playwright
+config discovery, `testpilot.config.ts` validity, test-directory existence, include-pattern sanity,
+and TestPilot project-structure (when scaffolded). AI guidance-file drift is reported as *not
+checked yet* (the generator lands later) — no faked drift detection.
+
+**Output:** an overall status (`pass`/`warn`/`fail`), each check (`id`, `title`, `category`,
+`status`, `message`, optional `remediation`), and deduped `nextActions`. `--json` envelope:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "command": "doctor",
+  "status": "fail",
+  "checks": [
+    { "id": "playwright-installed", "title": "Playwright installed", "category": "environment",
+      "status": "fail", "message": "Playwright is not installed locally.",
+      "remediation": "Add it (`npm install -D @playwright/test`) and run `npm install`." }
+  ],
+  "nextActions": ["Add it (`npm install -D @playwright/test`) and run `npm install`."]
+}
+```
+
+**Exit codes:** `0` when no checks fail (warnings are not hard problems); `3` when the config is
+invalid; `4` for environment/project setup problems (e.g. missing Playwright or `package.json`);
+`5` only on an unexpected internal error. (Config failure takes precedence → `3`.)
 
 ---
 

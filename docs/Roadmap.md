@@ -69,9 +69,11 @@ The credible core: scaffold a great project, detect the worst locators reliably,
 - **Locator Quality Score** + sub-scores (Resilience, Accessibility, Maintainability, Flakiness), letter grades, and **`--min-score` CI gating**. *(3C)*
 - **Constraint:** no fake concrete suggestions — category-level guidance only ("prefer `getByRole`/`getByLabel`/`getByTestId` where possible"), never `getByRole('button', { name: 'Save' })` without DOM context.
 
-### Phase 4 — Doctor & Explain  *(MVP polish)*
-- `testpilot doctor`: Node version, Playwright dependency, config validity, test directory, AI guidance-file drift.
-- `testpilot explain <ruleId>`: rationale, bad example, better example, docs link.
+### Phase 4 — Doctor & Explain  *(MVP polish — delivered)*
+- `testpilot explain <ruleId>`: rationale, bad example, better example, guidance, docs link. *(4A)*
+- `testpilot doctor`: Node version, package.json, local Playwright install, Playwright/TestPilot config validity, test directory, include sanity, project structure; pass/warn/fail report with CI-friendly exit codes. AI guidance-file drift is stubbed (generator lands later — no faked drift). *(4B)*
+
+> With 4A–4B, **all five MVP commands** (`init`, `run`, `analyze`, `doctor`, `explain`) are implemented.
 
 ---
 

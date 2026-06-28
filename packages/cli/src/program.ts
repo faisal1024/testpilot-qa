@@ -7,9 +7,9 @@ import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
 
 /**
- * Builds the TestPilot CLI program. `init` (scaffolding), `run` (Playwright
- * pass-through), `analyze` (static locator analysis), and `explain` (rule
- * education) are implemented; `doctor` remains a placeholder until its phase.
+ * Builds the TestPilot CLI program. All five MVP commands are implemented:
+ * `init` (scaffolding), `run` (Playwright pass-through), `analyze` (static
+ * locator analysis), `doctor` (project diagnostics), and `explain` (rule education).
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -45,7 +45,10 @@ export function buildProgram(): Command {
     )
     .action(analyzeCommand)
 
-  program.command('doctor').description('Diagnose the project (Phase 4).').action(doctorCommand)
+  program
+    .command('doctor')
+    .description('Diagnose project readiness and common setup issues.')
+    .action(doctorCommand)
 
   program
     .command('explain <ruleId>')
