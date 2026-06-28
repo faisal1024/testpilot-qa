@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "Static locator analysis engine for TestPilot QA.",
   "license": "MIT",
+  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

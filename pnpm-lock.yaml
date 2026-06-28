@@ -43,6 +43,22 @@ importers:
 
   packages/cli:
     dependencies:
+      '@typescript-eslint/parser':
+        specifier: ^8.18.0
+        version: 8.61.1(eslint@10.5.0(jiti@2.7.0))(typescript@5.9.3)
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      jiti:
+        specifier: ^2.4.2
+        version: 2.7.0
+      tinyglobby:
+        specifier: ^0.2.10
+        version: 0.2.17
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
       '@testpilot/core':
         specifier: workspace:*
         version: link:../core
@@ -52,9 +68,6 @@ importers:
       '@testpilot/scaffold':
         specifier: workspace:*
         version: link:../scaffold
-      commander:
-        specifier: ^12.1.0
-        version: 12.1.0
 
   packages/core:
     dependencies:

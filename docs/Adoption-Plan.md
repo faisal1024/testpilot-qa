@@ -1,6 +1,8 @@
 # TestPilot QA — Adapted Adoption Plan
 
-> Status: Product-owner plan after MVP/5A/5B review.
+> Status: Product-owner plan after MVP/5A/5B review. **Milestone 5C (public alpha hardening) is the
+> active milestone** — package smoke (`smoke:package`), `examples/fragile-suite`, alpha positioning,
+> and the dependency-PR strategy are landing.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 
@@ -245,8 +247,9 @@ Avoid this language until the features exist:
 
 After Milestone 5B:
 
-1. **5C — Public alpha hardening:** package smoke, examples, README alpha positioning, dependency PR
-   cleanup plan.
+1. **5C — Public alpha hardening (active):** package smoke (`smoke:package`), `examples/fragile-suite`,
+   README alpha positioning, dependency-PR strategy. The CLI now bundles `@testpilot/*` so the
+   published `testpilot-qa` is a single self-contained package.
 2. **6A — Brownfield baseline:** baseline file, no-regression gate, output file support.
 3. **6B — PR integration:** SARIF/GitHub Action/PR summary.
 4. **6C — Guidance regeneration:** `testpilot add ai` with safe drift-aware behavior.

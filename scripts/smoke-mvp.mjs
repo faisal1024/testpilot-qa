@@ -166,6 +166,18 @@ check('doctor reports AI guidance as current for a fresh scaffold', () => {
   })
 })
 
+check('analyze flags the expected rules in examples/fragile-suite', () => {
+  const { status, stdout } = cli(['analyze', 'examples/fragile-suite', '--json'], { cwd: repoRoot })
+  assert(status === 0, `exit ${status}`)
+  const report = JSON.parse(stdout)
+  assert(report.summary.filesAnalyzed >= 1, 'no example files analyzed')
+  assert(typeof report.score.score === 'number', 'missing score')
+  const ruleIds = new Set(report.findings.map((finding) => finding.ruleId))
+  for (const rule of ['no-xpath', 'no-css-class-selector', 'no-hard-wait']) {
+    assert(ruleIds.has(rule), `example analysis missing ${rule}`)
+  }
+})
+
 console.log('')
 if (failures > 0) {
   console.error(`smoke:mvp FAILED — ${failures} check(s) failed.`)

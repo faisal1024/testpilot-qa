@@ -93,9 +93,10 @@ pass-through), `analyze` (static Locator Intelligence), `doctor` (project diagno
 
 ---
 
-## Discovery Documents
+## Documentation
 
-This repository currently contains the architecture discovery phase. Start here:
+The design and planning docs (the alpha is implemented; these capture the architecture and
+sequencing). Start here:
 
 | Document | What it covers |
 |---|---|
@@ -155,13 +156,31 @@ Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 
 See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
-## Status
+## Status — public alpha
 
-**MVP complete (release candidate).** All five commands — `init`, `run`, `analyze` (six Tier 1 rules
-+ Locator Quality Score + `--min-score`), `doctor`, and `explain` — are implemented, CI-gated, and
-covered by a smoke script. Everything is Tier 1 / static, offline, and Playwright-native. See the
-[Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan and the
-[Release Checklist](docs/Release-Checklist.md) for the release gate.
+TestPilot QA is an **alpha**: a local-first, deterministic Playwright **quality toolkit**. It is
+**not a test framework** and **does not replace Playwright** — Playwright runs the tests; everything
+TestPilot generates is plain, ejectable Playwright.
+
+**What works today:**
+
+- `init` — scaffold a TypeScript Playwright project (UI + API examples) **+ AI agent guidance files**
+- `run` — thin Playwright pass-through (not a custom runner)
+- `analyze` — static Tier 1 locator analysis (six rules) + Locator Quality Score + `--min-score` gating
+- `doctor` — project-readiness diagnostics + AI guidance drift detection
+- `explain` — rule education
+
+**Intentionally *not* in the alpha** (planned, not done): auto-fix, DOM-aware/concrete locator
+suggestions, baseline/`--changed` brownfield gating, SARIF/HTML reports, a GitHub Action, dashboards,
+MCP, and any LLM calls.
+
+**Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile
+suites, and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents
+to write resilient Playwright. **Brownfield CI features (baseline / no-regression / PR integration)
+are next — not done yet.**
+
+See [docs/Adoption-Plan.md](docs/Adoption-Plan.md) for the sequencing, the [Roadmap](docs/Roadmap.md)
+for the full plan, and [docs/Release-Checklist.md](docs/Release-Checklist.md) for the release gate.
 
 ## Development
 
@@ -169,6 +188,7 @@ covered by a smoke script. Everything is Tier 1 / static, offline, and Playwrigh
 pnpm install
 pnpm lint && pnpm typecheck && pnpm test && pnpm -r build
 pnpm smoke:mvp        # offline end-to-end smoke of the built CLI
+pnpm smoke:package    # pack + install the tarball and run it as a consumer would
 ```
 
 User-facing changes require a changeset (`pnpm changeset`) and a README/CLI-Spec update. The
