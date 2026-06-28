@@ -90,9 +90,9 @@ Make it part of the everyday loop, the CI pipeline, and the agent ecosystem; the
 - *Why early in V1:* most teams adopt in an **existing** repo, not from a clean scaffold.
 
 ### Phase 6 — AI-Agent Integration (full)
-- Canonical `testpilot/agent-guidance.md` as the single source.
-- Generated `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, Cursor rules.
-- Drift detection in `doctor`; `testpilot add ai`.
+- ✅ **Canonical guidance source** (`@testpilot/ai` `CANONICAL_GUIDANCE`) as the single source. *(5A)*
+- ✅ Generated `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, Cursor rules — written by `init` by default, with `version + sha256` markers. *(5A)*
+- ⏳ Drift detection in `doctor`; `testpilot add ai` regeneration. *(5B — marker helpers already exported)*
 - **No LLM calls** — this is agent *readiness*, not AI-generated tests.
 
 ### Phase 7 — Documentation Portal (Docusaurus)

@@ -7,6 +7,7 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: {
+      '@testpilot/ai': pkg('ai'),
       '@testpilot/core': pkg('core'),
       '@testpilot/locator-intelligence': pkg('locator-intelligence'),
       '@testpilot/scaffold': pkg('scaffold'),

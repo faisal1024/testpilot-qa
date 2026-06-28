@@ -1,9 +1,8 @@
 {
   "name": "@testpilot/ai",
   "version": "0.0.0",
-  "description": "AI agent context generators for TestPilot QA (reserved).",
+  "description": "Deterministic AI-agent guidance generation for TestPilot QA.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

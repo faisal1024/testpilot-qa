@@ -71,13 +71,15 @@ testpilot init [directory] [options]
 
 **Behavior (target):** resolves template → previews file plan → writes → installs → runs the example test to prove green → generates AI context files. Detects an existing Playwright project and switches to *augment* mode (adds config + AI files, does not overwrite tests).
 
-> **As implemented (Milestone 2.5):** generates the `ui-api-fullstack` files (`package.json`,
+> **As implemented (Milestone 2.5 + 5A):** generates the `ui-api-fullstack` files (`package.json`,
 > `playwright.config.ts`, `testpilot.config.ts`, UI + API example tests, `.gitignore`, README,
-> GitHub Actions workflow). Supported flags today: `[directory]` (default `.`), `--template`
-> (default `ui-api-fullstack`), `--force`, and the global `--json`/`--quiet`. **Never overwrites**
-> existing files without `--force` (they are reported as skipped). Dependency install, AI-file
-> generation, `--base-url`, `--ci`, and prompts are deferred to later milestones; `--yes` is
-> accepted (init is already non-interactive).
+> GitHub Actions workflow) **plus AI agent guidance files** (`CLAUDE.md`, `AGENTS.md`,
+> `.github/copilot-instructions.md`, `.cursor/rules/testpilot-playwright.mdc`) from one canonical
+> source. Supported flags today: `[directory]` (default `.`), `--template` (default
+> `ui-api-fullstack`), `--force`, and the global `--json`/`--quiet`. **Never overwrites** existing
+> files without `--force` (they are reported as skipped, in both human and JSON output). Dependency
+> install, `--base-url`, `--ci`, and prompts are deferred to later milestones; `--yes` is accepted
+> (init is already non-interactive).
 
 **Examples**
 ```bash

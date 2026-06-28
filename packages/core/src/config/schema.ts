@@ -21,7 +21,10 @@ export const scoringSchema = z
 
 export const aiSchema = z
   .object({
-    agents: z.array(z.enum(['claude', 'codex', 'cursor', 'copilot'])).default(['claude']),
+    // All supported agents by default — generated projects include every guidance file.
+    agents: z
+      .array(z.enum(['claude', 'codex', 'cursor', 'copilot']))
+      .default(['claude', 'codex', 'cursor', 'copilot']),
   })
   .default({})
 
