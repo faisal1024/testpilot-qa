@@ -134,6 +134,19 @@ when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware
 **[docs/Scoring.md](docs/Scoring.md)** for exactly how the score is computed, with worked examples.
 
 ```bash
+# Preview safe, mechanical locator rewrites (writes nothing — shows a diff)
+npx testpilot-qa fix
+
+# Apply them
+npx testpilot-qa fix --write
+```
+
+`fix` makes only **behavior-preserving, syntactic** rewrites and is a **dry-run by default**. Today it
+rewrites `page.locator('text=Foo')` → `page.getByText('Foo')` (equivalent matching), and leaves anything
+ambiguous untouched. It edits only your test files, never application code, and never inspects the DOM —
+it will not turn a CSS/XPath selector into a role locator (that needs DOM evidence TestPilot doesn't use).
+
+```bash
 # Understand any rule: why it matters, examples, and guidance
 npx testpilot-qa explain no-xpath
 npx testpilot-qa explain no-hard-wait --json
@@ -242,7 +255,7 @@ Per the *Updated Plan After Claude Review*, the MVP is deliberately narrow:
 - **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`.
 - **Tier 1 only** — category-level locator guidance, never a concrete rewrite it can't prove.
 - **Internal interfaces only** — no public plugin system yet.
-- **Deferred:** `fix`, ESLint plugin, DOM-aware suggestions, MCP, LLM features, and the docs portal.
+- **Deferred:** ESLint plugin, DOM-aware suggestions/rewrites, MCP, LLM features, and the docs portal. (A conservative `fix` preview ships in 8A; broader auto-fix stays deferred.)
 
 See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
@@ -259,12 +272,14 @@ TestPilot generates is plain, ejectable Playwright.
 - `analyze` — static Tier 1 locator analysis (six rules) + Locator Quality Score + `--min-score` gating
 - **brownfield baseline** — record known findings and gate CI on *new* ones only (`--baseline`)
 - **reporters** — `--reporter table|json|sarif|html`: SARIF for GitHub code scanning, a shareable HTML report, plus a wrapper GitHub Action
+- `fix` — safe, behavior-preserving mechanical locator rewrites (dry-run by default)
 - `add ai` — safely regenerate AI guidance files (dry-run by default)
 - `doctor` — project-readiness diagnostics + AI guidance drift detection
 - `explain` — rule education
 
-**Intentionally *not* in the alpha** (planned, not done): auto-fix, DOM-aware/concrete locator
-suggestions, `--changed` diff scoping, dashboards, MCP, and any LLM calls.
+**Intentionally *not* in the alpha** (planned, not done): DOM-aware/concrete locator suggestions and
+DOM-backed rewrites, broader auto-fix beyond the safe mechanical set, `--changed` diff scoping,
+dashboards, MCP, and any LLM calls.
 
 **Best early users:** teams already on Playwright, QA/automation engineers cleaning up fragile
 suites, and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents

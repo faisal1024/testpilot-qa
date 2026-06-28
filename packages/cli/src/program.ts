@@ -4,14 +4,16 @@ import { addAiCommand } from './commands/add-ai.js'
 import { analyzeCommand } from './commands/analyze.js'
 import { doctorCommand } from './commands/doctor.js'
 import { explainCommand } from './commands/explain.js'
+import { fixCommand } from './commands/fix.js'
 import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
 
 /**
- * Builds the TestPilot CLI program. The five MVP commands — `init` (scaffolding),
+ * Builds the TestPilot CLI program: the five MVP commands — `init` (scaffolding),
  * `run` (Playwright pass-through), `analyze` (static locator analysis), `doctor`
- * (project diagnostics), and `explain` (rule education) — plus `add ai`
- * (safe, dry-run-by-default AI guidance regeneration).
+ * (project diagnostics), and `explain` (rule education) — plus `fix` (safe,
+ * dry-run-by-default mechanical locator rewrites) and `add ai` (safe,
+ * dry-run-by-default AI guidance regeneration).
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -53,6 +55,12 @@ export function buildProgram(): Command {
       'Write the current findings to the --baseline path (records, does not gate).',
     )
     .action(analyzeCommand)
+
+  program
+    .command('fix [patterns...]')
+    .description('Apply safe, mechanical locator rewrites. Dry-run (diff) by default.')
+    .option('--write', 'Write the fixes to disk (default is a dry-run preview).', false)
+    .action(fixCommand)
 
   program
     .command('doctor')

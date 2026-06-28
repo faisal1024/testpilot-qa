@@ -4,15 +4,16 @@
 > Binary name: `testpilot` (alias `tpq`)
 > Bootstrap: `npx testpilot-qa` / `npm create testpilot-qa@latest`
 
-> **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`. `fix` and `list` are
-> **deferred to V1**; of `add`, only the `add ai` subcommand is implemented (6C). `init` ships a
-> **single** `ui-api-fullstack` template in MVP. Commands below are tagged *(MVP)* or *(V1)* accordingly.
+> **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`. `list` is **deferred to V1**;
+> `fix` has a safe-preview foundation (8A) with `--dom`/`-i`/`--rules` deferred; of `add`, only the
+> `add ai` subcommand is implemented (6C). `init` ships a **single** `ui-api-fullstack` template in MVP.
+> Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
 > **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5), `analyze`
 > (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, `--min-score` gating,
-> `--baseline` no-regression gate, `--reporter table|json|sarif`; 3A–3C, 6A–6B), `doctor` (project
-> diagnostics + AI guidance drift; 4B, 5B), `explain` (rule education; 4A), and `add ai` (safe AI
-> guidance regeneration; 6C).
+> `--baseline` no-regression gate, `--reporter table|json|sarif|html`; 3A–3C, 6A–6B, 7A), `doctor`
+> (project diagnostics + AI guidance drift; 4B, 5B), `explain` (rule education; 4A), `fix` (safe
+> mechanical rewrites, dry-run by default; 8A), and `add ai` (safe AI guidance regeneration; 6C).
 
 ---
 
@@ -217,31 +218,38 @@ testpilot analyze tests/login.spec.ts --dom ./test-results/login/trace.zip
 
 ---
 
-### 3.3 `testpilot fix` *(V1 — deferred)*
+### 3.3 `testpilot fix` *(foundation in 8A; `--dom`/`-i`/`--rules` are V1 — deferred)*
 
-> Deferred per the approved plan: `fix` ships **after** static analysis has proven useful, so
-> detection precision is established before TestPilot writes to user test code. Spec retained here
-> for design continuity; not part of MVP.
-
-Apply safe, mechanical rewrites suggested by `analyze`. Mutates test code — gated.
+Apply safe, **behavior-preserving, mechanical** rewrites to your test files. Mutates test code, so it is
+**dry-run by default** and gated behind `--write`.
 
 ```
-testpilot fix [globs...] [options]
+testpilot fix [patterns...] [options]
 ```
 
-| Option | Description | Default |
-|---|---|---|
-| `--write` | Actually write changes. Without it: dry-run diff only. | dry-run |
-| `--rules <ids...>` | Limit to specific rules. | auto-fixable only |
-| `--interactive`, `-i` | Approve each change. | off |
-| `--dom <source>` | Use DOM context to produce concrete locator rewrites. | none |
+| Option | Description | Default | Status |
+|---|---|---|---|
+| `--write` | Write changes. Without it: dry-run unified diff only. | dry-run | **8A** |
+| `--rules <ids...>` | Limit to specific rules. | all fixable | V1 |
+| `--interactive`, `-i` | Approve each change. | off | V1 |
+| `--dom <source>` | Use DOM context for concrete locator rewrites. | none | V2 |
 
-**Behavior:** only rules marked `autoFixable` are applied. Without `--dom`, fixes are conservative (e.g. `waitForTimeout` → comment+TODO, `.locator('text=x')` → `getByText('x')`). Concrete role-based rewrites require `--dom`. Always shows a unified diff first.
+> **Behavior (8A):** scans the same files as `analyze` (the `patterns`, or `config.testDir`/`include`).
+> Dry-run prints a **unified diff** and writes nothing; `--write` applies. Fixes are **idempotent** and
+> preserve line count. Only unambiguous, behavior-identical rewrites are made — today:
+> **`x.locator('text=Foo')` → `x.getByText('Foo')`** (Playwright's string `getByText` does the same
+> case-insensitive/trimmed/substring match as the `text=` engine). Quoted-exact (`text="Foo"`), regex
+> (`text=/foo/`), chained (`>>`), dynamic (template), and unsafe-to-requote selectors are **left
+> untouched**. It **never edits application code**, never calls an LLM, and **never** infers role/test-id
+> locators from a string (that needs DOM evidence — see `--dom`, V2). Parse errors and unreadable files
+> are skipped, never half-written. Unwritable paths exit **2**. `--json` emits
+> `{ command:'fix', dryRun, files[], summary }`; `--quiet` prints nothing.
 
 **Examples**
 ```bash
-testpilot fix "tests/**/*.spec.ts"            # preview diffs, write nothing
-testpilot fix "tests/**/*.spec.ts" --write -i # apply, approving each
+testpilot fix                       # preview diffs across the suite, write nothing
+testpilot fix tests/login.spec.ts   # preview a single file
+testpilot fix --write               # apply the safe rewrites
 ```
 
 ---

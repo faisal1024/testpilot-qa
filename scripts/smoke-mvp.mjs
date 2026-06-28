@@ -172,6 +172,34 @@ check('analyze --baseline gates only on new findings', () => {
   })
 })
 
+check('fix previews then applies a safe mechanical rewrite (dry-run by default)', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    const spec = join(dir, 'tests', 'fixme.spec.ts')
+    const original = "await page.locator('text=Submit').click()\n"
+    writeFileSync(spec, original)
+
+    // Dry-run: shows a diff, writes nothing.
+    const preview = cli(['fix', '--cwd', dir])
+    assert(preview.status === 0, `exit ${preview.status}`)
+    assert(
+      /\+await page\.getByText\('Submit'\)/.test(preview.stdout),
+      'dry-run did not preview the fix',
+    )
+    assert(readFileSync(spec, 'utf8') === original, 'dry-run unexpectedly modified the file')
+
+    // --write applies it; a second run is idempotent.
+    const applied = cli(['fix', '--write', '--cwd', dir])
+    assert(applied.status === 0, `exit ${applied.status}`)
+    assert(
+      readFileSync(spec, 'utf8') === "await page.getByText('Submit').click()\n",
+      'fix --write did not rewrite the locator',
+    )
+    const again = cli(['fix', '--write', '--cwd', dir])
+    assert(/No mechanical fixes/.test(again.stdout), 'fix was not idempotent')
+  })
+})
+
 check('init scaffolds a complete project and protects existing files', () => {
   withTempDir((dir) => {
     const first = cli(['init', 'demo', '--yes', '--json', '--cwd', dir])
