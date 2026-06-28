@@ -335,8 +335,11 @@ drift classification as `doctor`'s `ai-guidance` check.
 > create/update actions; `--force` implies `--write` **and** also overwrites files edited after
 > generation. Per-file outcomes: **missing → create**, **stale (older guidance version) → update**,
 > **current → unchanged**, **edited / unmarked → kept** (only overwritten with `--force`). User edits
-> are never clobbered by default. `[agent]` is one id or `all`; omitted, it uses `config.ai.agents`.
-> An unknown agent exits **2**. `--json` emits `{ command:'add', resource:'ai', dryRun, files[], summary }`.
+> are never clobbered by default. (A file is `stale` only after the bundled `GUIDANCE_VERSION` is
+> bumped in a TestPilot release — until then a generated file is `current`.) `[agent]` is one id or
+> `all`; omitted, it uses `config.ai.agents` (an empty list reports "nothing to regenerate" and exits
+> 0). An unknown agent exits **2**. Writes are best-effort per file: a failure is reported and the run
+> continues, exiting **2** at the end. `--json` emits `{ command:'add', resource:'ai', dryRun, files[], summary }`.
 
 ```bash
 testpilot add ai                 # preview all configured agents

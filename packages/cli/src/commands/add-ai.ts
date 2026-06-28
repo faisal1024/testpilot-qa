@@ -4,6 +4,7 @@ import {
   AGENT_FILE_PATHS,
   type AgentId,
   type GuidanceAction,
+  type GuidanceFileState,
   SUPPORTED_AGENTS,
   actionWrites,
   classifyGuidanceFile,
@@ -25,10 +26,15 @@ interface AddAiOptions {
 interface AddAiFileResult {
   agent: AgentId
   path: string
-  state: string
+  state: GuidanceFileState
   action: GuidanceAction
   written: boolean
   reason: string
+}
+
+/** True when `agent` is a concrete id the user typed (not `undefined`/`all`). */
+function isExplicitAgent(agent: string | undefined): agent is string {
+  return agent !== undefined && agent !== 'all'
 }
 
 function fail(globals: GlobalOptions, message: string, code: number): never {
@@ -72,8 +78,8 @@ export async function addAiCommand(
   const globals = readGlobalOptions(command)
   const { config } = await resolveConfigOrExit(globals)
 
-  const targets = resolveTargets(agent, config)
-  if (targets.length === 0) {
+  // An explicitly-typed agent that isn't supported is a usage error.
+  if (isExplicitAgent(agent) && !(SUPPORTED_AGENTS as readonly string[]).includes(agent)) {
     fail(
       globals,
       `Unknown agent "${agent}". Choose one of: ${SUPPORTED_AGENTS.join(', ')}, all.`,
@@ -83,9 +89,18 @@ export async function addAiCommand(
 
   const force = options.force === true
   const dryRun = !(options.write === true || force)
+  const targets = resolveTargets(agent, config)
+
+  // Only reachable when no agent was named and `config.ai.agents` is empty.
+  if (targets.length === 0) {
+    reportEmpty(dryRun, globals)
+    return
+  }
+
   const generated = new Map(generateAgentFiles(targets).map((file) => [file.path, file.content]))
 
   const results: AddAiFileResult[] = []
+  const writeErrors: string[] = []
   for (const agentId of targets) {
     const path = AGENT_FILE_PATHS[agentId]
     const absolute = resolve(globals.cwd, path)
@@ -93,31 +108,42 @@ export async function addAiCommand(
     const action = resolveGuidanceAction(status.state, force)
 
     let written = false
+    let reason = status.reason
     if (!dryRun && actionWrites(action)) {
-      const content = generated.get(path)
-      if (content !== undefined) {
-        try {
-          writeTextFile(absolute, content)
-        } catch (error) {
-          if (error instanceof OutputError) {
-            fail(globals, error.message, ExitCode.USAGE)
-          }
-          throw error
-        }
+      const content = generated.get(path) ?? ''
+      try {
+        writeTextFile(absolute, content)
         written = true
+      } catch (error) {
+        if (!(error instanceof OutputError)) throw error
+        // Don't abort mid-run — record the failure and keep going so the report
+        // reflects every file, then exit non-zero below.
+        writeErrors.push(error.message)
+        reason = error.message
       }
     }
-    results.push({
-      agent: agentId,
-      path,
-      state: status.state,
-      action,
-      written,
-      reason: status.reason,
-    })
+    results.push({ agent: agentId, path, state: status.state, action, written, reason })
   }
 
   report(results, dryRun, globals)
+
+  if (writeErrors.length > 0) {
+    if (!globals.quiet) {
+      for (const message of writeErrors) console.error(message)
+    }
+    process.exit(ExitCode.USAGE)
+  }
+}
+
+/** Reports the "no agents configured" case (empty `config.ai.agents`). */
+function reportEmpty(dryRun: boolean, globals: GlobalOptions): void {
+  if (globals.json) {
+    console.log(
+      JSON.stringify({ command: 'add', resource: 'ai', dryRun, files: [], summary: summarize([]) }),
+    )
+  } else if (!globals.quiet) {
+    console.log('No AI agents configured in config.ai.agents — nothing to regenerate.')
+  }
 }
 
 const ACTION_LABEL: Record<GuidanceAction, { applied: string; planned: string; symbol: string }> = {
@@ -171,7 +197,7 @@ function report(results: AddAiFileResult[], dryRun: boolean, globals: GlobalOpti
     const changed = summary.created + summary.updated + summary.overwritten
     console.log(`${changed} file(s) written, ${summary.unchanged} already current.`)
   }
-  if (summary.skipped > 0 && !globals.quiet) {
+  if (summary.skipped > 0) {
     console.log(
       `${summary.skipped} edited file(s) left untouched — re-run with --force to overwrite.`,
     )

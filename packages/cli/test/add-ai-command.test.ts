@@ -115,6 +115,42 @@ describe('add ai — protecting user edits', () => {
   })
 })
 
+describe('add ai — agent selection', () => {
+  it('with no argument, honors a non-default config.ai.agents subset', async () => {
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { ai: { agents: ['claude'] } }\n",
+    )
+    await runAddAi(['--write'])
+    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(false)
+    expect(existsSync(join(dir, '.github/copilot-instructions.md'))).toBe(false)
+  })
+
+  it('`all` regenerates every supported agent regardless of config', async () => {
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { ai: { agents: ['claude'] } }\n",
+    )
+    await runAddAi(['all', '--write'])
+    for (const file of [
+      'CLAUDE.md',
+      'AGENTS.md',
+      '.cursor/rules/testpilot-playwright.mdc',
+      '.github/copilot-instructions.md',
+    ]) {
+      expect(existsSync(join(dir, file))).toBe(true)
+    }
+  })
+
+  it('reports cleanly (exit 0) when config configures no agents', async () => {
+    writeFileSync(join(dir, 'testpilot.config.ts'), 'export default { ai: { agents: [] } }\n')
+    const { exitCode, stdout } = await runAddAi()
+    expect(exitCode).toBeUndefined()
+    expect(stdout).toContain('No AI agents configured')
+  })
+})
+
 describe('add ai — output modes & errors', () => {
   it('rejects an unknown agent (exit 2)', async () => {
     const { exitCode, stderr } = await runAddAi(['bogus'])
@@ -133,5 +169,16 @@ describe('add ai — output modes & errors', () => {
   it('prints nothing with --quiet', async () => {
     const { stdout } = await runAddAi(['claude'], ['--quiet'])
     expect(stdout).toBe('')
+  })
+
+  it('continues past a write failure, writes the rest, and exits 2', async () => {
+    // A file where the `.cursor` directory should be blocks the cursor write,
+    // but later agents (copilot) must still be written.
+    writeFileSync(join(dir, '.cursor'), 'x')
+    const { exitCode, stderr } = await runAddAi(['all', '--write'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Could not write')
+    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
+    expect(existsSync(join(dir, '.github/copilot-instructions.md'))).toBe(true) // wrote past the failure
   })
 })
