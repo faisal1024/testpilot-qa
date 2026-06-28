@@ -62,6 +62,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@testpilot/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@testpilot/core':
         specifier: workspace:*
         version: link:../core

@@ -71,3 +71,38 @@ export function selectedAgents(agents?: readonly AgentId[]): AgentId[] {
   const set = new Set(agents ?? SUPPORTED_AGENTS)
   return SUPPORTED_AGENTS.filter((agent) => set.has(agent))
 }
+
+/**
+ * What regenerating a guidance file should do, given its drift `state`:
+ * - `create` — the file is missing;
+ * - `update` — the file is a stale generated file;
+ * - `overwrite` — the file was hand-edited (or isn't a generated file) and is
+ *   only touched when the caller explicitly forces it;
+ * - `skip-current` — already up to date;
+ * - `skip-edited` — hand-edited/unmarked and left alone (no `force`).
+ */
+export type GuidanceAction = 'create' | 'update' | 'overwrite' | 'skip-current' | 'skip-edited'
+
+/**
+ * Decides what to do with a guidance file from its drift state. Pure — the
+ * caller does the I/O. `force` is required before an edited or unmarked file is
+ * overwritten, so user edits are never clobbered by default.
+ */
+export function resolveGuidanceAction(state: GuidanceFileState, force: boolean): GuidanceAction {
+  switch (state) {
+    case 'missing':
+      return 'create'
+    case 'stale':
+      return 'update'
+    case 'current':
+      return 'skip-current'
+    default:
+      // 'edited' or 'no-marker': only overwrite when explicitly forced.
+      return force ? 'overwrite' : 'skip-edited'
+  }
+}
+
+/** Whether an action changes the file on disk (when not a dry run). */
+export function actionWrites(action: GuidanceAction): boolean {
+  return action === 'create' || action === 'update' || action === 'overwrite'
+}

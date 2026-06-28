@@ -1,5 +1,6 @@
 import { VERSION } from '@testpilot/core'
 import { Command } from 'commander'
+import { addAiCommand } from './commands/add-ai.js'
 import { analyzeCommand } from './commands/analyze.js'
 import { doctorCommand } from './commands/doctor.js'
 import { explainCommand } from './commands/explain.js'
@@ -7,9 +8,10 @@ import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
 
 /**
- * Builds the TestPilot CLI program. All five MVP commands are implemented:
- * `init` (scaffolding), `run` (Playwright pass-through), `analyze` (static
- * locator analysis), `doctor` (project diagnostics), and `explain` (rule education).
+ * Builds the TestPilot CLI program. The five MVP commands — `init` (scaffolding),
+ * `run` (Playwright pass-through), `analyze` (static locator analysis), `doctor`
+ * (project diagnostics), and `explain` (rule education) — plus `add ai`
+ * (safe, dry-run-by-default AI guidance regeneration).
  */
 export function buildProgram(): Command {
   const program = new Command('testpilot')
@@ -61,6 +63,14 @@ export function buildProgram(): Command {
     .command('explain <ruleId>')
     .description('Explain a rule: why it matters, examples, and guidance.')
     .action(explainCommand)
+
+  const add = program.command('add').description('Add or regenerate project assets.')
+  add
+    .command('ai [agent]')
+    .description('Regenerate AI agent guidance files (dry-run by default). Agent: an id or `all`.')
+    .option('--write', 'Apply create/update changes to generated files.', false)
+    .option('--force', 'Also overwrite files edited after generation (implies --write).', false)
+    .action(addAiCommand)
 
   return program
 }

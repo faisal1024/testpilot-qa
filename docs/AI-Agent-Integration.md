@@ -5,7 +5,7 @@
 
 > **Alignment note (approved plan):** MVP generates the agent context files **from one canonical
 > source** as part of `init` (no LLM calls — agent *readiness*, not AI-generated tests). The
-> standalone `add ai` regeneration command + full drift reconciliation are **V1**. The **MCP server
+> standalone `add ai` regeneration command is **implemented** (Milestone 6C, below). The **MCP server
 > is V2 and optional** — Direction 1 (generated files, §1) is the MVP path.
 
 > **Implemented (Milestone 5A):** `@testpilot/ai` defines the canonical guidance once
@@ -18,7 +18,15 @@
 > by `config.ai.agents`, it classifies each file as `current` / `missing` / `edited` / `stale` /
 > `no-marker` (via `@testpilot/ai`'s `classifyGuidanceFile`), surfaced as the `ai-guidance` check
 > with structured `details.files`. **Detection only** — read-only, deterministic, never regenerates;
-> drift is a warning, never a hard failure. Regeneration (`testpilot add ai`) is still V1.
+> drift is a warning, never a hard failure.
+
+> **Implemented (Milestone 6C):** `testpilot add ai [agent]` regenerates **only** the guidance files
+> (never scaffold or tests; no LLM). It reuses the same drift classification as `doctor` and is a
+> **dry-run preview by default**: missing files are *created*, stale ones *updated*, current ones left
+> alone, and **hand-edited or unmarked files are never overwritten without `--force`**. `--write`
+> applies create/update; `--force` implies `--write` and also overwrites edited files. `[agent]` is a
+> single agent id or `all`; with no argument it targets `config.ai.agents`. Reports per file (`--json`
+> or human) and exits 0 (usage error → 2). See §2.
 
 ---
 
