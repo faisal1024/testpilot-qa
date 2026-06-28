@@ -45,7 +45,7 @@ export function buildProgram(): Command {
     .option('--min-score <number>', 'Fail (non-zero exit) if the score is below this value.', (v) =>
       Number(v),
     )
-    .option('--reporter <format>', 'Output format: table | json | sarif.')
+    .option('--reporter <format>', 'Output format: table | json | sarif | html.')
     .option('--output <path>', 'Write the report to a file instead of stdout.')
     .option('--baseline <path>', 'Compare against a baseline; fail only on new findings.')
     .option(

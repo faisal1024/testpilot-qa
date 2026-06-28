@@ -24,7 +24,7 @@ Checklist:
 - [ ] `pnpm typecheck` clean (`tsc --noEmit`).
 - [ ] `pnpm test` green.
 - [ ] `pnpm -r build` succeeds for all packages.
-- [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `--output`, `--reporter sarif`, `--baseline` gate, `init` + overwrite protection, example-suite analysis).
+- [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `--output`, `--reporter sarif`, `--reporter html`, `--baseline` gate, `add ai`, `init` + overwrite protection, example-suite analysis).
 - [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx`, so don't reference `action@v0` in docs until an alpha tag is published.
 - [ ] `pnpm smoke:package` green (see below).
 - [ ] **Changeset status:** every user-facing change since the last release has a changeset (`.changeset/*.md`). Run `pnpm changeset status` if needed.
@@ -48,7 +48,7 @@ tests run in either.
 
 ## MVP scope confirmation (don't ship beyond this)
 
-Implemented surface: `init`, `run`, `analyze` (six Tier 1 rules + Locator Quality Score + `--min-score` + `--baseline` no-regression gate + `--reporter table|json|sarif` + `--output`), `doctor`, `explain`, and a composite GitHub Action wrapping the CLI. Deliberately **out** of scope for the alpha: auto-fix, DOM-aware suggestions, AI/LLM, HTML report, MCP, dashboards, public plugin API, `--changed`, and any Playwright-replacement behavior.
+Implemented surface: `init`, `run`, `analyze` (six Tier 1 rules + Locator Quality Score + `--min-score` + `--baseline` no-regression gate + `--reporter table|json|sarif|html` + `--output`), `doctor`, `explain`, `add ai` (safe guidance regeneration), and a composite GitHub Action wrapping the CLI. Deliberately **out** of scope for the alpha: auto-fix, DOM-aware suggestions, AI/LLM, MCP, dashboards, public plugin API, `--changed`, and any Playwright-replacement behavior.
 
 ## Dependency PR triage (before public alpha)
 

@@ -6,13 +6,14 @@ import { BaselineError, loadBaseline, writeBaseline } from '../util/baseline-io.
 import { ExitCode } from '../util/exit-codes.js'
 import { isBelowThreshold, isValidMinScore, resolveMinScore } from '../util/gating.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
+import { toHtml } from '../util/html-report.js'
 import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
 import { toSarif } from '../util/sarif.js'
 
-type ReporterFormat = 'table' | 'json' | 'sarif'
-const REPORTERS: ReporterFormat[] = ['table', 'json', 'sarif']
+type ReporterFormat = 'table' | 'json' | 'sarif' | 'html'
+const REPORTERS: ReporterFormat[] = ['table', 'json', 'sarif', 'html']
 
 interface AnalyzeOptions {
   minScore?: number
@@ -111,6 +112,8 @@ export async function analyzeCommand(
     try {
       if (reporter === 'sarif') {
         writeJsonFile(resolve(globals.cwd, options.output), toSarif(sarifReport))
+      } else if (reporter === 'html') {
+        writeTextFile(resolve(globals.cwd, options.output), toHtml(report))
       } else if (reporter === 'table') {
         writeTextFile(
           resolve(globals.cwd, options.output),
@@ -130,6 +133,8 @@ export async function analyzeCommand(
     }
   } else if (reporter === 'sarif') {
     console.log(JSON.stringify(toSarif(sarifReport), null, 2))
+  } else if (reporter === 'html') {
+    console.log(toHtml(report))
   } else if (reporter === 'json') {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {
