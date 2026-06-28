@@ -51,7 +51,26 @@ npx testpilot-qa analyze --json
 
 # Gate CI on a minimum Locator Quality Score (non-zero exit if below)
 npx testpilot-qa analyze --min-score 80
+
+# Write the JSON report to a file (instead of stdout)
+npx testpilot-qa analyze --output testpilot-report.json
 ```
+
+**Brownfield baseline.** Adopting on an existing suite with known issues? Record a baseline once,
+then gate CI on *new* findings only — exit non-zero only when a regression is introduced, while the
+pre-existing findings are grandfathered in.
+
+```bash
+# Record the current findings as the accepted baseline
+npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
+
+# In CI: fail only when a NEW finding appears (exit 1), ignore baselined ones
+npx testpilot-qa analyze --baseline testpilot-baseline.json
+```
+
+A finding's baseline identity is its rule + file + code snippet — independent of line number and
+severity — so moving code around or re-grading a rule never resurfaces an already-accepted finding.
+Commit the baseline file and shrink it over time as you fix the debt.
 
 `analyze` statically flags fragile locators with the MVP Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and

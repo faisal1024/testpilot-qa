@@ -159,16 +159,28 @@ testpilot analyze [globs...] [options]
 > `--min-score` flag wins; otherwise `config.scoring.minScore`; otherwise no gating. `--json` still
 > prints the full report (including `score`) even when the gate fails. Still Tier 1 / static — not
 > DOM-aware.
+>
+> **Output & baseline (6A):** **`--output <path>`** writes the full JSON report to a file (creating
+> parent directories) instead of stdout. **`--baseline <path>`** compares the current findings to a
+> saved baseline and gates on *new* findings only — exit **1** when a regression appears, exit **0**
+> when every current finding is grandfathered in. A finding's baseline identity is `ruleId + file +
+> snippet` (line/column/severity-independent), so moving code or re-grading a rule never resurfaces an
+> accepted finding; duplicate findings are counted, so an *extra* occurrence beyond the baseline count
+> is treated as new. **`--update-baseline`** (requires `--baseline`) records the current findings to
+> that path and exits **0** without gating. When `--baseline` is active the JSON report gains a
+> `baseline` block (`{ path, newFindings, baselinedFindings }`). Missing/malformed baseline files and
+> unwritable `--output`/`--baseline` paths exit **2** (usage) with a clear message.
 
 | Option | Description | Default | Version |
 |---|---|---|---|
 | `--reporter <fmt>` | `table` \| `json` (MVP); `html` \| `sarif` (V1). Repeatable. | `table` | MVP / V1 |
-| `--output <path>` | Write report to file. | stdout | MVP |
+| `--output <path>` | Write the JSON report to a file. | stdout | MVP (6A) |
 | `--min-score <n>` | Fail if project score `< n` (0–100). | none | MVP |
+| `--baseline <path>` | Compare to a saved baseline; gate on *new* findings only. | none | MVP (6A) |
+| `--update-baseline` | Record current findings to `--baseline` (no gate). | off | MVP (6A) |
 | `--severity <level>` | Min severity to report: `info`\|`warn`\|`error`. | `info` | MVP |
 | `--rules <ids...>` | Only run these rule ids. | all enabled | MVP |
 | `--changed` | Analyze only files changed vs base branch (CI speed). | off | V1 |
-| `--baseline <path>` | Compare to a saved baseline; report only *new* findings. | none | V1 |
 | `--dom <source>` | Tier 2: enrich with DOM context from a trace dir or URL. | none (static) | V2 |
 
 **Examples**
@@ -345,11 +357,11 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.2`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.3`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "command": "analyze",
   "summary": {
     "filesAnalyzed": 3,
@@ -385,11 +397,14 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
   "warnings": [
     { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." }
   ],
-  "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }]
+  "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
+  "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
 }
 ```
 
-Findings are sorted by `(file, line, column, ruleId)`, so the report is deterministic and diffable.
+`baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
+against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
+deterministic and diffable.
 
 ---
 

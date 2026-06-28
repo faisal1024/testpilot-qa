@@ -103,6 +103,42 @@ check('analyze reports a finding on a fragile locator', () => {
   })
 })
 
+check('analyze --output writes a report file', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'fragile.spec.ts'), "page.locator('//button')\n")
+    const out = join(dir, 'report.json')
+    const { status, stdout } = cli(['analyze', '--output', out, '--cwd', dir])
+    assert(status === 0, `exit ${status}`)
+    assert(stdout.includes('Report written to'), 'missing confirmation message')
+    const report = JSON.parse(readFileSync(out, 'utf8'))
+    assert(report.command === 'analyze', 'output file is not a valid analyze report')
+  })
+})
+
+check('analyze --baseline gates only on new findings', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'fragile.spec.ts'), "page.locator('//button')\n")
+    const baseline = join(dir, 'baseline.json')
+
+    // Record the current findings.
+    const recorded = cli(['analyze', '--baseline', baseline, '--update-baseline', '--cwd', dir])
+    assert(recorded.status === 0, `record exit ${recorded.status}`)
+    assert(existsSync(baseline), 'baseline file was not written')
+
+    // No new findings → passes.
+    const clean = cli(['analyze', '--baseline', baseline, '--cwd', dir])
+    assert(clean.status === 0, `expected pass, got exit ${clean.status}`)
+
+    // A brand-new finding → fails with exit 1.
+    writeFileSync(join(dir, 'tests', 'slow.spec.ts'), 'page.waitForTimeout(1000)\n')
+    const regressed = cli(['analyze', '--baseline', baseline, '--cwd', dir])
+    assert(regressed.status === 1, `expected exit 1 on regression, got ${regressed.status}`)
+    assert(regressed.stdout.includes('no-hard-wait'), 'regression output missing the new rule')
+  })
+})
+
 check('init scaffolds a complete project and protects existing files', () => {
   withTempDir((dir) => {
     const first = cli(['init', 'demo', '--yes', '--json', '--cwd', dir])
