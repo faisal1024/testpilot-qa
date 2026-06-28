@@ -35,7 +35,8 @@ export async function analyzeCommand(
   if (globals.json) {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {
-    console.error(renderAnalysisText(report))
+    // Primary report goes to stdout, consistent with doctor/explain/init.
+    console.log(renderAnalysisText(report))
   }
 
   // Gating: --min-score flag wins, else config.scoring.minScore, else no gate.

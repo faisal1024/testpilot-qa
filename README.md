@@ -146,7 +146,19 @@ See [Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan.
 
 ## Status
 
-Active development. Milestone 1 (repo foundation) and Milestone 2 (CLI basics: global options + config
-loading) are merged. Milestone 2.5 implements `init` (scaffolding) and `run` (Playwright pass-through).
-Locator Intelligence (`analyze`) ships its full MVP Tier 1 rule set plus the Locator Quality Score
-and `--min-score` CI gating (Milestones 3B–3C). See [Roadmap](docs/Roadmap.md).
+**MVP complete (release candidate).** All five commands — `init`, `run`, `analyze` (six Tier 1 rules
++ Locator Quality Score + `--min-score`), `doctor`, and `explain` — are implemented, CI-gated, and
+covered by a smoke script. Everything is Tier 1 / static, offline, and Playwright-native. See the
+[Roadmap](docs/Roadmap.md) for the full Phase 0–10 plan and the
+[Release Checklist](docs/Release-Checklist.md) for the release gate.
+
+## Development
+
+```bash
+pnpm install
+pnpm lint && pnpm typecheck && pnpm test && pnpm -r build
+pnpm smoke:mvp        # offline end-to-end smoke of the built CLI
+```
+
+User-facing changes require a changeset (`pnpm changeset`) and a README/CLI-Spec update. The
+pre-release gate lives in [docs/Release-Checklist.md](docs/Release-Checklist.md).

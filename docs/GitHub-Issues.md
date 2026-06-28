@@ -3,6 +3,13 @@
 > Status: Approved — aligned to *Updated Plan After Claude Review*
 > A prioritized, labeled backlog organized as Epics → Stories → Tasks. Priorities map to the Roadmap (Phase 0–10 / MVP first).
 
+> **MVP delivered (as of Milestone 4C):** the P0 MVP epics are complete and merged — repo
+> foundation (1), single-template scaffolding (2) + `run`, the Tier 1 analyzer with six rules,
+> scoring, and `--min-score` (3, 4), `doctor` and `explain` (6.2, 7), and the `table`/`json`
+> reporters (5, P0). Items below tagged `prio:p1`+ (auto-fix, ESLint plugin, CI/SARIF, DOM tier,
+> MCP, plugin ecosystem, docs portal) remain **pending** for V1+. Treat the per-epic priorities as
+> the source of truth; the MVP P0 slice is done.
+
 ---
 
 ## Suggested Labels
