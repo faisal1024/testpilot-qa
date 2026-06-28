@@ -47,14 +47,18 @@ function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
 }
 
 describe('toHtml', () => {
-  it('produces a self-contained HTML document with no external assets', () => {
+  it('produces a self-contained HTML document that loads nothing on open', () => {
     const html = toHtml(report())
     expect(html.startsWith('<!doctype html>')).toBe(true)
     expect(html).toContain('<style>')
-    // No external resource references and no scripts.
+    // Nothing is fetched when the file is opened: no scripts, no auto-loaded resources.
     expect(html).not.toMatch(/<script/i)
-    expect(html).not.toMatch(/https?:\/\/(?!testpilot\.dev)/) // only rule docs links, no CDNs
-    expect(html).not.toMatch(/src=|<link/i)
+    expect(html).not.toMatch(/\ssrc=/i)
+    expect(html).not.toMatch(/<link/i)
+    expect(html).not.toMatch(/url\(/i)
+    expect(html).not.toMatch(/@import/i)
+    // The only URLs are click-through rule docs links (testpilot.dev).
+    expect(html).not.toMatch(/https?:\/\/(?!testpilot\.dev\/)/)
   })
 
   it('shows the score, grade, sub-scores, and summary counts', () => {
@@ -134,5 +138,52 @@ describe('toHtml', () => {
     const html = toHtml(withBaseline)
     expect(html).toContain('testpilot-baseline.json')
     expect(html).toContain('new finding')
+  })
+
+  it('renders and escapes the warnings and parse-error sections', () => {
+    const html = toHtml(
+      report({
+        warnings: [{ code: 'unknown-rule', message: 'Unknown rule <script>x</script>' }],
+        parseErrors: [{ file: 'tests/<b>broken</b>.spec.ts', message: 'Unexpected </script>' }],
+      }),
+    )
+    expect(html).toContain('Warnings')
+    expect(html).toContain('Could not parse')
+    expect(html).not.toContain('<script>x</script>')
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;')
+    expect(html).toContain('&lt;b&gt;broken&lt;/b&gt;')
+  })
+
+  it('omits the suggestion and does not link an unsafe docsUrl', () => {
+    const html = toHtml(
+      report({
+        findings: [finding({ suggestion: undefined, docsUrl: 'javascript:alert(1)' })],
+      }),
+    )
+    expect(html).not.toContain('class="suggestion"')
+    expect(html).not.toContain('javascript:alert(1)') // not rendered as an href at all
+    expect(html).not.toMatch(/<a [^>]*href=/) // no link for a non-http docsUrl
+    expect(html).toContain('no-xpath') // rule id still shown as plain text
+  })
+
+  it('groups findings by file in first-seen order (deterministic)', () => {
+    const html = toHtml(
+      report({
+        findings: [
+          finding({ file: 'tests/b.spec.ts' }),
+          finding({ file: 'tests/a.spec.ts' }),
+          finding({ file: 'tests/b.spec.ts', ruleId: 'no-hard-wait' }),
+        ],
+        summary: {
+          filesAnalyzed: 2,
+          filesWithParseErrors: 0,
+          findings: 3,
+          bySeverity: { info: 0, warn: 0, error: 3 },
+        },
+      }),
+    )
+    // b.spec.ts is seen first, so its group comes first.
+    expect(html.indexOf('tests/b.spec.ts')).toBeLessThan(html.indexOf('tests/a.spec.ts'))
+    expect(html).toContain('Findings (3)')
   })
 })

@@ -125,9 +125,15 @@ function findingsSection(findings: Finding[]): string {
   return `<section class="findings"><h2>Findings (${findings.length})</h2>${groups}</section>`
 }
 
+/** Only link http(s) URLs — never `javascript:`/`data:` — even though `esc()`
+ * already blocks attribute breakout. Defense-in-depth for the one URL sink. */
+function isHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
 function findingRow(finding: Finding): string {
   const sev = finding.severity
-  const rule = finding.docsUrl
+  const rule = isHttpUrl(finding.docsUrl)
     ? `<a href="${esc(finding.docsUrl)}" rel="noreferrer noopener">${esc(finding.ruleId)}</a>`
     : esc(finding.ruleId)
   const suggestion = finding.suggestion
