@@ -81,6 +81,9 @@ importers:
 
   packages/scaffold:
     dependencies:
+      '@testpilot/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@testpilot/templates':
         specifier: workspace:*
         version: link:../templates

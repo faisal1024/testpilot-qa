@@ -16,7 +16,7 @@ Everything it generates is **ejectable plain Playwright** — zero lock-in.
 ## Quick start
 
 ```bash
-# Scaffold a TypeScript Playwright project (UI + API examples)
+# Scaffold a TypeScript Playwright project (UI + API examples + AI agent guidance)
 npx testpilot-qa init demo --yes
 cd demo
 
@@ -77,9 +77,18 @@ config validity, the test directory, and project structure — printing a pass/w
 remediation. It's read-only and offline; exit codes are CI-friendly (`0` healthy, `3` invalid
 config, `4` setup problems).
 
-**Available today (all five MVP commands):** `init` (scaffold), `run` (Playwright pass-through),
-`analyze` (static Locator Intelligence), `doctor` (project diagnostics), and `explain` (rule
-education).
+### AI agent guidance
+
+`init` also generates agent-context files from a **single canonical guidance source** (offline, no
+LLM): `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, and
+`.cursor/rules/testpilot-playwright.mdc`. They teach agents the locator hierarchy, web-first
+assertions, no-hard-waits, API conventions, and the TestPilot commands — and stay honest about Tier
+1 limits (no DOM-aware suggestions). Each carries a `version + sha256` marker for future drift
+detection. Existing files are never overwritten without `--force`.
+
+**Available today (all five MVP commands):** `init` (scaffold + AI guidance), `run` (Playwright
+pass-through), `analyze` (static Locator Intelligence), `doctor` (project diagnostics), and `explain`
+(rule education).
 
 ---
 

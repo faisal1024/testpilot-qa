@@ -24,6 +24,11 @@ const EXPECTED_FILES = [
   '.gitignore',
   '.github/workflows/e2e.yml',
   'README.md',
+  // AI agent guidance files (@testpilot/ai)
+  'CLAUDE.md',
+  'AGENTS.md',
+  '.cursor/rules/testpilot-playwright.mdc',
+  '.github/copilot-instructions.md',
 ]
 
 describe('scaffoldProject', () => {
@@ -118,5 +123,39 @@ describe('scaffoldProject', () => {
 
   it('throws ScaffoldError for an unknown template', () => {
     expect(() => scaffoldProject({ targetDir: dir, templateId: 'nope' })).toThrow(ScaffoldError)
+  })
+
+  it('generates the AI agent guidance files with generated markers', () => {
+    scaffoldProject({ targetDir: dir, projectName: 'demo' })
+    for (const file of [
+      'CLAUDE.md',
+      'AGENTS.md',
+      '.cursor/rules/testpilot-playwright.mdc',
+      '.github/copilot-instructions.md',
+    ]) {
+      expect(existsSync(join(dir, file)), file).toBe(true)
+      expect(readFileSync(join(dir, file), 'utf8')).toContain('@testpilot/guidance')
+    }
+  })
+
+  it('skips an existing AI file without --force and overwrites with --force', () => {
+    const claude = join(dir, 'CLAUDE.md')
+    writeFileSync(claude, '# my notes\n')
+
+    const skip = scaffoldProject({ targetDir: dir, projectName: 'demo' })
+    expect(skip.skipped).toContain('CLAUDE.md')
+    expect(skip.created).not.toContain('CLAUDE.md')
+    expect(readFileSync(claude, 'utf8')).toBe('# my notes\n')
+
+    const forced = scaffoldProject({ targetDir: dir, projectName: 'demo', force: true })
+    expect(forced.created).toContain('CLAUDE.md')
+    expect(readFileSync(claude, 'utf8')).toContain('@testpilot/guidance')
+  })
+
+  it('honors the agents option', () => {
+    const result = scaffoldProject({ targetDir: dir, projectName: 'demo', agents: ['claude'] })
+    expect(result.created).toContain('CLAUDE.md')
+    expect(result.created).not.toContain('AGENTS.md')
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(false)
   })
 })

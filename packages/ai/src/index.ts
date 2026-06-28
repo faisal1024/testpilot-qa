@@ -1,8 +1,25 @@
 /**
- * @testpilot/ai — reserved package boundary.
+ * @testpilot/ai — deterministic AI-agent guidance generation.
  *
- * Implementation lands in its roadmap phase. This placeholder exists so the
- * dependency graph and package naming are locked from Milestone 1.
+ * One canonical guidance source (`CANONICAL_GUIDANCE`) drives generators for
+ * CLAUDE.md, AGENTS.md, GitHub Copilot, and Cursor. Offline, no LLM calls.
+ * Each file carries a marker (version + content hash) so Milestone 5B can add
+ * `doctor` drift detection cleanly.
  */
-
-export const RESERVED = true
+export { CANONICAL_GUIDANCE } from './guidance.js'
+export {
+  AGENT_FILE_PATHS,
+  type AgentId,
+  type GeneratedFile,
+  generateAgentFiles,
+  SUPPORTED_AGENTS,
+} from './generators.js'
+export {
+  extractGeneratedBody,
+  GUIDANCE_VERSION,
+  type GuidanceMarker,
+  guidanceMarker,
+  hashGuidance,
+  isGuidancePristine,
+  parseGuidanceMarker,
+} from './marker.js'

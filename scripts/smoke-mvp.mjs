@@ -120,6 +120,11 @@ check('init scaffolds a complete project and protects existing files', () => {
       'tests/api/example.spec.ts',
       'README.md',
       '.github/workflows/e2e.yml',
+      // AI agent guidance files
+      'CLAUDE.md',
+      'AGENTS.md',
+      '.cursor/rules/testpilot-playwright.mdc',
+      '.github/copilot-instructions.md',
     ]
     for (const file of expected) {
       assert(existsSync(join(demo, file)), `generated project is missing ${file}`)

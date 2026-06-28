@@ -17,6 +17,7 @@
     "build": "tsup"
   },
   "dependencies": {
+    "@testpilot/ai": "workspace:*",
     "@testpilot/templates": "workspace:*"
   }
 }

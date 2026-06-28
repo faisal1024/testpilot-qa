@@ -6,6 +6,7 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
+import { type AgentId, SUPPORTED_AGENTS, generateAgentFiles } from '@testpilot/ai'
 import { DEFAULT_TEMPLATE_ID, getTemplate } from '@testpilot/templates'
 import { ScaffoldError } from './errors.js'
 
@@ -20,6 +21,8 @@ export interface ScaffoldOptions {
   projectName?: string
   /** Overwrite existing files. Defaults to `false` (existing files are skipped). */
   force?: boolean
+  /** AI agents whose guidance files to generate. Defaults to all supported agents. */
+  agents?: readonly AgentId[]
 }
 
 export interface ScaffoldResult {
@@ -45,7 +48,12 @@ export function scaffoldProject(options: ScaffoldOptions): ScaffoldResult {
   }
 
   const projectName = options.projectName ?? basename(targetDir)
-  const files = template.files({ projectName })
+  // The template provides the project; @testpilot/ai appends agent guidance files.
+  // Both are { path, content } and flow through the same overwrite-protection loop.
+  const files = [
+    ...template.files({ projectName }),
+    ...generateAgentFiles(options.agents ?? SUPPORTED_AGENTS),
+  ]
 
   const created: string[] = []
   const skipped: string[] = []

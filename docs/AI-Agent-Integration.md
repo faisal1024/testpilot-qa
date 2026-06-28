@@ -8,6 +8,14 @@
 > standalone `add ai` regeneration command + full drift reconciliation are **V1**. The **MCP server
 > is V2 and optional** — Direction 1 (generated files, §1) is the MVP path.
 
+> **Implemented (Milestone 5A):** `@testpilot/ai` defines the canonical guidance once
+> (`CANONICAL_GUIDANCE`) and deterministically generates `CLAUDE.md`, `AGENTS.md`,
+> `.github/copilot-instructions.md`, and `.cursor/rules/testpilot-playwright.mdc`. `testpilot init`
+> writes them by default (selectable via `config.ai.agents`), with the standard overwrite protection
+> (`--force`). Each file carries a `version + sha256` marker (`@testpilot/guidance …`) and exported
+> helpers (`parseGuidanceMarker`, `isGuidancePristine`) so **5B** can add `doctor` drift detection
+> cleanly. The guidance is honest about Tier 1 limits (no DOM-aware suggestions, no auto-fix, no LLM).
+
 ---
 
 ## 1. Two Directions of Integration
