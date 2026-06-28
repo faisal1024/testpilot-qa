@@ -3,18 +3,22 @@ import { ScaffoldError, type ScaffoldResult, scaffoldProject } from '@testpilot/
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
+import { resolveConfigOrExit } from '../util/resolve-config.js'
 
 interface InitOptions {
   template?: string
   force?: boolean
 }
 
-export function initCommand(
+export async function initCommand(
   directory: string | undefined,
   options: InitOptions,
   command: Command,
-): void {
+): Promise<void> {
   const globals = readGlobalOptions(command)
+  // Load config so `ai.agents` selects which guidance files are generated.
+  // An invalid config exits 3 (consistent with analyze/doctor/run).
+  const { config } = await resolveConfigOrExit(globals)
   const targetDir = resolve(globals.cwd, directory ?? '.')
 
   try {
@@ -22,6 +26,7 @@ export function initCommand(
       targetDir,
       templateId: options.template,
       force: options.force,
+      agents: config.ai.agents,
     })
     reportInit(result, directory ?? '.', globals)
   } catch (error) {
