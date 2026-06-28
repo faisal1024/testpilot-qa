@@ -151,12 +151,43 @@ describe('analyze — Tier 1 rule set', () => {
     expect(report.findings.length).toBeGreaterThan(0)
   })
 
-  it('expands a directory pattern into its test files', async () => {
-    writeFixture('e2e/login.spec.ts', "page.locator('//button')")
-    // A bare directory (e.g. `analyze examples/fragile-suite`) is expanded.
-    const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e'] })
-    expect(report.summary.filesAnalyzed).toBe(1)
-    expect(report.findings.some((f) => f.ruleId === 'no-xpath')).toBe(true)
+  describe('directory positionals', () => {
+    it('expands a directory pattern into its test files', async () => {
+      writeFixture('e2e/login.spec.ts', "page.locator('//button')")
+      const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e'] })
+      expect(report.summary.filesAnalyzed).toBe(1)
+      expect(report.findings.some((f) => f.ruleId === 'no-xpath')).toBe(true)
+    })
+
+    it('handles a trailing slash on the directory', async () => {
+      writeFixture('e2e/login.spec.ts', "page.locator('//button')")
+      const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e/'] })
+      expect(report.summary.filesAnalyzed).toBe(1)
+    })
+
+    it('treats a non-existent path as a literal glob (no match, no throw)', async () => {
+      const report = await analyze({ cwd: dir, config: config(), patterns: ['does-not-exist'] })
+      expect(report.summary.filesAnalyzed).toBe(0)
+      expect(report.findings).toEqual([])
+    })
+
+    it('returns nothing for a directory with no matching test files', async () => {
+      mkdirSync(join(dir, 'empty'), { recursive: true })
+      writeFixture('empty/notes.md', '# not a test')
+      const report = await analyze({ cwd: dir, config: config(), patterns: ['empty'] })
+      expect(report.summary.filesAnalyzed).toBe(0)
+    })
+
+    it('mixes a directory positional with a glob positional', async () => {
+      writeFixture('e2e/a.spec.ts', "page.locator('//button')")
+      writeFixture('extra/b.spec.ts', "page.locator('.btn')")
+      const report = await analyze({
+        cwd: dir,
+        config: config(),
+        patterns: ['e2e', 'extra/**/*.spec.ts'],
+      })
+      expect(report.summary.filesAnalyzed).toBe(2)
+    })
   })
 
   describe('scoring', () => {

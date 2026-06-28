@@ -1,6 +1,5 @@
 ---
 "testpilot-qa": minor
-"@testpilot/locator-intelligence": minor
 ---
 
 Milestone 5C — public alpha hardening and package smoke.
@@ -8,7 +7,8 @@ Milestone 5C — public alpha hardening and package smoke.
 - **Self-contained published CLI:** `testpilot-qa` now bundles the internal `@testpilot/*` workspace
   packages and declares its real npm deps (`commander`, `zod`, `jiti`, `tinyglobby`,
   `@typescript-eslint/parser`). The packed tarball installs and runs without any unpublished
-  workspace dependency.
+  workspace dependency. The `@testpilot/*` packages are now `private` so **only `testpilot-qa`
+  publishes** (they are bundled, not shipped as separate npm packages).
 - **`pnpm smoke:package`** (`scripts/smoke-package.mjs`): packs the CLI, installs the tarball into a
   fresh temp project, and runs the installed binary (`--help`/`--version`, `explain --json`, `init`
   + AI guidance + overwrite protection, `doctor`, `analyze`). Proves the install path a consumer

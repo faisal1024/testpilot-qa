@@ -26,7 +26,20 @@ if (!existsSync(join(cliDir, 'dist', 'cli.js'))) {
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: 'utf8', ...options })
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+  return {
+    status: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    // Surface spawn failures (e.g. command not on PATH) instead of a blank message.
+    error: result.error,
+  }
+}
+
+function describeFailure(label, result) {
+  if (result.error) {
+    return `${label}: ${result.error.message}`
+  }
+  return `${label}:\n${result.stderr || result.stdout || `exit ${result.status}`}`
 }
 
 function assert(condition, message) {
@@ -56,14 +69,18 @@ let testpilot = () => {
 }
 
 try {
-  // 1) Pack the CLI.
-  const pack = run('pnpm', ['pack', '--pack-destination', work], { cwd: cliDir })
+  // 1) Pack the CLI with `npm pack` — this is the publish artifact a consumer
+  //    installs, and it avoids assuming a plain `pnpm` binary is on PATH (only
+  //    `corepack pnpm` may be available in some environments).
+  const pack = run('npm', ['pack', '--pack-destination', work], { cwd: cliDir })
   if (pack.status !== 0) {
-    throw new Error(`pnpm pack failed:\n${pack.stderr || pack.stdout}`)
+    throw new Error(describeFailure('npm pack failed', pack))
   }
-  const tarball = readdirSync(work).find((file) => file.endsWith('.tgz'))
+  const tarball = readdirSync(work).find(
+    (file) => file.startsWith('testpilot-qa-') && file.endsWith('.tgz'),
+  )
   if (!tarball) {
-    throw new Error('no tarball produced by pnpm pack')
+    throw new Error('no testpilot-qa tarball produced by npm pack')
   }
   console.log(`  • packed ${tarball}`)
 
@@ -74,7 +91,7 @@ try {
     cwd: project,
   })
   if (install.status !== 0) {
-    throw new Error(`npm install of the tarball failed:\n${install.stderr || install.stdout}`)
+    throw new Error(describeFailure('npm install of the tarball failed', install))
   }
   const installedCli = join(project, 'node_modules', 'testpilot-qa', 'dist', 'cli.js')
   if (!existsSync(installedCli)) {
