@@ -11,9 +11,14 @@ export class OutputError extends Error {
 
 /** Writes pretty-printed JSON to an absolute path, creating parent dirs. */
 export function writeJsonFile(absolutePath: string, data: unknown): void {
+  writeTextFile(absolutePath, `${JSON.stringify(data, null, 2)}\n`)
+}
+
+/** Writes text to an absolute path, creating parent dirs. */
+export function writeTextFile(absolutePath: string, content: string): void {
   try {
     mkdirSync(dirname(absolutePath), { recursive: true })
-    writeFileSync(absolutePath, `${JSON.stringify(data, null, 2)}\n`)
+    writeFileSync(absolutePath, content)
   } catch (error) {
     throw new OutputError(
       `Could not write to ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`,

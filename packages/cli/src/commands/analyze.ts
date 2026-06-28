@@ -6,15 +6,31 @@ import { BaselineError, loadBaseline, writeBaseline } from '../util/baseline-io.
 import { ExitCode } from '../util/exit-codes.js'
 import { isBelowThreshold, isValidMinScore, resolveMinScore } from '../util/gating.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
-import { OutputError, writeJsonFile } from '../util/output.js'
+import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
+import { toSarif } from '../util/sarif.js'
+
+type ReporterFormat = 'table' | 'json' | 'sarif'
+const REPORTERS: ReporterFormat[] = ['table', 'json', 'sarif']
 
 interface AnalyzeOptions {
   minScore?: number
+  reporter?: string
   output?: string
   baseline?: string
   updateBaseline?: boolean
+}
+
+/**
+ * Resolves the output format. An explicit `--reporter` always wins; otherwise
+ * `--json` or a bare `--output` (which has always emitted JSON) imply `json`,
+ * and interactive runs default to the human `table`.
+ */
+function resolveReporter(options: AnalyzeOptions, globals: GlobalOptions): ReporterFormat {
+  if (options.reporter) return options.reporter as ReporterFormat
+  if (globals.json || options.output) return 'json'
+  return 'table'
 }
 
 function fail(globals: GlobalOptions, message: string, code: number): never {
@@ -33,6 +49,9 @@ export async function analyzeCommand(
 
   if (options.minScore !== undefined && !isValidMinScore(options.minScore)) {
     fail(globals, '--min-score must be a number between 0 and 100.', ExitCode.USAGE)
+  }
+  if (options.reporter && !REPORTERS.includes(options.reporter as ReporterFormat)) {
+    fail(globals, `--reporter must be one of: ${REPORTERS.join(', ')}.`, ExitCode.USAGE)
   }
   if (options.updateBaseline && !options.baseline) {
     fail(globals, '--update-baseline requires --baseline <path>.', ExitCode.USAGE)
@@ -82,9 +101,24 @@ export async function analyzeCommand(
   }
 
   // --- Output ---
+  // In baseline mode the SARIF annotations and the human table are scoped to the
+  // *new* findings (so a brownfield PR is not flooded with pre-existing debt).
+  // The JSON report is left whole — it carries the full findings plus the
+  // `baseline` summary, which is its stable contract.
+  const reporter = resolveReporter(options, globals)
+  const sarifReport = newFindings === undefined ? report : { ...report, findings: newFindings }
   if (options.output) {
     try {
-      writeJsonFile(resolve(globals.cwd, options.output), report)
+      if (reporter === 'sarif') {
+        writeJsonFile(resolve(globals.cwd, options.output), toSarif(sarifReport))
+      } else if (reporter === 'table') {
+        writeTextFile(
+          resolve(globals.cwd, options.output),
+          `${renderAnalysisText(report, newFindings)}\n`,
+        )
+      } else {
+        writeJsonFile(resolve(globals.cwd, options.output), report)
+      }
     } catch (error) {
       if (error instanceof OutputError) {
         fail(globals, error.message, ExitCode.USAGE)
@@ -94,7 +128,9 @@ export async function analyzeCommand(
     if (!globals.quiet) {
       console.log(`Report written to ${options.output}.`)
     }
-  } else if (globals.json) {
+  } else if (reporter === 'sarif') {
+    console.log(JSON.stringify(toSarif(sarifReport), null, 2))
+  } else if (reporter === 'json') {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {
     console.log(renderAnalysisText(report, newFindings))

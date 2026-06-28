@@ -38,6 +38,9 @@ importers:
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@25.9.4)
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
 
   packages/ai: {}
 
@@ -3582,8 +3585,7 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.2.0
 
-  yaml@2.9.0:
-    optional: true
+  yaml@2.9.0: {}
 
   yocto-queue@0.1.0: {}
 

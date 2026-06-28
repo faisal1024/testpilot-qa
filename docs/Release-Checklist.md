@@ -24,7 +24,8 @@ Checklist:
 - [ ] `pnpm typecheck` clean (`tsc --noEmit`).
 - [ ] `pnpm test` green.
 - [ ] `pnpm -r build` succeeds for all packages.
-- [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `init` + overwrite protection, example-suite analysis).
+- [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `--output`, `--reporter sarif`, `--baseline` gate, `init` + overwrite protection, example-suite analysis).
+- [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx`, so don't reference `action@v0` in docs until an alpha tag is published.
 - [ ] `pnpm smoke:package` green (see below).
 - [ ] **Changeset status:** every user-facing change since the last release has a changeset (`.changeset/*.md`). Run `pnpm changeset status` if needed.
 - [ ] **README reviewed:** alpha positioning and the implemented command surface match reality.
@@ -47,7 +48,7 @@ tests run in either.
 
 ## MVP scope confirmation (don't ship beyond this)
 
-Implemented MVP surface: `init`, `run`, `analyze` (six Tier 1 rules + Locator Quality Score + `--min-score`), `doctor`, `explain`. Deliberately **out** of the MVP: auto-fix, DOM-aware suggestions, AI/LLM, HTML/SARIF reports, MCP, dashboards, public plugin API, baseline/`--changed`, and any Playwright-replacement behavior.
+Implemented surface: `init`, `run`, `analyze` (six Tier 1 rules + Locator Quality Score + `--min-score` + `--baseline` no-regression gate + `--reporter table|json|sarif` + `--output`), `doctor`, `explain`, and a composite GitHub Action wrapping the CLI. Deliberately **out** of scope for the alpha: auto-fix, DOM-aware suggestions, AI/LLM, HTML report, MCP, dashboards, public plugin API, `--changed`, and any Playwright-replacement behavior.
 
 ## Dependency PR triage (before public alpha)
 
