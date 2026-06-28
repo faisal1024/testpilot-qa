@@ -130,9 +130,10 @@ and `test:e2e:headed` npm scripts.
 ### 3.2 `testpilot analyze` *(MVP)*
 
 Run Locator Intelligence over test files. Read-only.
-**Implemented:** Tier 1 static analysis with `table`/`json`/`sarif`/`html` reporters, `--min-score`
-gating, and the `--baseline`/`--update-baseline` no-regression gate (6A/6B/7A). **Still V2:** `--dom`
-(DOM-aware enrichment) and `--changed` (diff scoping) — see tags below.
+**Implemented:** Tier 1 static analysis with `--min-score` gating (MVP), the
+`--baseline`/`--update-baseline` no-regression gate and `--output` (6A), and the `sarif` (6B) and
+`html` (7A) reporters on top of `table`/`json`. **Still V2:** `--dom` (DOM-aware enrichment) and
+`--changed` (diff scoping) — see tags below.
 
 ```
 testpilot analyze [globs...] [options]
