@@ -24,7 +24,7 @@
     "*.{ts,js,json,jsonc}": "biome check --write --no-errors-on-unmatched"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.5.1",
     "@changesets/cli": "^2.27.9",
     "@types/node": "^25.9.3",
     "@vitest/coverage-v8": "^2.1.0",
