@@ -19,18 +19,22 @@ function expandDirectoryPatterns(cwd: string, patterns: string[], include: strin
  * - When `patterns` are given (e.g. CLI positional globs), they are resolved
  *   relative to `cwd`. A pattern that is a directory expands to that directory's
  *   test files (using `config.include`), so `analyze examples/fragile-suite` works.
- * - Otherwise `config.include` is resolved relative to `cwd/config.testDir`.
+ * - Otherwise `config.include` is resolved relative to `config.testDir`, which is
+ *   itself relative to `configDir` — the directory of the loaded config file —
+ *   so running from a sub-directory of a monorepo still finds the suite.
+ *   Falls back to `cwd` when no config file exists.
  */
 export async function resolveTestFiles(
   cwd: string,
   patterns: string[] | undefined,
   config: TestPilotConfig,
+  configDir?: string,
 ): Promise<string[]> {
   const usingPatterns = patterns !== undefined && patterns.length > 0
   const globs = usingPatterns
     ? expandDirectoryPatterns(cwd, patterns, config.include)
     : config.include
-  const base = usingPatterns ? cwd : resolve(cwd, config.testDir)
+  const base = usingPatterns ? cwd : resolve(configDir ?? cwd, config.testDir)
 
   const matches = await glob(globs, {
     cwd: base,

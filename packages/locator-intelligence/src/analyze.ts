@@ -23,6 +23,12 @@ export interface AnalyzeOptions {
   config: TestPilotConfig
   /** Explicit globs (CLI positional args). Falls back to `config.include`. */
   patterns?: string[]
+  /**
+   * Directory of the loaded config file. Config-driven discovery (`testDir` +
+   * `include`) and reported file paths resolve against it, so a monorepo run
+   * from a sub-directory still sees the suite. Defaults to `cwd`.
+   */
+  configDir?: string
 }
 
 interface EnabledRule {
@@ -77,15 +83,34 @@ function compareFindings(a: Finding, b: Finding): number {
  * Parse failures are reported (not thrown) and never fail the command.
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
-  const files = await resolveTestFiles(options.cwd, options.patterns, options.config)
+  const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
+  const files = await resolveTestFiles(
+    options.cwd,
+    options.patterns,
+    options.config,
+    options.configDir,
+  )
+  // Paths are reported relative to the same base discovery used: cwd for explicit
+  // patterns, the config file's directory otherwise (repo-relative for SARIF).
+  const reportBase = usingPatterns ? options.cwd : (options.configDir ?? options.cwd)
   const { rules, warnings } = resolveRules(options.config)
+  if (files.length === 0) {
+    // A run that matched nothing must never look like a clean pass — a
+    // TypeScript-only glob on a JavaScript suite would otherwise score 100/A.
+    warnings.push({
+      code: 'no-files-matched',
+      message: usingPatterns
+        ? `No test files matched ${options.patterns?.join(', ')}.`
+        : `No test files matched include ${JSON.stringify(options.config.include)} under testDir "${options.config.testDir}".`,
+    })
+  }
 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
   let callSites = 0
 
   for (const absolute of files) {
-    const relativePath = toPosix(relative(options.cwd, absolute))
+    const relativePath = toPosix(relative(reportBase, absolute))
     let code: string
     try {
       code = readFileSync(absolute, 'utf8')

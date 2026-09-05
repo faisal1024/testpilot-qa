@@ -13,7 +13,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     column: 7,
     snippet: "page.locator('//button')",
     suggestion: 'Prefer getByRole().',
-    docsUrl: 'https://testpilot.dev/rules/no-xpath',
+    docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
     ...overrides,
   }
 }
@@ -100,7 +100,9 @@ describe('toSarif', () => {
     )
     const rules = sarif.runs[0]?.tool.driver.rules ?? []
     expect(rules.map((r) => r.id)).toEqual(['no-xpath', 'no-hard-wait'])
-    expect(rules[0]?.helpUri).toBe('https://testpilot.dev/rules/no-xpath')
+    expect(rules[0]?.helpUri).toBe(
+      'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
+    )
     // Two no-xpath results both point at rule index 0; the no-hard-wait result at index 1.
     expect(sarif.runs[0]?.results.map((r) => r.ruleIndex)).toEqual([0, 0, 1])
   })

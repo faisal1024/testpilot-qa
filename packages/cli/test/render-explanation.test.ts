@@ -12,7 +12,7 @@ const EXPLANATION: RuleExplanation = {
   badExample: "page.locator('//button')",
   betterExample: "page.getByRole('button', { name: 'Submit' })",
   guidance: ['Prefer getByRole.', 'Avoid XPath.'],
-  docsUrl: 'https://testpilot.dev/rules/no-xpath',
+  docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
 }
 
 describe('renderExplanationText', () => {
@@ -26,6 +26,8 @@ describe('renderExplanationText', () => {
     expect(out).toContain('✓ Better')
     expect(out).toContain("page.getByRole('button', { name: 'Submit' })")
     expect(out).toContain('- Prefer getByRole.')
-    expect(out).toContain('Docs: https://testpilot.dev/rules/no-xpath')
+    expect(out).toContain(
+      'Docs: https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
+    )
   })
 })

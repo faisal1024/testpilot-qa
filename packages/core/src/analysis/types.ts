@@ -34,7 +34,7 @@ export interface Finding {
 
 /** A non-fatal problem detected while analyzing (e.g. an unknown rule id in config). */
 export interface AnalysisWarning {
-  code: 'unknown-rule'
+  code: 'unknown-rule' | 'no-files-matched'
   message: string
   ruleId?: string
 }
@@ -107,7 +107,7 @@ export interface AnalysisReport {
 }
 
 /** Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline. */
-export const ANALYSIS_SCHEMA_VERSION = '1.3'
+export const ANALYSIS_SCHEMA_VERSION = '1.4'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

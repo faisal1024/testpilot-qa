@@ -145,7 +145,10 @@ check('analyze --reporter html writes a self-contained report', () => {
     assert(html.startsWith('<!doctype html>'), 'not an HTML document')
     assert(html.includes('no-xpath'), 'HTML is missing the finding')
     assert(!/<script/i.test(html), 'HTML must not contain scripts')
-    assert(!/https?:\/\/(?!testpilot\.dev)/.test(html), 'HTML must not reference external assets')
+    assert(
+      !/https?:\/\/(?!github\.com\/faisal1024\/testpilot-qa\/)/.test(html),
+      'HTML must not reference external assets',
+    )
   })
 })
 

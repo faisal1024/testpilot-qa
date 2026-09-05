@@ -1,4 +1,4 @@
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { type Finding, buildBaseline, compareToBaseline } from '@testpilot/core'
 import { analyze } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
@@ -7,6 +7,7 @@ import { ExitCode } from '../util/exit-codes.js'
 import { isBelowThreshold, isValidMinScore, resolveMinScore } from '../util/gating.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { toHtml } from '../util/html-report.js'
+import { failIfNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
@@ -58,12 +59,14 @@ export async function analyzeCommand(
     fail(globals, '--update-baseline requires --baseline <path>.', ExitCode.USAGE)
   }
 
-  const { config } = await resolveConfigOrExit(globals)
+  const { config, filepath } = await resolveConfigOrExit(globals)
   const report = await analyze({
     cwd: globals.cwd,
     config,
     patterns: patterns.length > 0 ? patterns : undefined,
+    configDir: filepath ? dirname(filepath) : undefined,
   })
+  failIfNoFilesMatched(globals, report.summary.filesAnalyzed, patterns, config, filepath)
 
   // --- Baseline ---
   let newFindings: Finding[] | undefined

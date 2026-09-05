@@ -25,6 +25,7 @@ export type {
 export { type AstNode, parseSource, walk } from './parser.js'
 export { cssChainDepth } from './rules/no-deep-css-chain.js'
 export { resolveTestFiles } from './resolve-files.js'
+export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'
 export { computeScore, gradeFor, type ScoringWeights } from './score.js'
 export {
   builtinRuleIds,

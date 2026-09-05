@@ -9,7 +9,8 @@ export const noCssClassSelector: Rule = {
   id: 'no-css-class-selector',
   category: 'locator',
   defaultSeverity: 'error',
-  docsUrl: 'https://testpilot.dev/rules/no-css-class-selector',
+  docsUrl:
+    'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md',
   evaluate(context) {
     if (context.isDynamic || context.apiCall !== 'locator') {
       return null

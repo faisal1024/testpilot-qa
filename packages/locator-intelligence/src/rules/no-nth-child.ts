@@ -5,7 +5,7 @@ export const noNthChild: Rule = {
   id: 'no-nth-child',
   category: 'locator',
   defaultSeverity: 'error',
-  docsUrl: 'https://testpilot.dev/rules/no-nth-child',
+  docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-nth-child.md',
   evaluate(context) {
     if (context.apiCall === 'nth') {
       return {

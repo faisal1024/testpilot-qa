@@ -64,6 +64,44 @@ describe('analyze command output', () => {
   })
 })
 
+describe('analyze — nothing matched is never a pass', () => {
+  it('exits 3 with guidance when the config include matches no files', async () => {
+    rmSync(join(dir, 'tests'), { recursive: true, force: true })
+    mkdirSync(join(dir, 'tests'))
+    writeFileSync(join(dir, 'tests', 'a.spec.rb'), 'not playwright\n')
+    const { stdout, stderr, exitCode } = await runAnalyze(['--min-score', '80'])
+    expect(exitCode).toBe(3)
+    expect(stdout).not.toContain('Locator Quality Score')
+    expect(stderr).toContain('No test files matched')
+    expect(stderr).toContain('testDir/include')
+  })
+
+  it('exits 2 when explicit patterns match no files', async () => {
+    const { stderr, exitCode } = await runAnalyze(['nope/**/*.spec.ts'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('No test files matched nope/**/*.spec.ts')
+  })
+
+  it('analyzes a plain JavaScript suite out of the box', async () => {
+    writeFileSync(join(dir, 'tests', 'b.spec.js'), 'page.waitForTimeout(1000)\n')
+    const { stdout, exitCode } = await runAnalyze(['--json'])
+    expect(exitCode).toBeUndefined()
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(2)
+    expect(report.findings.map((f: { ruleId: string }) => f.ruleId)).toContain('no-hard-wait')
+  })
+
+  it('finds the suite via the config file directory when run from a sub-directory', async () => {
+    writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const { stdout, exitCode } = await runAnalyze(['--json', '--cwd', join(dir, 'src', 'deep')])
+    expect(exitCode).toBeUndefined()
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0].file).toBe('tests/a.spec.ts')
+  })
+})
+
 describe('analyze --output', () => {
   it('writes the JSON report to a file and confirms on stdout', async () => {
     const out = join(dir, 'report.json')

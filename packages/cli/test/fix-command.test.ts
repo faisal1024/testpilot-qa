@@ -67,6 +67,14 @@ describe('fix — dry run (default)', () => {
   })
 })
 
+describe('fix — nothing matched', () => {
+  it('exits 3 instead of reporting "nothing to fix" when no files match', async () => {
+    const { stderr, exitCode } = await runFix()
+    expect(exitCode).toBe(3)
+    expect(stderr).toContain('No test files matched')
+  })
+})
+
 describe('fix --write', () => {
   it('applies the fix and is idempotent on a second run', async () => {
     const path = writeSpec('a.spec.ts', "await page.locator('text=Save').click()\n")

@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs'
-import { relative } from 'node:path'
+import { dirname, relative } from 'node:path'
 import { type FixEdit, computeFixes, resolveTestFiles } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
+import { failIfNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
@@ -40,14 +41,16 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const { config } = await resolveConfigOrExit(globals)
+  const { config, filepath } = await resolveConfigOrExit(globals)
   const write = options.write === true
 
   const files = await resolveTestFiles(
     globals.cwd,
     patterns.length > 0 ? patterns : undefined,
     config,
+    filepath ? dirname(filepath) : undefined,
   )
+  failIfNoFilesMatched(globals, files.length, patterns, config, filepath)
 
   const results: FileFixSummary[] = []
   const diffs: string[] = []

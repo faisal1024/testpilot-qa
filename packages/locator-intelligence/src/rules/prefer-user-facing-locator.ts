@@ -10,7 +10,8 @@ export const preferUserFacingLocator: Rule = {
   id: 'prefer-user-facing-locator',
   category: 'locator',
   defaultSeverity: 'warn',
-  docsUrl: 'https://testpilot.dev/rules/prefer-user-facing-locator',
+  docsUrl:
+    'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/prefer-user-facing-locator.md',
   evaluate(context) {
     if (context.isDynamic || context.apiCall !== 'locator') {
       return null

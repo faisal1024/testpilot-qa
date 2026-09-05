@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.3')
+    expect(report.schemaVersion).toBe('1.4')
     expect(report.summary).toEqual({
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
@@ -63,6 +63,47 @@ describe('analyze — Tier 1 rule set', () => {
     ])
 
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
+  })
+
+  it('analyzes JavaScript/JSX/TSX suites with the default include', async () => {
+    writeFixture('tests/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/b.test.jsx', "page.locator('.btn')\n")
+    writeFixture('tests/c.spec.tsx', 'page.waitForTimeout(500)\n')
+    writeFixture('tests/d.spec.mjs', "page.locator('//a')\n")
+    writeFixture('tests/e.spec.cjs', "page.locator('//a')\n")
+    writeFixture('tests/f.e2e.ts', "page.locator('//a')\n") // cal.com naming
+    writeFixture('tests/g.e2e-spec.ts', "page.locator('//a')\n") // immich naming
+    writeFixture('tests/helpers/pom.ts', "page.locator('//a')\n") // not matched by default
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(7)
+    expect(report.warnings).toEqual([])
+  })
+
+  it('warns (no-files-matched) instead of scoring 100/A when nothing matches', async () => {
+    writeFixture('tests/only.spec.rb', 'not a playwright test')
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(0)
+    expect(report.warnings).toEqual([
+      { code: 'no-files-matched', message: expect.stringContaining('under testDir "tests"') },
+    ])
+
+    const byPattern = await analyze({ cwd: dir, config: config(), patterns: ['nope/**'] })
+    expect(byPattern.warnings).toEqual([
+      { code: 'no-files-matched', message: 'No test files matched nope/**.' },
+    ])
+  })
+
+  it('resolves testDir against configDir and reports paths relative to it', async () => {
+    // Monorepo layout: config lives in packages/web, the command runs from packages/web/src.
+    writeFixture('packages/web/tests/a.spec.ts', "page.locator('//button')\n")
+    mkdirSync(join(dir, 'packages/web/src'), { recursive: true })
+    const report = await analyze({
+      cwd: join(dir, 'packages/web/src'),
+      config: config(),
+      configDir: join(dir, 'packages/web'),
+    })
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
   })
 
   it('produces identical output across runs (deterministic + sorted)', async () => {

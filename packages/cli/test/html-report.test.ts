@@ -13,14 +13,14 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     column: 7,
     snippet: "page.locator('//button')",
     suggestion: 'Prefer getByRole().',
-    docsUrl: 'https://testpilot.dev/rules/no-xpath',
+    docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
     ...overrides,
   }
 }
 
 function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
   return {
-    schemaVersion: '1.3',
+    schemaVersion: '1.4',
     command: 'analyze',
     summary: {
       filesAnalyzed: 1,
@@ -57,8 +57,8 @@ describe('toHtml', () => {
     expect(html).not.toMatch(/<link/i)
     expect(html).not.toMatch(/url\(/i)
     expect(html).not.toMatch(/@import/i)
-    // The only URLs are click-through rule docs links (testpilot.dev).
-    expect(html).not.toMatch(/https?:\/\/(?!testpilot\.dev\/)/)
+    // The only URLs are click-through rule docs links (the GitHub rule docs).
+    expect(html).not.toMatch(/https?:\/\/(?!github\.com\/faisal1024\/testpilot-qa\/)/)
   })
 
   it('shows the score, grade, sub-scores, and summary counts', () => {
@@ -75,7 +75,9 @@ describe('toHtml', () => {
     expect(html).toContain('no-xpath')
     expect(html).toContain('tests/login.spec.ts:12:7')
     expect(html).toContain('XPath selectors are brittle.')
-    expect(html).toContain('href="https://testpilot.dev/rules/no-xpath"')
+    expect(html).toContain(
+      'href="https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md"',
+    )
   })
 
   it('states the static Tier 1 scope and makes no DOM-rewrite claims', () => {

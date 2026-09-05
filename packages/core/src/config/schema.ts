@@ -43,7 +43,9 @@ export const configSchema = z
   .object({
     testDir: z.string().default('tests'),
     playwrightConfig: z.string().default('playwright.config.ts'),
-    include: z.array(z.string()).default(['**/*.spec.ts', '**/*.test.ts']),
+    // Every extension the parser handles and the common suffixes seen in real suites
+    // (`*.e2e.ts`, `*.e2e-spec.ts`) — a JS suite must not silently match nothing.
+    include: z.array(z.string()).default(['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']),
     rules: z.record(severitySchema).default({}),
     scoring: scoringSchema,
     ai: aiSchema,

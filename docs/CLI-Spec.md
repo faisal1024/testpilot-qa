@@ -403,11 +403,11 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.3`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.4`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "command": "analyze",
   "summary": {
     "filesAnalyzed": 3,
@@ -437,11 +437,12 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
       "column": 14,
       "snippet": "page.locator('.btn-primary')",
       "suggestion": "Prefer getByRole() or getByTestId() over class-based selectors.",
-      "docsUrl": "https://testpilot.dev/rules/no-css-class-selector"
+      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md"
     }
   ],
   "warnings": [
-    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." }
+    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." },
+    { "code": "no-files-matched", "message": "No test files matched include [...] under testDir \"tests\"." }
   ],
   "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
   "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
@@ -482,6 +483,13 @@ across line moves.
 | `5` | Internal error (bug — should be reported). |
 
 Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures) lets CI treat them differently.
+
+**A run that matches zero test files is never a pass.** `analyze` and `fix` exit `2` when explicit
+patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
+printing what was searched. The default `include` is
+`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']`; `testDir` is resolved
+relative to the directory of the loaded `testpilot.config.ts` (falling back to `--cwd` when there is
+no config file), so running from a sub-directory of a monorepo still finds the suite.
 
 ---
 
