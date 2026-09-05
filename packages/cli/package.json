@@ -1,8 +1,33 @@
 {
   "name": "testpilot-qa",
   "version": "0.0.0",
-  "description": "A developer-experience layer and project accelerator for Playwright.",
+  "description": "Local-first Playwright quality toolkit: static locator analysis, quality scoring, brownfield baselines, SARIF/HTML reports, safe mechanical fixes, diagnostics, and AI-agent guidance.",
+  "keywords": [
+    "playwright",
+    "testing",
+    "e2e",
+    "locators",
+    "test-quality",
+    "qa",
+    "sarif",
+    "linter",
+    "static-analysis",
+    "ai-agents"
+  ],
   "license": "MIT",
+  "author": "Faisal Islam",
+  "homepage": "https://github.com/faisal1024/testpilot-qa#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/faisal1024/testpilot-qa.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/faisal1024/testpilot-qa/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,6 +39,7 @@
   },
   "bin": {
     "testpilot": "./dist/cli.js",
+    "testpilot-qa": "./dist/cli.js",
     "tpq": "./dist/cli.js"
   },
   "files": ["dist"],

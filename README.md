@@ -159,6 +159,9 @@ The bundled **GitHub Action** wraps the CLI (it does not duplicate analysis logi
 writes SARIF, and adds the human report to the job summary. Pair it with GitHub's `upload-sarif` to
 publish the annotations:
 
+> **Note (alpha):** the `@v0` tag below is created with the first tagged GitHub release — it does not
+> exist yet. Until then, pin to a commit SHA (`faisal1024/testpilot-qa/action@<sha>`) or `@main`.
+
 ```yaml
 # .github/workflows/testpilot.yml
 permissions:

@@ -1,4 +1,3 @@
-import { VERSION } from '@testpilot/core'
 import { Command } from 'commander'
 import { addAiCommand } from './commands/add-ai.js'
 import { analyzeCommand } from './commands/analyze.js'
@@ -7,6 +6,7 @@ import { explainCommand } from './commands/explain.js'
 import { fixCommand } from './commands/fix.js'
 import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
+import { CLI_VERSION } from './version.js'
 
 /**
  * Builds the TestPilot CLI program: the five MVP commands — `init` (scaffolding),
@@ -18,7 +18,7 @@ import { runCommand } from './commands/run.js'
 export function buildProgram(): Command {
   const program = new Command('testpilot')
     .description('A developer-experience layer and project accelerator for Playwright.')
-    .version(VERSION, '-v, --version')
+    .version(CLI_VERSION, '-v, --version')
     .option('--json', 'Output machine-readable JSON.', false)
     .option('--config <path>', 'Path to testpilot.config.ts.')
     .option('--cwd <path>', 'Run as if in this directory.')

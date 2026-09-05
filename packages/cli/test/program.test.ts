@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildProgram } from '../src/program.js'
+import { CLI_VERSION } from '../src/version.js'
 
 describe('CLI program', () => {
   it('registers the MVP commands plus `fix` and `add`', () => {
@@ -13,9 +14,10 @@ describe('CLI program', () => {
     expect(add?.commands.map((c) => c.name())).toEqual(['ai'])
   })
 
-  it('exposes a version', () => {
+  it('exposes its package version (read from package.json, not hardcoded)', () => {
     const program = buildProgram()
-    expect(program.version()).toBe('0.0.0')
+    expect(program.version()).toBe(CLI_VERSION)
+    expect(program.version()).toMatch(/^\d+\.\d+\.\d+(-[\w.]+)?$/) // valid semver
   })
 
   it('describes the tool', () => {

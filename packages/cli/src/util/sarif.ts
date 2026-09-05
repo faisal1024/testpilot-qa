@@ -2,9 +2,9 @@ import {
   type AnalysisReport,
   type Finding,
   type FindingSeverity,
-  VERSION,
   findingKey,
 } from '@testpilot/core'
+import { CLI_VERSION } from '../version.js'
 
 /**
  * Minimal SARIF 2.1.0 shape — just the parts TestPilot emits. Typed locally so
@@ -123,7 +123,7 @@ function driver(rules: SarifReportingDescriptor[]): SarifDriver {
   return {
     name: 'TestPilot QA',
     informationUri: INFORMATION_URI,
-    version: VERSION,
+    version: CLI_VERSION,
     rules,
   }
 }
