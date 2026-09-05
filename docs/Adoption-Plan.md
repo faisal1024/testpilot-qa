@@ -4,12 +4,12 @@
 > (dependency PR cleanup), 6A (brownfield baseline & output), 6B (CI & PR integration: SARIF + GitHub
 > Action), 6C (safe AI guidance regeneration: `testpilot add ai`), 7A (local HTML report), 7B (score
 > calibration docs), and 8A (safe mechanical fix preview: `testpilot fix`).
-> **Next active focus: public-alpha release readiness.** The alpha can launch on the **current pinned
-> dependencies** — release readiness is a clean run of the [release gate](Release-Checklist.md), an npm
-> alpha publish (`--tag alpha`), a README sanity check, and launch positioning. The remaining
-> runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`) are
-> **post-alpha hardening** — each in its own PR with full validation — and are **not** launch blockers
-> unless one is actively breaking the gate. No new feature milestone is in progress.
+> **✅ The public alpha shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag
+> (CI-published with provenance, 2026-09-05).
+> **Next active focus: post-alpha hardening** — the deferred runtime/toolchain dependency majors
+> (`@biomejs/biome` 2.x, `zod` 4.x, a Node 22 / pnpm 10 toolchain bump, then `@changesets/cli` 3.x and
+> `changesets/action` v2), each in its own PR with a full local gate. No new feature milestone is in
+> progress.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 >

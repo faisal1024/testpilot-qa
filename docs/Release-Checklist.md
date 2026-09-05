@@ -3,10 +3,13 @@
 > Status: **Public-alpha readiness is the active focus.** All feature milestones through 8A are merged
 > (6A baseline/output, 6B SARIF + GitHub Action, 6C `add ai`, 7A HTML report, 7B scoring docs, 8A
 > `fix` preview).
-> **The public alpha can launch with the current pinned dependencies once the [launch gate](#public-alpha-launch-gate) passes.**
+> **✅ Published: `testpilot-qa@0.1.0-alpha.0` is live on npm** under the **`alpha`** dist-tag, with SLSA
+> provenance, released by CI via the Changesets workflow (2026-09-05).
 > The deferred runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`)
-> are **post-alpha hardening** — each handled in its own PR with full validation — and are **not** launch
-> blockers (unless one is actively breaking the gate). Not yet released.
+> remain **post-alpha hardening** — each handled in its own PR with full validation.
+>
+> Note: npm sets `latest` on a package's first publish, so `latest` also points at `0.1.0-alpha.0`. The
+> `alpha` tag is authoritative for this phase; keep using the dist-tag check below on every release.
 
 ## Public alpha launch gate
 
@@ -55,7 +58,7 @@ Checklist:
 - [ ] `pnpm test` green.
 - [ ] `pnpm -r build` succeeds for all packages.
 - [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `--output`, `--reporter sarif`, `--reporter html`, `--baseline` gate, `fix` dry-run + `--write`, `add ai`, `init` + overwrite protection, example-suite analysis).
-- [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx`, so don't reference `action@v0` in docs until an alpha tag is published.
+- [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx` (now live on the `alpha` tag), and the `v0` tag exists — re-point `v0` whenever `action/action.yml` changes.
 - [ ] `pnpm smoke:package` green (see below).
 - [ ] **Changeset status:** every user-facing change since the last release has a changeset (`.changeset/*.md`). Run `pnpm changeset status` if needed.
 - [ ] **README reviewed:** alpha positioning and the implemented command surface match reality.

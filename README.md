@@ -13,8 +13,10 @@ It's **local-first, deterministic, and offline** — no network, no API key, no 
 generates is **ejectable plain Playwright**: delete `testpilot.config.ts` and the dependency and you
 still have a working suite. Zero lock-in.
 
-> **Alpha.** TestPilot QA is in public alpha. It does **not** do DOM-aware healing, broad auto-fix,
-> dashboards, MCP, AI-generated tests, or LLM-powered execution — see [Status](#status--public-alpha).
+> **Alpha.** TestPilot QA is in public alpha, published under the npm **`alpha`** dist-tag — pin
+> `testpilot-qa@alpha` (e.g. `npm i -D testpilot-qa@alpha`), as the examples below do. It does **not**
+> do DOM-aware healing, broad auto-fix, dashboards, MCP, AI-generated tests, or LLM-powered execution —
+> see [Status](#status--public-alpha).
 
 ---
 
@@ -23,19 +25,19 @@ still have a working suite. Zero lock-in.
 **New here?** Scaffold a project and see a locator-quality report in your browser:
 
 ```bash
-npx testpilot-qa init demo --yes
+npx testpilot-qa@alpha init demo --yes
 cd demo
-npx testpilot-qa analyze tests --reporter html   # writes an HTML report to open
+npx testpilot-qa@alpha analyze tests --reporter html   # writes an HTML report to open
 ```
 
 **Already have a Playwright project?** `analyze` is read-only — just point it at your tests:
 
 ```bash
-npx testpilot-qa analyze tests                    # human table (add --json for CI)
+npx testpilot-qa@alpha analyze tests                    # human table (add --json for CI)
 
 # Adopting on an existing suite? Record a baseline, then gate CI on NEW findings only:
-npx testpilot-qa analyze tests --baseline testpilot-baseline.json --update-baseline
-npx testpilot-qa analyze tests --baseline testpilot-baseline.json
+npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json
 ```
 
 That's it. The rest of this README goes deeper on each command.
@@ -63,7 +65,7 @@ is a pass-through and forwards everything to Playwright.
 
 ```bash
 # Scaffold a TypeScript Playwright project (UI + API examples + AI agent guidance)
-npx testpilot-qa init demo --yes
+npx testpilot-qa@alpha init demo --yes
 cd demo
 
 # Install Playwright and run the generated tests
@@ -78,9 +80,9 @@ npm run test:e2e:api         # API tests only
 npm run test:e2e:parallel    # run with 2 workers
 
 # …or run through TestPilot (a thin pass-through around Playwright)
-npx testpilot-qa run
-npx testpilot-qa run -- --workers=2
-npx testpilot-qa run -- tests/ui --workers=2
+npx testpilot-qa@alpha run
+npx testpilot-qa@alpha run -- --workers=2
+npx testpilot-qa@alpha run -- tests/ui --workers=2
 ```
 
 `testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
@@ -103,14 +105,14 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 
 ```bash
 # Analyze locator quality in your existing tests (read-only)
-npx testpilot-qa analyze
-npx testpilot-qa analyze --json
+npx testpilot-qa@alpha analyze
+npx testpilot-qa@alpha analyze --json
 
 # Gate CI on a minimum Locator Quality Score (non-zero exit if below)
-npx testpilot-qa analyze --min-score 80
+npx testpilot-qa@alpha analyze --min-score 80
 
 # Write the report to a file instead of stdout
-npx testpilot-qa analyze --output testpilot-report.json
+npx testpilot-qa@alpha analyze --output testpilot-report.json
 ```
 
 Every run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
@@ -127,10 +129,10 @@ are grandfathered in.
 
 ```bash
 # Record the current findings as the accepted baseline
-npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa@alpha analyze --baseline testpilot-baseline.json --update-baseline
 
 # In CI: fail only when a NEW finding appears (exit 1), ignore baselined ones
-npx testpilot-qa analyze --baseline testpilot-baseline.json
+npx testpilot-qa@alpha analyze --baseline testpilot-baseline.json
 ```
 
 A finding's baseline identity is its rule + file + code snippet — independent of line number,
@@ -146,10 +148,10 @@ to share results and run in CI:
 
 ```bash
 # SARIF 2.1.0 — findings show up inline on the PR "Files changed" tab (code scanning)
-npx testpilot-qa analyze --reporter sarif --output testpilot.sarif
+npx testpilot-qa@alpha analyze --reporter sarif --output testpilot.sarif
 
 # A shareable, self-contained HTML report — open it in any browser
-npx testpilot-qa analyze --reporter html --output testpilot-report.html
+npx testpilot-qa@alpha analyze --reporter html --output testpilot-report.html
 ```
 
 The **HTML report** is a single static file — score, sub-scores, and findings grouped by file, with no
@@ -159,8 +161,8 @@ The bundled **GitHub Action** wraps the CLI (it does not duplicate analysis logi
 writes SARIF, and adds the human report to the job summary. Pair it with GitHub's `upload-sarif` to
 publish the annotations:
 
-> **Note (alpha):** the `@v0` tag below is created with the first tagged GitHub release — it does not
-> exist yet. Until then, pin to a commit SHA (`faisal1024/testpilot-qa/action@<sha>`) or `@main`.
+> **Note (alpha):** `@v0` is a moving major tag — it is re-pointed as the action changes. Pin a commit
+> SHA (`faisal1024/testpilot-qa/action@<sha>`) if you want it frozen.
 
 ```yaml
 # .github/workflows/testpilot.yml
@@ -197,10 +199,10 @@ prints a unified diff and writes nothing until you pass `--write`).
 
 ```bash
 # Preview safe, mechanical rewrites (writes nothing — shows a diff)
-npx testpilot-qa fix
+npx testpilot-qa@alpha fix
 
 # Apply them
-npx testpilot-qa fix --write
+npx testpilot-qa@alpha fix --write
 ```
 
 Today it rewrites `page.locator('text=Foo')` → `page.getByText('Foo')` (equivalent matching) and leaves
@@ -211,8 +213,8 @@ calls** and **never inspects the DOM**, so it will **not** turn a CSS/XPath sele
 ## Understand a rule — `explain`
 
 ```bash
-npx testpilot-qa explain no-xpath
-npx testpilot-qa explain no-hard-wait --json
+npx testpilot-qa@alpha explain no-xpath
+npx testpilot-qa@alpha explain no-hard-wait --json
 ```
 
 `explain` shows why a rule matters, a ✗ bad example, a ✓ better example, and guidance — handy at the
@@ -221,8 +223,8 @@ terminal or for feeding an agent.
 ## Diagnose setup — `doctor`
 
 ```bash
-npx testpilot-qa doctor
-npx testpilot-qa doctor --json
+npx testpilot-qa@alpha doctor
+npx testpilot-qa@alpha doctor --json
 ```
 
 `doctor` checks Node version, `package.json`, a local Playwright install, Playwright/TestPilot config
@@ -246,14 +248,14 @@ or scaffold), and is a **dry-run preview by default**:
 
 ```bash
 # Preview what would change (writes nothing)
-npx testpilot-qa add ai
+npx testpilot-qa@alpha add ai
 
 # Apply: create missing files and refresh stale ones
-npx testpilot-qa add ai --write
+npx testpilot-qa@alpha add ai --write
 
 # Just one agent, or every supported agent
-npx testpilot-qa add ai claude --write
-npx testpilot-qa add ai all --write
+npx testpilot-qa@alpha add ai claude --write
+npx testpilot-qa@alpha add ai all --write
 ```
 
 It reuses `doctor`'s drift detection: missing files are **created**, stale ones (older guidance version)
