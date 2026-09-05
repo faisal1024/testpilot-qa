@@ -21,9 +21,14 @@ dependencies** — no deferred dependency major is required first.
 6. `corepack pnpm smoke:mvp`
 7. `corepack pnpm smoke:package`
 8. `corepack pnpm changeset status` — every user-facing change has a changeset
-9. **npm alpha publish** — publish under the `alpha` dist-tag (`npm publish --tag alpha`), then verify a
-   fresh `npx testpilot-qa@alpha --version` works
+9. **npm alpha publish** — publish under the `alpha` dist-tag, then **verify the dist-tag actually
+   landed** (`npm dist-tag ls testpilot-qa`) and fix it up with `npm dist-tag add/rm` if the release
+   went to `latest` — Changesets pre-mode does not reliably keep the pre-tag. Then confirm a fresh
+   `npx testpilot-qa@alpha --version` works
 10. **README sanity check** — alpha positioning honest; the Try-it path actually works end to end
+
+npm auth for step 9 (trusted publishing or a token) plus the `PUBLISH_ENABLED` switch are described in
+[`RELEASING.md`](../RELEASING.md).
 
 The detailed checklist below expands steps 1–8; **post-alpha hardening** (the deferred dependency majors)
 is tracked in [Dependency PR triage](#dependency-pr-triage-post-alpha-hardening).

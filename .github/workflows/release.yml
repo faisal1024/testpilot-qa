@@ -1,14 +1,30 @@
 name: Release
 
-# Configured but inactive until packages are publishable and NPM_TOKEN is set.
+# Runs on pushes to main and on manual dispatch.
+#
+# The Changesets action keeps the "Version Packages" PR up to date whenever
+# unconsumed changesets are present. It only *publishes* once npm publishing is
+# configured and the `PUBLISH_ENABLED` repository variable is `true` (see
+# RELEASING.md), so `main` stays green before the first release instead of
+# failing on missing npm auth.
+#
+# `workflow_dispatch` is required, not a nicety: `PUBLISH_ENABLED` changes
+# outside git, so without a manual trigger, flipping it would have no effect
+# until some unrelated commit happened to land on main.
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
-  id-token: write
+  id-token: write # npm trusted publishing (OIDC) + provenance
   pull-requests: write
+
+# Never let two publish/tag-push runs overlap.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -21,11 +37,26 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
+      # OIDC trusted publishing needs npm >= 11.5.1; Node 20 bundles npm 10.
+      # The real chain is `changeset publish` -> `pnpm publish` -> the `npm` on
+      # PATH, so upgrading the global npm is what reaches the publisher (don't
+      # "simplify" this away or pin pnpm's npm-path). Pinned, because an
+      # unpinned @latest that drops Node 20 support would turn main red; and
+      # gated, so non-publishing pushes don't pay for it.
+      - name: Upgrade npm for OIDC trusted publishing
+        if: vars.PUBLISH_ENABLED == 'true'
+        run: |
+          npm install --global npm@^11.5.1
+          npm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - uses: changesets/action@v1
         with:
-          publish: pnpm release
+          # Empty publish script => the action only versions / opens the Version
+          # PR when changesets are pending; it never attempts to publish.
+          publish: ${{ vars.PUBLISH_ENABLED == 'true' && 'pnpm release' || '' }}
         env:
+          # Unset when using trusted publishing (OIDC); set only for token-based
+          # publishing (Option B in RELEASING.md).
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
