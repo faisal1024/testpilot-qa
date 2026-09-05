@@ -22,6 +22,7 @@ function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
   return {
     schemaVersion: '1.4',
     command: 'analyze',
+    rootDir: '/repo',
     summary: {
       filesAnalyzed: 1,
       filesWithParseErrors: 0,

@@ -14,7 +14,7 @@
     "test": "vitest run",
     "smoke:mvp": "node scripts/smoke-mvp.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
-    "docs:rules": "node scripts/generate-rule-docs.mjs",
+    "docs:rules": "pnpm --filter @testpilot/core --filter @testpilot/locator-intelligence build && node scripts/generate-rule-docs.mjs",
     "lint": "biome check .",
     "format": "biome format --write .",
     "clean": "pnpm -r exec rimraf dist && rimraf tsconfig.tsbuildinfo",

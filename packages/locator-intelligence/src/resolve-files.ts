@@ -24,6 +24,20 @@ function expandDirectoryPatterns(cwd: string, patterns: string[], include: strin
  *   so running from a sub-directory of a monorepo still finds the suite.
  *   Falls back to `cwd` when no config file exists.
  */
+/**
+ * The directory test-file discovery (and therefore every reported path) is
+ * relative to: `cwd` for explicit patterns, else the config file's directory
+ * (falling back to `cwd`). `analyze` and `fix` both use this so they agree.
+ */
+export function discoveryBase(
+  cwd: string,
+  patterns: string[] | undefined,
+  configDir: string | undefined,
+): string {
+  const usingPatterns = patterns !== undefined && patterns.length > 0
+  return usingPatterns ? cwd : (configDir ?? cwd)
+}
+
 export async function resolveTestFiles(
   cwd: string,
   patterns: string[] | undefined,
@@ -34,12 +48,14 @@ export async function resolveTestFiles(
   const globs = usingPatterns
     ? expandDirectoryPatterns(cwd, patterns, config.include)
     : config.include
-  const base = usingPatterns ? cwd : resolve(configDir ?? cwd, config.testDir)
+  const base = usingPatterns
+    ? cwd
+    : resolve(discoveryBase(cwd, patterns, configDir), config.testDir)
 
   const matches = await glob(globs, {
     cwd: base,
     absolute: true,
-    ignore: ['**/node_modules/**'],
+    ignore: config.exclude,
   })
 
   return [...new Set(matches)].sort()

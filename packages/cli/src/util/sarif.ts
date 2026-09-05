@@ -1,3 +1,4 @@
+import { relative, resolve, sep } from 'node:path'
 import {
   type AnalysisReport,
   type Finding,
@@ -79,7 +80,21 @@ function toLevel(severity: FindingSeverity): SarifLevel {
  * `partialFingerprints` use the same stable identity as the baseline, so a
  * finding that merely moves lines is not re-reported as new by code scanning.
  */
-export function toSarif(report: AnalysisReport): SarifLog {
+export interface SarifOptions {
+  /**
+   * Directory SARIF `artifactLocation.uri`s are made relative to (the Action runs
+   * from the repo root, so this keeps code-scanning annotations on the right
+   * files). Defaults to `report.rootDir`, i.e. the paths as reported.
+   */
+  cwd?: string
+}
+
+function artifactUri(report: AnalysisReport, file: string, cwd: string | undefined): string {
+  if (!cwd || !report.rootDir) return file
+  return relative(cwd, resolve(report.rootDir, file)).split(sep).join('/') || file
+}
+
+export function toSarif(report: AnalysisReport, options: SarifOptions = {}): SarifLog {
   const ruleIndex = new Map<string, number>()
   const rules: SarifReportingDescriptor[] = []
   const results: SarifResult[] = []
@@ -99,7 +114,7 @@ export function toSarif(report: AnalysisReport): SarifLog {
       locations: [
         {
           physicalLocation: {
-            artifactLocation: { uri: finding.file },
+            artifactLocation: { uri: artifactUri(report, finding.file, options.cwd) },
             region: {
               startLine: finding.line,
               startColumn: finding.column,

@@ -32,6 +32,8 @@ describe('defaultConfig', () => {
     expect(defaultConfig.testDir).toBe('tests')
     expect(defaultConfig.playwrightConfig).toBe('playwright.config.ts')
     expect(defaultConfig.include).toEqual(['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}'])
+    expect(defaultConfig.exclude).toContain('**/node_modules/**')
+    expect(defaultConfig.exclude).toContain('**/dist/**')
     // minScore is optional (no default) so `analyze` does not gate unless asked.
     expect(defaultConfig.scoring.minScore).toBeUndefined()
     expect(defaultConfig.scoring.weights).toEqual({ error: 5, warn: 2, info: 0.5 })

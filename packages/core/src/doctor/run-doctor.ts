@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import {
   AGENT_FILE_PATHS,
   type AgentGuidanceStatus,
@@ -302,11 +302,13 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
 
   let config: TestPilotConfig = defaultConfig
   let configFilePresent = false
+  let configDir: string | null = null
   let configCheck: DoctorCheck
   try {
     const result = await loadConfig({ cwd, configPath: options.configPath })
     config = result.config
     configFilePresent = result.filepath !== null
+    configDir = result.filepath === null ? null : dirname(result.filepath)
     configCheck = {
       id: 'config',
       title: 'TestPilot config',
@@ -328,9 +330,11 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   }
 
   const playwrightConfigPath = findPlaywrightConfig(projectRoot, config.playwrightConfig)
-  // Resolve testDir against the discovered project root (not the invocation cwd)
-  // so running `doctor` from a subdirectory doesn't falsely report it missing.
-  const testDirExists = isDirectory(join(projectRoot, config.testDir))
+  // Resolve testDir the same way `analyze` does — against the config file's
+  // directory — so `doctor` and `analyze` never disagree about where the suite is.
+  // Without a config file, fall back to the discovered project root (not the
+  // invocation cwd) so running from a subdirectory doesn't falsely report it missing.
+  const testDirExists = isDirectory(join(configDir ?? projectRoot, config.testDir))
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),

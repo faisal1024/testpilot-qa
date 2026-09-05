@@ -5,6 +5,8 @@ import { ruleExplanations } from '../src/explanations.js'
 import { renderRuleDoc, renderRuleIndex } from '../src/rule-docs.js'
 
 const docsDir = fileURLToPath(new URL('../../../docs/rules/', import.meta.url))
+// Tolerate CRLF checkouts (.gitattributes pins LF, but a local override must not fail the suite).
+const read = (file: string) => readFileSync(`${docsDir}${file}`, 'utf8').replace(/\r\n/g, '\n')
 const explanations = Object.values(ruleExplanations)
 
 describe('docs/rules — generated rule pages', () => {
@@ -18,9 +20,8 @@ describe('docs/rules — generated rule pages', () => {
 
   it('committed pages match the generator (run `pnpm docs:rules` after editing explanations)', () => {
     for (const explanation of explanations) {
-      const committed = readFileSync(`${docsDir}${explanation.id}.md`, 'utf8')
-      expect(committed, explanation.id).toBe(renderRuleDoc(explanation))
+      expect(read(`${explanation.id}.md`), explanation.id).toBe(renderRuleDoc(explanation))
     }
-    expect(readFileSync(`${docsDir}README.md`, 'utf8')).toBe(renderRuleIndex(explanations))
+    expect(read('README.md')).toBe(renderRuleIndex(explanations))
   })
 })

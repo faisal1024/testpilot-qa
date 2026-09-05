@@ -97,6 +97,12 @@ export interface BaselineReport {
 export interface AnalysisReport {
   schemaVersion: string
   command: 'analyze'
+  /**
+   * Absolute directory that `findings[].file` and `parseErrors[].file` are relative
+   * to: the config file's directory for config-driven discovery, `cwd` for explicit
+   * patterns. Consumers that need repo-relative paths (SARIF) re-resolve from here.
+   */
+  rootDir: string
   summary: AnalysisSummary
   score: QualityScore
   findings: Finding[]
@@ -106,7 +112,10 @@ export interface AnalysisReport {
   baseline?: BaselineReport
 }
 
-/** Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline. */
+/**
+ * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
+ * 1.4 `rootDir` + `no-files-matched` warning code.
+ */
 export const ANALYSIS_SCHEMA_VERSION = '1.4'
 
 /**

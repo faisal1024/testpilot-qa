@@ -67,8 +67,8 @@ describe('analyze — Tier 1 rule set', () => {
 
   it('analyzes JavaScript/JSX/TSX suites with the default include', async () => {
     writeFixture('tests/a.spec.js', "page.locator('//button')\n")
-    writeFixture('tests/b.test.jsx', "page.locator('.btn')\n")
-    writeFixture('tests/c.spec.tsx', 'page.waitForTimeout(500)\n')
+    writeFixture('tests/b.test.jsx', "const el = <div/>\npage.locator('.btn')\n")
+    writeFixture('tests/c.spec.tsx', 'const el = <div/>\npage.waitForTimeout(500)\n')
     writeFixture('tests/d.spec.mjs', "page.locator('//a')\n")
     writeFixture('tests/e.spec.cjs', "page.locator('//a')\n")
     writeFixture('tests/f.e2e.ts', "page.locator('//a')\n") // cal.com naming
@@ -76,7 +76,21 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/helpers/pom.ts', "page.locator('//a')\n") // not matched by default
     const report = await analyze({ cwd: dir, config: config() })
     expect(report.summary.filesAnalyzed).toBe(7)
+    expect(report.summary.filesWithParseErrors).toBe(0)
     expect(report.warnings).toEqual([])
+    expect(report.rootDir).toBe(dir)
+  })
+
+  it('ignores build output by default so compiled tests are not analyzed twice', async () => {
+    writeFixture('tests/a.spec.ts', "page.locator('//button')\n")
+    writeFixture('tests/dist/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/build/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/node_modules/dep/a.spec.js', "page.locator('//button')\n")
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(1)
+
+    const custom = await analyze({ cwd: dir, config: config({ exclude: ['**/dist/**'] }) })
+    expect(custom.summary.filesAnalyzed).toBe(3)
   })
 
   it('warns (no-files-matched) instead of scoring 100/A when nothing matches', async () => {
@@ -104,6 +118,7 @@ describe('analyze — Tier 1 rule set', () => {
     })
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
+    expect(report.rootDir).toBe(join(dir, 'packages/web'))
   })
 
   it('produces identical output across runs (deterministic + sorted)', async () => {

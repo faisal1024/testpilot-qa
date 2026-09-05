@@ -4,10 +4,11 @@ import { analyze } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { BaselineError, loadBaseline, writeBaseline } from '../util/baseline-io.js'
 import { ExitCode } from '../util/exit-codes.js'
+import { fail } from '../util/fail.js'
 import { isBelowThreshold, isValidMinScore, resolveMinScore } from '../util/gating.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { toHtml } from '../util/html-report.js'
-import { failIfNoFilesMatched } from '../util/no-files-matched.js'
+import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
@@ -35,13 +36,6 @@ function resolveReporter(options: AnalyzeOptions, globals: GlobalOptions): Repor
   return 'table'
 }
 
-function fail(globals: GlobalOptions, message: string, code: number): never {
-  if (!globals.quiet) {
-    console.error(message)
-  }
-  process.exit(code)
-}
-
 export async function analyzeCommand(
   patterns: string[],
   options: AnalyzeOptions,
@@ -66,7 +60,14 @@ export async function analyzeCommand(
     patterns: patterns.length > 0 ? patterns : undefined,
     configDir: filepath ? dirname(filepath) : undefined,
   })
-  failIfNoFilesMatched(globals, report.summary.filesAnalyzed, patterns, config, filepath)
+  const noFilesMatched = report.summary.filesAnalyzed === 0
+  if (globals.verbose && !globals.quiet) {
+    console.error(`[testpilot] files: ${report.summary.filesAnalyzed} under ${report.rootDir}`)
+  }
+  // An empty baseline would grandfather nothing and hide the discovery problem.
+  if (noFilesMatched && options.updateBaseline) {
+    failNoFilesMatched(globals, patterns, config, filepath)
+  }
 
   // --- Baseline ---
   let newFindings: Finding[] | undefined
@@ -85,7 +86,7 @@ export async function analyzeCommand(
     // Recording a baseline is not a gate.
     return
   }
-  if (options.baseline) {
+  if (options.baseline && !noFilesMatched) {
     let comparison: ReturnType<typeof compareToBaseline>
     try {
       const baseline = loadBaseline(resolve(globals.cwd, options.baseline), options.baseline)
@@ -110,11 +111,22 @@ export async function analyzeCommand(
   // The JSON report is left whole — it carries the full findings plus the
   // `baseline` summary, which is its stable contract.
   const reporter = resolveReporter(options, globals)
+  // Zero files is an operational failure (exit 2/3), but machine-readable consumers
+  // still get the report — it carries `filesAnalyzed: 0` and the `no-files-matched`
+  // warning, and an Action's `upload-sarif` with `if: always()` still finds its file.
+  // The human table/HTML would just print a meaningless 100 (A), so those fail first.
+  const machineReadable = reporter === 'json' || reporter === 'sarif'
+  if (noFilesMatched && !machineReadable) {
+    failNoFilesMatched(globals, patterns, config, filepath)
+  }
   const sarifReport = newFindings === undefined ? report : { ...report, findings: newFindings }
   if (options.output) {
     try {
       if (reporter === 'sarif') {
-        writeJsonFile(resolve(globals.cwd, options.output), toSarif(sarifReport))
+        writeJsonFile(
+          resolve(globals.cwd, options.output),
+          toSarif(sarifReport, { cwd: globals.cwd }),
+        )
       } else if (reporter === 'html') {
         writeTextFile(resolve(globals.cwd, options.output), toHtml(report))
       } else if (reporter === 'table') {
@@ -135,13 +147,17 @@ export async function analyzeCommand(
       console.log(`Report written to ${options.output}.`)
     }
   } else if (reporter === 'sarif') {
-    console.log(JSON.stringify(toSarif(sarifReport), null, 2))
+    console.log(JSON.stringify(toSarif(sarifReport, { cwd: globals.cwd }), null, 2))
   } else if (reporter === 'html') {
     console.log(toHtml(report))
   } else if (reporter === 'json') {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {
     console.log(renderAnalysisText(report, newFindings))
+  }
+
+  if (noFilesMatched) {
+    failNoFilesMatched(globals, patterns, config, filepath)
   }
 
   // --- Gating ---

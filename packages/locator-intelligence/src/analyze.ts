@@ -11,7 +11,7 @@ import {
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
-import { resolveTestFiles } from './resolve-files.js'
+import { discoveryBase, resolveTestFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 import { computeScore } from './score.js'
@@ -90,9 +90,8 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     options.config,
     options.configDir,
   )
-  // Paths are reported relative to the same base discovery used: cwd for explicit
-  // patterns, the config file's directory otherwise (repo-relative for SARIF).
-  const reportBase = usingPatterns ? options.cwd : (options.configDir ?? options.cwd)
+  // Paths are reported relative to the same base discovery used (see discoveryBase).
+  const reportBase = discoveryBase(options.cwd, options.patterns, options.configDir)
   const { rules, warnings } = resolveRules(options.config)
   if (files.length === 0) {
     // A run that matched nothing must never look like a clean pass — a
@@ -166,6 +165,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     command: 'analyze',
+    rootDir: reportBase,
     summary: {
       filesAnalyzed: files.length,
       filesWithParseErrors: parseErrors.length,

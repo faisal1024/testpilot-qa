@@ -18,8 +18,8 @@ function finding(overrides: Partial<Finding> = {}): Finding {
   }
 }
 
-function reportWith(findings: Finding[]): AnalysisReport {
-  return { findings } as AnalysisReport
+function reportWith(findings: Finding[], rootDir = '/repo'): AnalysisReport {
+  return { findings, rootDir } as AnalysisReport
 }
 
 const LEVELS = ['error', 'warning', 'note']
@@ -138,5 +138,14 @@ describe('toSarif', () => {
         ]),
       ),
     )
+  })
+
+  it('re-relativizes artifact URIs to the given cwd, keeping paths as-is without one', () => {
+    const report = reportWith([finding({ file: 'tests/login.spec.ts' })], '/repo/packages/web')
+    const uriOf = (sarif: ReturnType<typeof toSarif>) =>
+      sarif.runs[0]?.results[0]?.locations[0]?.physicalLocation.artifactLocation.uri
+    expect(uriOf(toSarif(report))).toBe('tests/login.spec.ts')
+    expect(uriOf(toSarif(report, { cwd: '/repo' }))).toBe('packages/web/tests/login.spec.ts')
+    expect(uriOf(toSarif(report, { cwd: '/repo/packages/web/src' }))).toBe('../tests/login.spec.ts')
   })
 })

@@ -1,0 +1,2 @@
+# Generated docs (docs/rules) are compared byte-for-byte in tests; keep LF everywhere.
+* text=auto eol=lf

@@ -73,6 +73,23 @@ describe('fix — nothing matched', () => {
     expect(exitCode).toBe(3)
     expect(stderr).toContain('No test files matched')
   })
+
+  it('exits 2 when an explicit pattern matches nothing', async () => {
+    const { stderr, exitCode } = await runFix(['nope/**/*.ts'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('No test files matched nope/**/*.ts')
+  })
+})
+
+describe('fix — path base agrees with analyze', () => {
+  it('reports files relative to the config directory when run from a sub-directory', async () => {
+    writeSpec('a.spec.ts', "await page.locator('text=Save').click()\n")
+    writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const { stdout } = await runFix([], ['--json', '--cwd', join(dir, 'src', 'deep')])
+    const report = JSON.parse(stdout)
+    expect(report.files[0].file).toBe('tests/a.spec.ts')
+  })
 })
 
 describe('fix --write', () => {

@@ -14,6 +14,7 @@ import {
 } from '@testpilot/ai'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
+import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { OutputError, writeTextFile } from '../util/output.js'
 import { resolveConfigOrExit } from '../util/resolve-config.js'
@@ -35,13 +36,6 @@ interface AddAiFileResult {
 /** True when `agent` is a concrete id the user typed (not `undefined`/`all`). */
 function isExplicitAgent(agent: string | undefined): agent is string {
   return agent !== undefined && agent !== 'all'
-}
-
-function fail(globals: GlobalOptions, message: string, code: number): never {
-  if (!globals.quiet) {
-    console.error(message)
-  }
-  process.exit(code)
 }
 
 function readFileOrNull(absolutePath: string): string | null {

@@ -138,9 +138,11 @@ when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware
 **[docs/Scoring.md](docs/Scoring.md)** for exactly how the score is computed, with worked examples,
 and **[docs/rules](docs/rules/README.md)** for every rule with bad → better examples.
 
-Test files are found via `testDir` + `include` from `testpilot.config.ts` (defaults: `tests/`,
-`**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}` — JavaScript suites and `*.e2e.ts` naming work out of the box), or via explicit
-patterns (`npx testpilot-qa analyze "e2e/**/*.spec.ts"`). **A run that matches no files fails** (exit
+Test files are found via `testDir` + `include` (+ `exclude`) from `testpilot.config.ts` (defaults:
+`tests/`, `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}`, ignoring `node_modules`/`dist`/`build`
+— JavaScript suites and `*.e2e.ts` naming work out of the box), or via explicit patterns
+(`npx testpilot-qa analyze "e2e/**/*.spec.ts"`). `testDir` is relative to the config file, so running
+from a sub-directory of a monorepo still finds the suite. **A run that matches no files fails** (exit
 `3` for config discovery, `2` for patterns) instead of reporting an empty 100/A — so a wrong `testDir`
 can't turn into a green CI gate.
 

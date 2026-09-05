@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,6 +82,48 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(stderr).toContain('No test files matched nope/**/*.spec.ts')
   })
 
+  it('exits 3 and blames include when a directory argument matches nothing', async () => {
+    mkdirSync(join(dir, 'e2e'))
+    writeFileSync(join(dir, 'e2e', 'a.spec.rb'), 'not playwright\n')
+    const { stderr, exitCode } = await runAnalyze(['e2e'])
+    expect(exitCode).toBe(3)
+    expect(stderr).toContain('No test files matched under e2e using include')
+  })
+
+  it('stays silent on zero files with --quiet (exit code only)', async () => {
+    const { stdout, stderr, exitCode } = await runAnalyze(['--quiet', 'nope/**'])
+    expect(exitCode).toBe(2)
+    expect(stdout).toBe('')
+    expect(stderr).toBe('')
+  })
+
+  it('still emits the JSON envelope (with the warning) before exiting on zero files', async () => {
+    const { stdout, exitCode } = await runAnalyze(['--json', 'nope/**'])
+    expect(exitCode).toBe(2)
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(0)
+    expect(report.warnings).toEqual([{ code: 'no-files-matched', message: expect.any(String) }])
+  })
+
+  it('still writes the SARIF file before exiting on zero files (upload-sarif if: always())', async () => {
+    const { exitCode } = await runAnalyze([
+      '--reporter',
+      'sarif',
+      '--output',
+      'out.sarif',
+      'nope/**',
+    ])
+    expect(exitCode).toBe(2)
+    const sarif = JSON.parse(readFileSync(join(dir, 'out.sarif'), 'utf8'))
+    expect(sarif.runs[0].results).toEqual([])
+  })
+
+  it('refuses to record an empty baseline on zero files', async () => {
+    const { exitCode } = await runAnalyze(['--baseline', 'b.json', '--update-baseline', 'nope/**'])
+    expect(exitCode).toBe(2)
+    expect(existsSync(join(dir, 'b.json'))).toBe(false)
+  })
+
   it('analyzes a plain JavaScript suite out of the box', async () => {
     writeFileSync(join(dir, 'tests', 'b.spec.js'), 'page.waitForTimeout(1000)\n')
     const { stdout, exitCode } = await runAnalyze(['--json'])
@@ -99,6 +141,23 @@ describe('analyze — nothing matched is never a pass', () => {
     const report = JSON.parse(stdout)
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings[0].file).toBe('tests/a.spec.ts')
+    expect(report.rootDir).toBe(dir)
+  })
+
+  it('keeps SARIF URIs relative to --cwd (the Action contract) when the config lives elsewhere', async () => {
+    writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const { stdout, exitCode } = await runAnalyze([
+      '--reporter',
+      'sarif',
+      '--cwd',
+      join(dir, 'src', 'deep'),
+    ])
+    expect(exitCode).toBeUndefined()
+    const sarif = JSON.parse(stdout)
+    expect(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe(
+      '../../tests/a.spec.ts',
+    )
   })
 })
 
