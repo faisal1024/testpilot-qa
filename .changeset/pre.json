@@ -1,0 +1,32 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@testpilot/ai": "0.0.0",
+    "testpilot-qa": "0.0.0",
+    "@testpilot/core": "0.0.0",
+    "@testpilot/locator-intelligence": "0.0.0",
+    "@testpilot/reporters": "0.0.0",
+    "@testpilot/scaffold": "0.0.0",
+    "@testpilot/templates": "0.0.0"
+  },
+  "changesets": [
+    "milestone-2-5-init-run",
+    "milestone-2-cli-basics",
+    "milestone-3-5-parallel-foundation",
+    "milestone-3a-locator-intelligence",
+    "milestone-3b-tier1-rules",
+    "milestone-3c-scoring-gating",
+    "milestone-4a-explain",
+    "milestone-4b-doctor",
+    "milestone-4c-release-readiness",
+    "milestone-5a-ai-guidance",
+    "milestone-5b-doctor-drift",
+    "milestone-5c-alpha-hardening",
+    "milestone-6a-baseline-output",
+    "milestone-6b-sarif-ci",
+    "milestone-6c-add-ai",
+    "milestone-7a-html-report",
+    "milestone-8a-fix-preview"
+  ]
+}
