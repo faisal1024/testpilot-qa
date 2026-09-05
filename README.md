@@ -13,8 +13,25 @@ It's **local-first, deterministic, and offline** — no network, no API key, no 
 generates is **ejectable plain Playwright**: delete `testpilot.config.ts` and the dependency and you
 still have a working suite. Zero lock-in.
 
-> **Alpha.** TestPilot QA is in public alpha. It does **not** do DOM-aware healing, broad auto-fix,
-> dashboards, MCP, AI-generated tests, or LLM-powered execution — see [Status](#status--public-alpha).
+> **Alpha.** Published on npm under the **`alpha`** dist-tag. It does **not** do DOM-aware healing,
+> broad auto-fix, dashboards, MCP, AI-generated tests, or LLM-powered execution — see
+> [Status](#status--public-alpha).
+
+## Install
+
+```bash
+npm i -D testpilot-qa@alpha     # requires Node >= 20
+```
+
+Then every `npx testpilot-qa …` example below resolves to your local copy — no network round-trip.
+Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
+
+> **Pin `@alpha`.** A plain `npm i testpilot-qa` resolves `latest`, which today happens to point at the
+> same alpha build — but that is not guaranteed to track future alphas. Always pin.
+>
+> **What "alpha" promises:** the CLI flags, JSON/SARIF report shapes, baseline file format, and scoring
+> weights may change between `alpha.N` releases without a major version bump. If you gate CI on
+> `--min-score`, pin an exact version (`testpilot-qa@0.1.0-alpha.0`).
 
 ---
 
@@ -23,19 +40,20 @@ still have a working suite. Zero lock-in.
 **New here?** Scaffold a project and see a locator-quality report in your browser:
 
 ```bash
-npx testpilot-qa init demo --yes
+npx testpilot-qa@alpha init demo --yes
 cd demo
-npx testpilot-qa analyze tests --reporter html   # writes an HTML report to open
+npx testpilot-qa@alpha analyze tests --reporter html --output testpilot-report.html
+# → open testpilot-report.html in your browser
 ```
 
 **Already have a Playwright project?** `analyze` is read-only — just point it at your tests:
 
 ```bash
-npx testpilot-qa analyze tests                    # human table (add --json for CI)
+npx testpilot-qa@alpha analyze tests                    # human table (add --json for CI)
 
 # Adopting on an existing suite? Record a baseline, then gate CI on NEW findings only:
-npx testpilot-qa analyze tests --baseline testpilot-baseline.json --update-baseline
-npx testpilot-qa analyze tests --baseline testpilot-baseline.json
+npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json
 ```
 
 That's it. The rest of this README goes deeper on each command.
@@ -159,8 +177,8 @@ The bundled **GitHub Action** wraps the CLI (it does not duplicate analysis logi
 writes SARIF, and adds the human report to the job summary. Pair it with GitHub's `upload-sarif` to
 publish the annotations:
 
-> **Note (alpha):** the `@v0` tag below is created with the first tagged GitHub release — it does not
-> exist yet. Until then, pin to a commit SHA (`faisal1024/testpilot-qa/action@<sha>`) or `@main`.
+> **Note (alpha):** `@v0` is a moving major tag — it is re-pointed as the action changes. Pin a commit
+> SHA (`faisal1024/testpilot-qa/action@<sha>`) if you want it frozen.
 
 ```yaml
 # .github/workflows/testpilot.yml
@@ -174,6 +192,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: faisal1024/testpilot-qa/action@v0
         with:
+          version: alpha          # pin the dist-tag; the action defaults to `latest`
           min-score: 80
           baseline: testpilot-baseline.json
       - uses: github/codeql-action/upload-sarif@v3
@@ -312,8 +331,9 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
 
-The alpha launches on the current pinned dependencies once the release gate passes; the deferred
-dependency majors are post-alpha hardening. See the **[public alpha launch gate](docs/Release-Checklist.md#public-alpha-launch-gate)**.
+**Shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag, CI-published with
+provenance. Next up is post-alpha hardening — the deferred dependency majors, each in its own PR. See
+the **[release checklist](docs/Release-Checklist.md)**.
 
 ---
 
@@ -349,6 +369,14 @@ CI, fix, and guidance-regeneration surfaces above. See [Architecture §2](docs/A
 full set of challenged assumptions and the [Roadmap](docs/Roadmap.md) for the Phase 0–10 plan.
 
 ---
+
+## Feedback & bugs
+
+This is an alpha and feedback is the most useful thing you can send. Please
+[open an issue](https://github.com/faisal1024/testpilot-qa/issues) — especially for **false positives**,
+which matter most right now. Include `npx testpilot-qa --version` and, if relevant,
+`npx testpilot-qa doctor --json`. Security reports: see [SECURITY.md](SECURITY.md).
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [MIT license](LICENSE).
 
 ## Development
 

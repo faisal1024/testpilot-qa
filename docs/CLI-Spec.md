@@ -2,7 +2,7 @@
 
 > Status: Approved — aligned to *Updated Plan After Claude Review*
 > Binary name: `testpilot` (alias `tpq`)
-> Bootstrap: `npx testpilot-qa` / `npm create testpilot-qa@latest`
+> Bootstrap: `npx testpilot-qa@alpha init` (there is no `create-testpilot-qa` package)
 
 > **MVP command surface:** `init`, `run`, `analyze`, `doctor`, `explain`. `list` is **deferred to V1**;
 > `fix` has a safe-preview foundation (8A) with `--dom`/`-i`/`--rules` deferred; of `add`, only the

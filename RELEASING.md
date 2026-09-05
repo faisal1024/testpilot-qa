@@ -31,16 +31,10 @@ green.
 **Option A — trusted publishing (recommended, no long-lived secret).** npm mints a short-lived
 credential from the workflow's OIDC identity, and provenance is attached automatically.
 
-> ⚠️ **First publish caveat:** a trusted publisher is configured on the **package's** settings page on
-> npmjs.com, which requires the package to already exist. `testpilot-qa` has never been published, so
-> the *very first* release needs a one-time authenticated publish — either Option B, or the local
-> fallback in [Manual publish](#manual-publish-fallback-if-not-using-ci) (it must run from
-> `packages/cli` after a build; the repo root is `private`). After that first version exists, switch to
-> trusted publishing and delete the token.
->
-> A local first publish creates no git tag, no GitHub release, and **no provenance**, and the next CI
-> run will report "No unpublished projects to publish" — so the OIDC path is first genuinely exercised
-> on `alpha.1`.
+> ✅ **First publish: done.** `testpilot-qa@0.1.0-alpha.0` was published from CI on 2026-09-05 using a
+> granular token with *Bypass two-factor authentication* enabled — with SLSA provenance, and Changesets
+> created the git tag and the GitHub pre-release. The package now exists, so a **trusted publisher can
+> be configured** (steps below) and the token can be deleted.
 
 1. On npmjs.com → the `testpilot-qa` package → **Settings → Trusted Publisher → GitHub Actions**.
 2. Repository: `faisal1024/testpilot-qa`; workflow filename: `release.yml` (leave environment blank
@@ -105,7 +99,7 @@ See [`docs/Release-Checklist.md`](docs/Release-Checklist.md) for the full launch
 
 ```bash
 corepack pnpm -r build
-cd packages/cli && npm publish --tag alpha   # NEVER publish the alpha to `latest`
+cd packages/cli && npm publish --tag alpha   # then re-point `latest` per the policy above
 ```
 
 ## Post-publish
@@ -116,7 +110,8 @@ cd packages/cli && npm publish --tag alpha   # NEVER publish the alpha to `lates
 npm dist-tag ls testpilot-qa
 # If the new version landed on `latest`, move it to `alpha` and remove `latest`:
 npm dist-tag add testpilot-qa@<version> alpha
-npm dist-tag rm  testpilot-qa latest      # keep `latest` empty during the alpha
+npm dist-tag add testpilot-qa@<version> latest   # policy: `latest` tracks the newest alpha
+# Do NOT `dist-tag rm latest` — that makes a plain `npm i testpilot-qa` fail.
 ```
 
 **2. If this was the first trusted-publishing run,** confirm npm's OIDC exchange actually happened in
@@ -124,6 +119,6 @@ the job log (rather than assuming); if it was skipped, drop `registry-url` from 
 `NODE_AUTH_TOKEN` only when the secret exists.
 
 - Verify: `npx testpilot-qa@alpha --version` / `--help` / `init demo --yes` / `analyze tests --reporter html`.
-- Switch the root README quickstart to `npx testpilot-qa@alpha …`.
-- Optionally create the `v0` Git tag / GitHub release so the GitHub Action example's `@v0` resolves
-  (until then the README points users to a SHA or `@main`).
+- ✅ Done for 0.1.0-alpha.0: README pins `@alpha` in the first-contact examples and documents `npm i -D testpilot-qa@alpha`.
+- ✅ The `v0` Action tag exists. **Standing obligation:** re-point `v0` whenever `action/action.yml`
+  changes (`git tag -f v0 <sha> && git push -f origin v0`).
