@@ -13,10 +13,39 @@ This requires Changesets **pre-release mode** (`changeset pre enter alpha`): in 
 
 ## One-time setup (maintainer)
 
-1. **npm auth:** create an npm **automation** token with publish rights to `testpilot-qa` and add it as
-   the GitHub Actions secret **`NPM_TOKEN`**. (The release workflow reads `secrets.NPM_TOKEN`.)
-2. **Allow the release PR:** in repo **Settings → Actions → General**, enable
-   *"Allow GitHub Actions to create and approve pull requests"* (Changesets opens the Version PR).
+Publishing stays **disabled** until you opt in: the release workflow only publishes when the repository
+variable **`PUBLISH_ENABLED`** is `true`. Until then it still keeps the "Version Packages" PR up to date,
+so `main` stays green.
+
+### 1. Choose how CI authenticates to npm
+
+**Option A — trusted publishing (recommended, no long-lived secret).** npm mints a short-lived
+credential from the workflow's OIDC identity, and provenance is attached automatically.
+
+> ⚠️ **First publish caveat:** a trusted publisher is configured on the **package's** settings page on
+> npmjs.com, which requires the package to already exist. `testpilot-qa` has never been published, so
+> the *very first* release needs a one-time authenticated publish (Option B, or a local
+> `npm login && npm publish --tag alpha`). After that first version exists, switch to trusted publishing
+> and delete the token.
+
+1. On npmjs.com → the `testpilot-qa` package → **Settings → Trusted Publisher → GitHub Actions**.
+2. Repository: `faisal1024/testpilot-qa`; workflow filename: `release.yml` (leave environment blank
+   unless the job uses one).
+3. Leave `NPM_TOKEN` **unset**. The workflow already grants `id-token: write` and upgrades npm to
+   >= 11.5.1 (Node 20 bundles npm 10, which cannot do OIDC publishing).
+
+**Option B — automation token.** Create an npm **automation** token with publish rights and add it as
+the GitHub Actions secret **`NPM_TOKEN`** (read by the workflow as `NODE_AUTH_TOKEN`).
+
+### 2. Turn publishing on
+
+Add the repository **variable** `PUBLISH_ENABLED = true`
+(Settings → Secrets and variables → Actions → *Variables*).
+
+### 3. Allow the Version PR
+
+Settings → Actions → General → enable *"Allow GitHub Actions to create and approve pull requests"*
+(Changesets opens the Version PR).
 
 ## Release flow (CI, via `.github/workflows/release.yml`)
 

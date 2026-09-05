@@ -25,6 +25,9 @@ dependencies** — no deferred dependency major is required first.
    fresh `npx testpilot-qa@alpha --version` works
 10. **README sanity check** — alpha positioning honest; the Try-it path actually works end to end
 
+npm auth for step 9 (trusted publishing or a token) plus the `PUBLISH_ENABLED` switch are described in
+[`RELEASING.md`](../RELEASING.md).
+
 The detailed checklist below expands steps 1–8; **post-alpha hardening** (the deferred dependency majors)
 is tracked in [Dependency PR triage](#dependency-pr-triage-post-alpha-hardening).
 

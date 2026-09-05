@@ -1,13 +1,17 @@
 name: Release
 
-# Configured but inactive until packages are publishable and NPM_TOKEN is set.
+# Runs on every push to main. The Changesets action always keeps the
+# "Version Packages" PR up to date; it only *publishes* once npm publishing has
+# been configured for this package and the `PUBLISH_ENABLED` repository variable
+# is set to `true` (see RELEASING.md). That keeps `main` green before the first
+# release instead of failing on missing npm auth.
 on:
   push:
     branches: [main]
 
 permissions:
   contents: write
-  id-token: write
+  id-token: write # required for npm trusted publishing (OIDC) + provenance
   pull-requests: write
 
 jobs:
@@ -21,11 +25,18 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
+      # Node 20 bundles npm 10, but OIDC trusted publishing needs npm >= 11.5.1.
+      # `changeset publish` shells out to this npm, so upgrade it before publishing.
+      - run: npm install --global npm@latest
+      - run: npm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - uses: changesets/action@v1
         with:
-          publish: pnpm release
+          # Empty publish script => version PR only, no publish attempt.
+          publish: ${{ vars.PUBLISH_ENABLED == 'true' && 'pnpm release' || '' }}
         env:
+          # Unset when using trusted publishing (OIDC); set it only if you prefer
+          # token-based publishing instead.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
