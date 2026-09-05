@@ -1,6 +1,6 @@
 # TestPilot QA — Release Checklist
 
-> Status: **Public-alpha readiness is the active focus.** All feature milestones through 8A are merged
+> Status: **Published — post-alpha hardening is the active focus.** All feature milestones through 8A are merged
 > (6A baseline/output, 6B SARIF + GitHub Action, 6C `add ai`, 7A HTML report, 7B scoring docs, 8A
 > `fix` preview).
 > **✅ Published: `testpilot-qa@0.1.0-alpha.0` is live on npm** under the **`alpha`** dist-tag, with SLSA
@@ -8,13 +8,19 @@
 > The deferred runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`)
 > remain **post-alpha hardening** — each handled in its own PR with full validation.
 >
-> Note: npm sets `latest` on a package's first publish, so `latest` also points at `0.1.0-alpha.0`. The
-> `alpha` tag is authoritative for this phase; keep using the dist-tag check below on every release.
+>
+> **Dist-tags — decided policy.** npm sets `latest` on a package's first publish, so today both `alpha`
+> and `latest` point at `0.1.0-alpha.0` and a plain `npm i testpilot-qa` happens to get the alpha.
+> **That is not self-sustaining:** Changesets pre-mode does not reliably re-tag, so from `alpha.1` on,
+> `latest` would freeze at `alpha.0` and unpinned installs would silently get a stale build.
+> **Policy for the alpha phase: `latest` tracks the newest published alpha.** After every publish run
+> both: `npm dist-tag add testpilot-qa@<v> alpha && npm dist-tag add testpilot-qa@<v> latest`.
+> (We do **not** remove `latest` — that would make `npm i testpilot-qa` fail outright.)
 
 ## Public alpha launch gate
 
-The alpha is ready to publish when **all** of these pass on the release commit with the **current pinned
-dependencies** — no deferred dependency major is required first.
+The alpha shipped on the current pinned dependencies. **Every subsequent alpha publish must pass all of
+these** on the release commit — no deferred dependency major is required first.
 
 1. `corepack pnpm install --frozen-lockfile` — clean install (lockfile committed and current)
 2. `corepack pnpm lint`
@@ -24,10 +30,9 @@ dependencies** — no deferred dependency major is required first.
 6. `corepack pnpm smoke:mvp`
 7. `corepack pnpm smoke:package`
 8. `corepack pnpm changeset status` — every user-facing change has a changeset
-9. **npm alpha publish** — publish under the `alpha` dist-tag, then **verify the dist-tag actually
-   landed** (`npm dist-tag ls testpilot-qa`) and fix it up with `npm dist-tag add/rm` if the release
-   went to `latest` — Changesets pre-mode does not reliably keep the pre-tag. Then confirm a fresh
-   `npx testpilot-qa@alpha --version` works
+9. **npm alpha publish**, then **verify the dist-tags** (`npm dist-tag ls testpilot-qa`) and apply the
+   policy above — `npm dist-tag add testpilot-qa@<v> alpha` **and** `… latest`. Changesets pre-mode does
+   not reliably keep the pre-tag. Then confirm a fresh `npx testpilot-qa@alpha --version` works
 10. **README sanity check** — alpha positioning honest; the Try-it path actually works end to end
 
 npm auth for step 9 (trusted publishing or a token) plus the `PUBLISH_ENABLED` switch are described in
@@ -85,7 +90,7 @@ Implemented surface: `init`, `run`, `analyze` (six Tier 1 rules + Locator Qualit
 
 ## Dependency PR triage (post-alpha hardening)
 
-The alpha launches on the current pinned dependencies. The remaining dependency majors are **post-alpha
+The alpha shipped on the current pinned dependencies. The remaining dependency majors are **post-alpha
 hardening**, not launch blockers — but each still gets its own PR + full validation before it merges, so
 the repo stays green. Strategy:
 

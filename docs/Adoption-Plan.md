@@ -7,8 +7,8 @@
 > **✅ The public alpha shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag
 > (CI-published with provenance, 2026-09-05).
 > **Next active focus: post-alpha hardening** — the deferred runtime/toolchain dependency majors
-> (`@biomejs/biome` 2.x, `zod` 4.x, a Node 22 / pnpm 10 toolchain bump, then `@changesets/cli` 3.x and
-> `changesets/action` v2), each in its own PR with a full local gate. No new feature milestone is in
+> (`@biomejs/biome` 2.x, `zod` 4.x, `commander` 15, `typescript` 6/7, a Node 22 + pnpm 10+ toolchain
+> bump, then `@changesets/cli` 3.x and `changesets/action` v2), each in its own PR with a full local gate. No new feature milestone is in
 > progress.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
@@ -268,10 +268,9 @@ After Milestone 5B:
 5. **7A — HTML report (merged):** local static report for sharing and demos.
 6. **7B — Scoring docs (merged):** [`docs/Scoring.md`](Scoring.md) — calibrate trust in the score.
 7. **8A — Safe fix preview (merged):** `testpilot fix` — dry-run mechanical locator rewrites.
-8. **Public-alpha readiness (active):** run the release gate ([`docs/Release-Checklist.md`](Release-Checklist.md)),
-   npm alpha publish, README sanity check, and launch the soft public alpha — on the current pinned
-   dependencies. Deferred dependency majors are **post-alpha hardening**, not launch blockers. No new
-   feature milestone in progress.
+8. **Public alpha (shipped):** published `testpilot-qa@0.1.0-alpha.0` on 2026-09-05 — CI release with
+   provenance, `alpha` dist-tag, git tag + GitHub pre-release.
+9. **Post-alpha hardening (active):** deferred dependency majors, each in its own PR with a full gate.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 

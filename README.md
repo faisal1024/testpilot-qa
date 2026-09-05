@@ -13,10 +13,25 @@ It's **local-first, deterministic, and offline** — no network, no API key, no 
 generates is **ejectable plain Playwright**: delete `testpilot.config.ts` and the dependency and you
 still have a working suite. Zero lock-in.
 
-> **Alpha.** TestPilot QA is in public alpha, published under the npm **`alpha`** dist-tag — pin
-> `testpilot-qa@alpha` (e.g. `npm i -D testpilot-qa@alpha`), as the examples below do. It does **not**
-> do DOM-aware healing, broad auto-fix, dashboards, MCP, AI-generated tests, or LLM-powered execution —
-> see [Status](#status--public-alpha).
+> **Alpha.** Published on npm under the **`alpha`** dist-tag. It does **not** do DOM-aware healing,
+> broad auto-fix, dashboards, MCP, AI-generated tests, or LLM-powered execution — see
+> [Status](#status--public-alpha).
+
+## Install
+
+```bash
+npm i -D testpilot-qa@alpha     # requires Node >= 20
+```
+
+Then every `npx testpilot-qa …` example below resolves to your local copy — no network round-trip.
+Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
+
+> **Pin `@alpha`.** A plain `npm i testpilot-qa` resolves `latest`, which today happens to point at the
+> same alpha build — but that is not guaranteed to track future alphas. Always pin.
+>
+> **What "alpha" promises:** the CLI flags, JSON/SARIF report shapes, baseline file format, and scoring
+> weights may change between `alpha.N` releases without a major version bump. If you gate CI on
+> `--min-score`, pin an exact version (`testpilot-qa@0.1.0-alpha.0`).
 
 ---
 
@@ -27,7 +42,8 @@ still have a working suite. Zero lock-in.
 ```bash
 npx testpilot-qa@alpha init demo --yes
 cd demo
-npx testpilot-qa@alpha analyze tests --reporter html   # writes an HTML report to open
+npx testpilot-qa@alpha analyze tests --reporter html --output testpilot-report.html
+# → open testpilot-report.html in your browser
 ```
 
 **Already have a Playwright project?** `analyze` is read-only — just point it at your tests:
@@ -65,7 +81,7 @@ is a pass-through and forwards everything to Playwright.
 
 ```bash
 # Scaffold a TypeScript Playwright project (UI + API examples + AI agent guidance)
-npx testpilot-qa@alpha init demo --yes
+npx testpilot-qa init demo --yes
 cd demo
 
 # Install Playwright and run the generated tests
@@ -80,9 +96,9 @@ npm run test:e2e:api         # API tests only
 npm run test:e2e:parallel    # run with 2 workers
 
 # …or run through TestPilot (a thin pass-through around Playwright)
-npx testpilot-qa@alpha run
-npx testpilot-qa@alpha run -- --workers=2
-npx testpilot-qa@alpha run -- tests/ui --workers=2
+npx testpilot-qa run
+npx testpilot-qa run -- --workers=2
+npx testpilot-qa run -- tests/ui --workers=2
 ```
 
 `testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
@@ -105,14 +121,14 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 
 ```bash
 # Analyze locator quality in your existing tests (read-only)
-npx testpilot-qa@alpha analyze
-npx testpilot-qa@alpha analyze --json
+npx testpilot-qa analyze
+npx testpilot-qa analyze --json
 
 # Gate CI on a minimum Locator Quality Score (non-zero exit if below)
-npx testpilot-qa@alpha analyze --min-score 80
+npx testpilot-qa analyze --min-score 80
 
 # Write the report to a file instead of stdout
-npx testpilot-qa@alpha analyze --output testpilot-report.json
+npx testpilot-qa analyze --output testpilot-report.json
 ```
 
 Every run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
@@ -129,10 +145,10 @@ are grandfathered in.
 
 ```bash
 # Record the current findings as the accepted baseline
-npx testpilot-qa@alpha analyze --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
 
 # In CI: fail only when a NEW finding appears (exit 1), ignore baselined ones
-npx testpilot-qa@alpha analyze --baseline testpilot-baseline.json
+npx testpilot-qa analyze --baseline testpilot-baseline.json
 ```
 
 A finding's baseline identity is its rule + file + code snippet — independent of line number,
@@ -148,10 +164,10 @@ to share results and run in CI:
 
 ```bash
 # SARIF 2.1.0 — findings show up inline on the PR "Files changed" tab (code scanning)
-npx testpilot-qa@alpha analyze --reporter sarif --output testpilot.sarif
+npx testpilot-qa analyze --reporter sarif --output testpilot.sarif
 
 # A shareable, self-contained HTML report — open it in any browser
-npx testpilot-qa@alpha analyze --reporter html --output testpilot-report.html
+npx testpilot-qa analyze --reporter html --output testpilot-report.html
 ```
 
 The **HTML report** is a single static file — score, sub-scores, and findings grouped by file, with no
@@ -176,6 +192,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: faisal1024/testpilot-qa/action@v0
         with:
+          version: alpha          # pin the dist-tag; the action defaults to `latest`
           min-score: 80
           baseline: testpilot-baseline.json
       - uses: github/codeql-action/upload-sarif@v3
@@ -199,10 +216,10 @@ prints a unified diff and writes nothing until you pass `--write`).
 
 ```bash
 # Preview safe, mechanical rewrites (writes nothing — shows a diff)
-npx testpilot-qa@alpha fix
+npx testpilot-qa fix
 
 # Apply them
-npx testpilot-qa@alpha fix --write
+npx testpilot-qa fix --write
 ```
 
 Today it rewrites `page.locator('text=Foo')` → `page.getByText('Foo')` (equivalent matching) and leaves
@@ -213,8 +230,8 @@ calls** and **never inspects the DOM**, so it will **not** turn a CSS/XPath sele
 ## Understand a rule — `explain`
 
 ```bash
-npx testpilot-qa@alpha explain no-xpath
-npx testpilot-qa@alpha explain no-hard-wait --json
+npx testpilot-qa explain no-xpath
+npx testpilot-qa explain no-hard-wait --json
 ```
 
 `explain` shows why a rule matters, a ✗ bad example, a ✓ better example, and guidance — handy at the
@@ -223,8 +240,8 @@ terminal or for feeding an agent.
 ## Diagnose setup — `doctor`
 
 ```bash
-npx testpilot-qa@alpha doctor
-npx testpilot-qa@alpha doctor --json
+npx testpilot-qa doctor
+npx testpilot-qa doctor --json
 ```
 
 `doctor` checks Node version, `package.json`, a local Playwright install, Playwright/TestPilot config
@@ -248,14 +265,14 @@ or scaffold), and is a **dry-run preview by default**:
 
 ```bash
 # Preview what would change (writes nothing)
-npx testpilot-qa@alpha add ai
+npx testpilot-qa add ai
 
 # Apply: create missing files and refresh stale ones
-npx testpilot-qa@alpha add ai --write
+npx testpilot-qa add ai --write
 
 # Just one agent, or every supported agent
-npx testpilot-qa@alpha add ai claude --write
-npx testpilot-qa@alpha add ai all --write
+npx testpilot-qa add ai claude --write
+npx testpilot-qa add ai all --write
 ```
 
 It reuses `doctor`'s drift detection: missing files are **created**, stale ones (older guidance version)
@@ -314,8 +331,9 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
 
-The alpha launches on the current pinned dependencies once the release gate passes; the deferred
-dependency majors are post-alpha hardening. See the **[public alpha launch gate](docs/Release-Checklist.md#public-alpha-launch-gate)**.
+**Shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag, CI-published with
+provenance. Next up is post-alpha hardening — the deferred dependency majors, each in its own PR. See
+the **[release checklist](docs/Release-Checklist.md)**.
 
 ---
 
@@ -351,6 +369,14 @@ CI, fix, and guidance-regeneration surfaces above. See [Architecture §2](docs/A
 full set of challenged assumptions and the [Roadmap](docs/Roadmap.md) for the Phase 0–10 plan.
 
 ---
+
+## Feedback & bugs
+
+This is an alpha and feedback is the most useful thing you can send. Please
+[open an issue](https://github.com/faisal1024/testpilot-qa/issues) — especially for **false positives**,
+which matter most right now. Include `npx testpilot-qa --version` and, if relevant,
+`npx testpilot-qa doctor --json`. Security reports: see [SECURITY.md](SECURITY.md).
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [MIT license](LICENSE).
 
 ## Development
 
