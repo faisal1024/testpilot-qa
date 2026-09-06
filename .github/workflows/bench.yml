@@ -1,0 +1,35 @@
+name: bench
+
+# The corpus benchmark is the tool's own no-regression gate: it runs the built CLI
+# against pinned commits of real Playwright suites and fails when the analyzed file
+# set narrows. It clones from the network and takes minutes, so it is not on the PR
+# path — it runs weekly and on demand, and a failure is a signal to investigate, not
+# a broken build.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - name: Run the corpus benchmark
+        id: bench
+        run: pnpm bench | tee bench-output.md
+      - name: Publish the comparison
+        if: always()
+        run: cat bench-output.md >> "${GITHUB_STEP_SUMMARY}"

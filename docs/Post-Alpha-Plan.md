@@ -173,11 +173,16 @@ Goal: **`analyze` can never report a score for files it did not open — and it 
   **false-positive issue template** (rule id + snippet required) and Discussions turned on. Phase 11
   needs real users' false positives to calibrate against, so the feedback loop opens before it, not
   after. (Moved up from Phase 14.)
-- **9e — Corpus benchmark.** `scripts/bench-corpus.mjs`: pinned commits of the five repos, sparse
-  checkout, runs the built CLI, writes `bench/results.json` (files, findings by rule, score, runtime)
-  and a Markdown diff vs the committed baseline. Runs on demand (`pnpm bench`) and weekly in CI
-  (non-blocking). This is the tool's own "no-regression baseline" — and the first run doubles as the
-  confirmation that #71 actually makes cal.com and immich discoverable with no flags.
+- ✅ **9e — Corpus benchmark (#75).** `pnpm bench` runs the built CLI against pinned commits of the
+  five repos (blobless sparse clones, cached) and diffs files/findings-by-rule/score/warnings against
+  `bench/baseline.json`. A **narrowed scan fails the run** — fewer files, or findings vanishing with
+  no rule change — because that is the one regression a score cannot reveal. Weekly in CI and on
+  demand; not on the PR path (it needs the network and takes minutes).
+
+  Recorded baseline: cal.com 60 files / 828 findings / 68 D · immich 21 / 76 / 89 B · Ghost 94 / 2 /
+  98 A · documenso 127 / 619 / 89 B · mattermost 298 / 1544 / 66 D. Discovery finds the files
+  Playwright runs, not every file present — cal.com's `testMatch` regex selects 60 of 77, immich's 21
+  of 75.
 
 ### Phase 10 — Run tests by tag (`alpha.2`)
 

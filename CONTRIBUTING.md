@@ -41,6 +41,19 @@ not edit those pages by hand: change the explanation (or a rule's `docsUrl`), ru
 (it rebuilds the engine first), and commit the regenerated pages. `rule-docs.test.ts` fails when the
 committed pages drift from the generator.
 
+## The corpus benchmark
+
+`pnpm bench` runs the built CLI against pinned commits of five real open-source Playwright suites and
+diffs the result against `bench/baseline.json`. It exists because unit tests cannot see the failure
+that matters most here: a rule or discovery change that quietly narrows what gets analyzed on a real
+repo. A drop in `filesAnalyzed`, or findings vanishing with no rule change, **fails the run**.
+
+- First run clones into `.bench-cache/` (gitignored) and needs the network; later runs reuse it.
+- Requires a prior `pnpm -r build`.
+- Accept an intended change with `pnpm bench --update-baseline`, and say in the PR why the numbers
+  moved. A baseline bump with no explanation is how signal loss gets normalized.
+- `bench/corpus.json` pins each repo's commit, so a diff measures TestPilot, not upstream churn.
+
 ## Conventions
 
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, …).

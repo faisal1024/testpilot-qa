@@ -14,6 +14,7 @@
     "test": "vitest run",
     "smoke:mvp": "node scripts/smoke-mvp.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
+    "bench": "node scripts/bench-corpus.mjs",
     "docs:rules": "pnpm --filter @testpilot/core --filter @testpilot/locator-intelligence build && node scripts/generate-rule-docs.mjs",
     "lint": "biome check .",
     "format": "biome format --write .",
