@@ -112,7 +112,10 @@ export const configSchema = z
           .strict()
           .default({}),
       })
-      .strict()
+      // Not `.strict()`: an unknown id here should warn like a typo in `rules`
+      // does, not fail the whole config load. A rule that is renamed later
+      // would otherwise hard-break every project that set an option on it.
+      .passthrough()
       .default({}),
     scoring: scoringSchema,
     ai: aiSchema,

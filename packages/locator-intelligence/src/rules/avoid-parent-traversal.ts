@@ -6,8 +6,9 @@ import type { Rule } from './types.js'
  * Split out of `no-xpath` at **info**. `..` is XPath, so `no-xpath` fired on it
  * at `error` — but it is a recognised Playwright idiom for reaching a
  * container, not the hand-written `//div[@class="x"]/span[2]` that rule is
- * about. On the corpus it was 6 of 8 xpath findings, so the loud rule was
- * mostly reporting the quiet case and the real XPath did not stand out.
+ * about. On the corpus it was 9 of the 11 xpath findings, so the
+ * loud rule was mostly reporting the quiet case and real XPath did not stand
+ * out.
  */
 export const avoidParentTraversal: Rule = {
   id: 'avoid-parent-traversal',
@@ -30,12 +31,16 @@ export const avoidParentTraversal: Rule = {
   },
 }
 
-/** True when every part of the selector is the `..` parent step. */
+/** True when every part of the selector is nothing but parent steps. */
 export function isParentTraversal(context: {
   parsed?: { parts: Array<{ engine: string; body: string }> }
 }): boolean {
   const parts = context.parsed?.parts ?? []
   return (
-    parts.length > 0 && parts.every((part) => part.engine === 'xpath' && part.body.trim() === '..')
+    parts.length > 0 &&
+    parts.every((part) => part.engine === 'xpath' && PARENT_STEPS.test(part.body.trim()))
   )
 }
+
+/** `..`, `../..`, `../../..` — a path made only of parent steps. */
+const PARENT_STEPS = /^\.\.(?:\/\.\.)*$/

@@ -42,6 +42,7 @@ export interface Finding {
 export interface AnalysisWarning {
   code:
     | 'unknown-rule'
+    | 'deprecated-rule-id'
     | 'no-files-matched'
     | 'test-tag-coverage'
     | 'playwright-config-partial'

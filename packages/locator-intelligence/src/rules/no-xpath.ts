@@ -6,8 +6,8 @@ import type { Rule } from './types.js'
  *
  * The `locator('..')` parent step is XPath too, but it is a recognised
  * Playwright idiom rather than a hand-written path expression, so it has its
- * own `info` rule. On the corpus it was 6 of 8 xpath findings — reporting it
- * here at `error` meant the real XPath did not stand out.
+ * own `info` rule. On the corpus it was 9 of the 11 xpath findings — reporting
+ * it here at `error` meant the real XPath did not stand out.
  */
 export const noXpath: Rule = {
   id: 'no-xpath',

@@ -16,8 +16,6 @@ Positional locators assume a fixed order and count of elements. Adding, removing
 
 ```ts
 await page.locator('ul li:nth-child(2)').click()
-// or
-await page.getByRole('listitem').nth(1).click()
 ```
 
 **Prefer**

@@ -4,7 +4,7 @@
 
 > **Category:** locator · **Default severity:** warn
 
-Selecting by position (.first(), .last(), .nth(n)) depends on how many elements match and in what order.
+Selecting by position depends on how many elements match and in what order. Detects `.nth()` today; `.first()`/`.last()` arrive with Phase 12.
 
 ## Why it matters
 
@@ -15,7 +15,7 @@ A positional call silently retargets when the matched collection changes — a n
 **Avoid**
 
 ```ts
-await page.getByRole('listitem').first().click()
+await page.getByRole('listitem').nth(1).click()
 ```
 
 **Prefer**
@@ -26,9 +26,10 @@ await page.getByRole('link', { name: 'Settings' }).click()
 
 ## Guidance
 
-- If the element is distinguishable — a name, a label, a test id — target it directly.
-- If the collection is genuinely uniform (a row in a results table), positional access is fine; silence this rule for the file or set it to `off`.
+- If the element is distinguishable — a name, a label, a test id — target it directly, or narrow with `filter({ hasText })`.
+- If the collection is genuinely uniform (a row in a results table, an ordered list the test is *about*), positional access is correct; set this rule to `off`.
 - CSS `:nth-child()` is a different matter and stays an error — see `no-nth-child`.
+- **Only `.nth()` is detected today.** `.first()` and `.last()` are the same pattern, but counting them changes the score's denominator, so they arrive with Phase 12.
 
 ## Does not fire on
 

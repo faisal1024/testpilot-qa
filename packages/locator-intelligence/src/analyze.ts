@@ -6,9 +6,12 @@ import {
   type AnalysisWarning,
   type ConfigDiscovery,
   DEFAULT_DISCOVERY,
+  DEPRECATED_RULE_IDS,
   type Finding,
   type FindingSeverity,
   type ParseError,
+  RULE_PREDECESSORS,
+  type Severity,
   type TestPilotConfig,
   isDirectory,
 } from '@testpilot/core'
@@ -57,7 +60,19 @@ function resolveRules(config: TestPilotConfig): {
   warnings: AnalysisWarning[]
 } {
   const warnings: AnalysisWarning[] = []
+  for (const id of Object.keys(config.ruleOptions ?? {})) {
+    if (!builtinRuleIds.has(id)) {
+      warnings.push({
+        code: 'unknown-rule',
+        ruleId: id,
+        message: `Unknown rule "${id}" in ruleOptions — ignored.`,
+      })
+    }
+  }
   for (const id of Object.keys(config.rules)) {
+    if (DEPRECATED_RULE_IDS.includes(id) && !builtinRuleIds.has(id)) {
+      continue
+    }
     if (!builtinRuleIds.has(id)) {
       warnings.push({
         code: 'unknown-rule',
@@ -70,7 +85,7 @@ function resolveRules(config: TestPilotConfig): {
 
   const rules: EnabledRule[] = []
   for (const rule of builtinRules) {
-    const override = config.rules[rule.id]
+    const override = severityFor(rule.id, config, warnings)
     if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
       continue
     }
@@ -78,7 +93,7 @@ function resolveRules(config: TestPilotConfig): {
   }
   const testRules: EnabledTestRule[] = []
   for (const rule of builtinTestRules) {
-    const override = config.rules[rule.id]
+    const override = severityFor(rule.id, config, warnings)
     // `defaultOff` rules need an explicit opt-in, not merely "not turned off".
     if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
       continue
@@ -460,7 +475,42 @@ function tagCoverageWarning(
 /** Per-rule settings from the config, or `undefined` when the rule has none. */
 function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | undefined {
   if (ruleId === 'no-deep-css-chain') {
-    return { maxChainDepth: config.ruleOptions['no-deep-css-chain'].maxChainDepth }
+    // Optional throughout: zod fills these in for a parsed config, but a
+    // programmatic caller can hand us a plain object, and crashing on a missing
+    // options key would take down the whole analysis for a setting nobody set.
+    const configured = config.ruleOptions?.['no-deep-css-chain']?.maxChainDepth
+    return configured === undefined ? undefined : { maxChainDepth: configured }
+  }
+  return undefined
+}
+
+/**
+ * The configured severity for a rule, honouring the id it was split out of.
+ *
+ * A team that wrote `rules: { 'no-nth-child': 'off' }` was silencing `.nth()`.
+ * After the split that setting would apply to a rule id they have never heard
+ * of — so the predecessor's severity carries over unless the successor is set
+ * explicitly, and the substitution is disclosed rather than assumed.
+ */
+function severityFor(
+  ruleId: string,
+  config: TestPilotConfig,
+  warnings: AnalysisWarning[],
+): Severity | undefined {
+  const own = config.rules[ruleId]
+  if (own !== undefined) {
+    return own
+  }
+  for (const previous of RULE_PREDECESSORS[ruleId] ?? []) {
+    const inherited = config.rules[previous]
+    if (inherited !== undefined) {
+      warnings.push({
+        code: 'deprecated-rule-id',
+        ruleId: previous,
+        message: `Rule "${previous}" was split; "${ruleId}" now covers part of what it did, and is taking its "${inherited}" setting. Set "${ruleId}" explicitly to silence this.`,
+      })
+      return inherited
+    }
   }
   return undefined
 }

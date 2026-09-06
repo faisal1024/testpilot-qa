@@ -18,20 +18,42 @@ Three rules get more precise, and two over-graded findings are re-levelled.
   pseudo's name inside an attribute *value*.
 - **`avoid-parent-traversal` (new, `info`)** takes `locator('..')` out of `no-xpath`. It is a
   recognised Playwright idiom rather than a hand-written path expression — and on the corpus it was
-  **6 of 8** xpath findings, so the `error`-level rule was mostly reporting the quiet case and the
+  **9 of the 11** xpath findings, so the `error`-level rule was mostly reporting the quiet case and the
   real XPath did not stand out.
 - Both new rules ship with a **"Does not fire on"** list that the test suite executes.
 
 **On the score.** It rises: cal.com 69→74, immich 89→91, Ghost 98→99, documenso 89→91,
-mattermost 66→67. That is entirely the two re-gradings — cal.com is exactly 113 findings × 3 weight
-points ÷ (1326 × 5) = 5.1%. **`callSites` is unchanged on all five repos**, which is how you can tell
+mattermost 66→67. That is entirely the two re-gradings — cal.com is 113 findings × 3 weight points plus one
+xpath finding × 4.5, over 1326 × 5 — 5.18%. **`callSites` is unchanged on all five repos**, which is how you can tell
 the rise is not the denominator moving.
 
 `.first()`/`.last()` are **not** extracted yet, against the plan's wording for 11e. They would become
-call sites — the score's denominator — and measured that moves every score 3–8 points, enough to flip
-a `--min-score 70` gate. A precision release must not move the score sideways while claiming to be
-about false positives, so they land with Phase 12, which owns the denominator. The rule is ready.
+call sites — the score's denominator — and that moves every score a *further* 3–8 points on top of
+the re-grading here.
+
+To be straight about it: this release already moves cal.com 69 → 74, which flips a `--min-score 70`
+gate from failing to passing. So "it would flip a gate" is not by itself the reason — this PR does
+that too. The reason is that it would be a **second, unrelated** mechanism moving the same number in
+the same release: a severity re-grade and a denominator change are different claims about a suite,
+and bundling them makes neither checkable. `callSites` is byte-identical on all five repos precisely
+so a reader can attribute this release's movement entirely to the re-grading. The denominator is
+Phase 12's subject; the rule already handles the two calls.
+
+**If you gate on `--min-score`, re-check your threshold on this release.** A gate that was passing
+still passes; one you had tuned tightly is now looser than you meant.
+
+Two rules — `no-deep-css-chain` and `no-nth-child` — now fire on **none** of the five corpus repos,
+so they are covered by unit tests alone. That is recorded in the baseline rather than left for a
+reader to notice.
 
 Also folds in two follow-ups to the tokenizer: `:nth-child(2 of.foo)` with no space after `of` is
 valid CSS that Playwright accepts and was silently dropping its selector, and the differential CI
 step now runs after the corpus exists rather than before it.
+
+**Existing configs and baselines keep working.** A rule split changes finding ids, which would
+otherwise re-report every grandfathered finding as new (measured: 114 on cal.com, on a suite where
+nothing changed) and un-silence a rule someone had set to `off`. Both are handled by a successor map:
+a `--baseline` entry recorded under a rule's previous id still matches (and the comparison reports
+how many did), and a severity set on the old id carries to its successors with a
+`deprecated-rule-id` warning naming the replacement. `GUIDANCE_VERSION` 4 → 5, since the AI guidance
+told agents to "never use `.nth()`" and the analyzer no longer agrees.

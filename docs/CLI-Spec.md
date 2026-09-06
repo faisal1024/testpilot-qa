@@ -10,7 +10,7 @@
 > Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
 > **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5), `analyze`
-> (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, `--min-score` gating,
+> (static Locator Intelligence — Tier 1 rules, Locator Quality Score, `--min-score` gating,
 > `--baseline` no-regression gate, `--reporter table|json|sarif|html`; 3A–3C, 6A–6B, 7A), `doctor`
 > (project diagnostics + AI guidance drift; 4B, 5B), `explain` (rule education; 4A), `fix` (safe
 > mechanical rewrites, dry-run by default; 8A), and `add ai` (safe AI guidance regeneration; 6C).
@@ -445,7 +445,7 @@ invalid; `4` for environment/project setup problems (e.g. missing Playwright or 
 ### 3.5 `testpilot explain <ruleId>` *(MVP — implemented in 4A)*
 
 Explain a rule: why it matters, a bad example, a better example, and guidance — the terminal-side
-education surface. Available for all six MVP Tier 1 rules.
+education surface. Available for every Tier 1 rule.
 
 ```
 testpilot explain no-xpath

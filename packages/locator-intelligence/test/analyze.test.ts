@@ -739,3 +739,63 @@ describe('require-test-tag (opt-in)', () => {
     expect(report.warnings.some((w) => w.code === 'unknown-rule')).toBe(false)
   })
 })
+
+describe('rule splits and existing config', () => {
+  const POSITIONAL = [
+    "import { test } from '@playwright/test'",
+    "test('x', async ({ page }) => {",
+    "  await page.getByRole('listitem').nth(1).click()",
+    "  await page.getByText('Total').locator('..').click()",
+    '})',
+  ].join('\n')
+
+  it('honours `off` on the id a rule was split out of', async () => {
+    // A team that silenced `no-nth-child` was silencing `.nth()`. Getting it
+    // back under an id they have never heard of is a broken promise.
+    writeFixture('tests/a.spec.ts', POSITIONAL)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'no-nth-child': 'off', 'no-xpath': 'off' } }),
+    })
+    expect(report.findings).toEqual([])
+  })
+
+  it('says it did so, rather than inheriting silently', async () => {
+    writeFixture('tests/a.spec.ts', POSITIONAL)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'no-nth-child': 'off' } }),
+    })
+    const warning = report.warnings.find((w) => w.code === 'deprecated-rule-id')
+    expect(warning?.message).toContain('avoid-positional-access')
+  })
+
+  it('lets an explicit setting on the new id win', async () => {
+    writeFixture('tests/a.spec.ts', POSITIONAL)
+    const report = await analyze({
+      cwd: dir,
+      config: config({
+        rules: { 'no-nth-child': 'off', 'avoid-positional-access': 'error' },
+      }),
+    })
+    expect(report.findings.some((f) => f.ruleId === 'avoid-positional-access')).toBe(true)
+  })
+
+  it('does not warn "unknown rule" for a deprecated id', async () => {
+    writeFixture('tests/a.spec.ts', POSITIONAL)
+    const report = await analyze({ cwd: dir, config: config({ rules: { 'no-nth-child': 'off' } }) })
+    expect(report.warnings.some((w) => w.code === 'unknown-rule')).toBe(false)
+  })
+
+  it('warns on an unknown id in ruleOptions instead of failing the load', async () => {
+    writeFixture('tests/a.spec.ts', POSITIONAL)
+    const report = await analyze({
+      cwd: dir,
+      config: {
+        ...config(),
+        ruleOptions: { 'made-up-rule': { maxChainDepth: 2 } } as never,
+      },
+    })
+    expect(report.warnings.some((w) => w.code === 'unknown-rule')).toBe(true)
+  })
+})

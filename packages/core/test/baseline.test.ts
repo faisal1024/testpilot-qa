@@ -115,3 +115,50 @@ describe('compareToBaseline', () => {
     expect(result.newFindings).toHaveLength(1)
   })
 })
+
+describe('rule splits do not invalidate a baseline', () => {
+  // A finding's identity is (ruleId, file, snippet), so renaming a rule made
+  // every grandfathered finding read as new — 114 of them on cal.com, on a
+  // suite where nothing changed. This is the promise the baseline exists for.
+  const under = (ruleId: string): Finding => ({
+    ruleId,
+    category: 'locator',
+    severity: 'warn',
+    message: 'm',
+    file: 'tests/a.spec.ts',
+    line: 1,
+    column: 1,
+    snippet: "page.getByRole('listitem').nth(1)",
+    docsUrl: 'https://example.test',
+  })
+
+  it('matches a finding recorded under the rule it was split out of', () => {
+    const baseline = buildBaseline([under('no-nth-child')])
+    const comparison = compareToBaseline([under('avoid-positional-access')], baseline)
+    expect(comparison.newFindings).toEqual([])
+    expect(comparison.baselinedFindings).toBe(1)
+    expect(comparison.matchedByPreviousId).toBe(1)
+  })
+
+  it('reports how many matched that way, rather than absorbing them silently', () => {
+    const baseline = buildBaseline([under('avoid-positional-access')])
+    expect(
+      compareToBaseline([under('avoid-positional-access')], baseline).matchedByPreviousId,
+    ).toBe(0)
+  })
+
+  it('still calls a genuinely new finding new', () => {
+    const baseline = buildBaseline([under('no-nth-child')])
+    const extra = { ...under('avoid-positional-access'), snippet: 'page.getByRole("row").nth(2)' }
+    expect(compareToBaseline([extra], baseline).newFindings).toHaveLength(1)
+  })
+
+  it('does not let a predecessor entry cover two current findings', () => {
+    const baseline = buildBaseline([under('no-nth-child')])
+    const comparison = compareToBaseline(
+      [under('avoid-positional-access'), under('avoid-positional-access')],
+      baseline,
+    )
+    expect(comparison.newFindings).toHaveLength(1)
+  })
+})

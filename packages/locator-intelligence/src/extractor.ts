@@ -2,6 +2,12 @@ import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './
 import { type AstNode, walk } from './parser.js'
 import { tokenizeSelector } from './selector/tokenize.js'
 
+/**
+ * Note `first`/`last` are absent deliberately. `avoid-positional-access`
+ * already handles them, but extracting them makes them **call sites** — the
+ * score's denominator — which moves every score by 3-8 points. That belongs
+ * with Phase 12, which owns the denominator. See `avoid-positional-access.ts`.
+ */
 const LOCATOR_METHODS = new Set<LocatorApi>([
   'locator',
   'frameLocator',

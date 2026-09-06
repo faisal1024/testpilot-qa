@@ -64,3 +64,28 @@ describe('docs "Does not fire on" examples', () => {
     })
   }
 })
+
+/**
+ * The mirror of the above: every documented "Avoid" example must actually
+ * produce a finding from its own rule.
+ *
+ * Nothing executed `badExample`, which is how two rule pages drifted in
+ * opposite directions at once — `avoid-positional-access` illustrated itself
+ * with `.first()`, which it cannot detect, while `no-nth-child` still showed
+ * `.nth()` as its Avoid case after that moved to another rule. `explain` prints
+ * these, so a wrong one is advice the tool contradicts.
+ */
+describe('docs "Avoid" examples', () => {
+  for (const explanation of Object.values(ruleExplanations)) {
+    const rule = getRule(explanation.id)
+    if (!rule || rule.kind === 'test') {
+      continue
+    }
+    it(`${explanation.id} flags its own bad example`, () => {
+      const contexts = contextsFor(explanation.badExample)
+      expect(contexts.length, `no call site in: ${explanation.badExample}`).toBeGreaterThan(0)
+      const fired = contexts.some((context) => rule.evaluate(context) !== null)
+      expect(fired, `${explanation.id} does not flag its own badExample`).toBe(true)
+    })
+  }
+})

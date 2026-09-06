@@ -182,10 +182,19 @@ describe('no-css-class-selector — nested selectors', () => {
 })
 
 describe('avoid-positional-access', () => {
-  it.each(['nth', 'first', 'last'] as const)('flags .%s()', (apiCall) => {
-    const finding = avoidPositionalAccess.evaluate(ctx({ apiCall }))
-    expect(finding?.message).toContain(`.${apiCall}()`)
+  it('flags .nth()', () => {
+    expect(avoidPositionalAccess.evaluate(ctx({ apiCall: 'nth' }))?.message).toContain('.nth()')
   })
+
+  it.each(['first', 'last'] as const)(
+    'would flag .%s(), which the extractor does not yet emit',
+    (apiCall) => {
+      // Named as latent rather than asserted as behaviour: nothing in the
+      // extractor produces these contexts, so a plain "flags .first()" test
+      // could not fail on any real input.
+      expect(avoidPositionalAccess.evaluate(ctx({ apiCall }))).not.toBeNull()
+    },
+  )
 
   it('is a warning, not an error — positional access over a repeated element is idiomatic', () => {
     expect(avoidPositionalAccess.defaultSeverity).toBe('warn')
@@ -250,3 +259,15 @@ describe('no-deep-css-chain after the split', () => {
 function xpath(selector: string): LocatorContext {
   return ctx({ selector, selectorEngine: 'xpath', parsed: tokenizeSelector(selector) })
 }
+
+describe('avoid-parent-traversal — repeated parent steps', () => {
+  it('flags ../.. as parent traversal, not hand-written XPath', () => {
+    expect(avoidParentTraversal.evaluate(xpath('../..'))).not.toBeNull()
+    expect(noXpath.evaluate(xpath('../..'))).toBeNull()
+  })
+
+  it('leaves a real path to no-xpath', () => {
+    expect(avoidParentTraversal.evaluate(xpath('../div'))).toBeNull()
+    expect(noXpath.evaluate(xpath('../div'))).not.toBeNull()
+  })
+})

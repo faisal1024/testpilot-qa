@@ -9,9 +9,9 @@ import type { ComplexSelector, ParsedSelector } from './types.js'
  * whitespace, when each of those selectors is one step deep. A comma is not a
  * combinator, and a list of shallow selectors is not a deep chain.
  *
- * Nested selectors count — `.a:has(b > c > d)` really does depend on four levels
- * of structure — but a `>>` chain does not add across parts, because each part
- * is matched independently against the previous part's subtree.
+ * Nesting accumulates: `.a b:has(c > d > e)` really does depend on the path to
+ * `b` *and* the path below it. A `>>` chain does not add across parts, because
+ * each part is matched independently against the previous part's subtree.
  */
 export function maxChainDepth(parsed: ParsedSelector): number | null {
   const selectors = cssSelectors(parsed)
@@ -19,18 +19,23 @@ export function maxChainDepth(parsed: ParsedSelector): number | null {
     return null
   }
   let deepest = 0
-  const visit = (list: ComplexSelector[]): void => {
+  // `outer` is the depth already traversed to reach this list. A nested
+  // `:has()` continues the chain rather than restarting it: `.a b:has(c > d)`
+  // walks one step to `b`, one more into the `:has()` subject, then two more —
+  // taking the maximum instead reported 2 and called it clean.
+  const visit = (list: ComplexSelector[], outer: number): void => {
     for (const selector of list) {
-      deepest = Math.max(deepest, selector.combinators.length)
-      for (const compound of selector.compounds) {
+      const depth = outer + selector.combinators.length
+      deepest = Math.max(deepest, depth)
+      for (const [index, compound] of selector.compounds.entries()) {
         for (const pseudo of compound.pseudos) {
           if (pseudo.selectors) {
-            visit(pseudo.selectors)
+            visit(pseudo.selectors, outer + index + 1)
           }
         }
       }
     }
   }
-  visit(selectors)
+  visit(selectors, 0)
   return deepest
 }

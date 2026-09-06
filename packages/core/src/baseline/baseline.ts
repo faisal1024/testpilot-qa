@@ -1,3 +1,4 @@
+import { RULE_PREDECESSORS } from '../analysis/rule-aliases.js'
 import type { Finding } from '../analysis/types.js'
 
 /** Bumped on changes to the baseline file shape. */
@@ -26,6 +27,12 @@ export interface BaselineComparison {
   newFindings: Finding[]
   /** How many current findings were absorbed by the baseline. */
   baselinedFindings: number
+  /**
+   * Of those, how many matched under a rule's **previous** id — a baseline
+   * recorded before that rule was split or renamed. Reported rather than
+   * absorbed silently, so a team can see why their baseline still fits.
+   */
+  matchedByPreviousId: number
   total: number
 }
 
@@ -98,16 +105,29 @@ export function compareToBaseline(findings: Finding[], baseline: Baseline): Base
 
   const newFindings: Finding[] = []
   let baselinedFindings = 0
+  let matchedByPreviousId = 0
   for (const finding of findings) {
-    const key = findingKey(finding)
-    const left = remaining.get(key) ?? 0
-    if (left > 0) {
-      remaining.set(key, left - 1)
-      baselinedFindings += 1
-    } else {
+    // The finding's own identity first, then any id it used to be recorded
+    // under. Without this a rule split re-reports every grandfathered finding
+    // as new, failing a gate on a suite that did not change — the exact
+    // brownfield promise the baseline exists to keep.
+    const keys = [
+      findingKey(finding),
+      ...(RULE_PREDECESSORS[finding.ruleId] ?? []).map((ruleId) =>
+        findingKey({ ...finding, ruleId }),
+      ),
+    ]
+    const matched = keys.find((key) => (remaining.get(key) ?? 0) > 0)
+    if (matched === undefined) {
       newFindings.push(finding)
+      continue
+    }
+    remaining.set(matched, (remaining.get(matched) ?? 0) - 1)
+    baselinedFindings += 1
+    if (matched !== keys[0]) {
+      matchedByPreviousId += 1
     }
   }
 
-  return { newFindings, baselinedFindings, total: findings.length }
+  return { newFindings, baselinedFindings, total: findings.length, matchedByPreviousId }
 }

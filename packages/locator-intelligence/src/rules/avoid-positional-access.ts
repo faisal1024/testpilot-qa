@@ -25,10 +25,16 @@ export const avoidPositionalAccess: Rule = {
     if (context.apiCall !== 'nth' && context.apiCall !== 'first' && context.apiCall !== 'last') {
       return null
     }
+    // Telling someone already using getByTestId() to "use getByTestId()" is the
+    // finding being unactionable. On cal.com the four commonest shapes are all
+    // `getByTestId(...).nth(0)`, so the useful advice there is narrowing, not
+    // re-locating.
+    const alreadyTargeted = context.parentApi?.startsWith('getBy')
     return {
       message: `Positional access (.${context.apiCall}()) depends on how many elements match and in what order.`,
-      suggestion:
-        'Where the element is distinguishable, target it directly — getByRole() with a name, or getByTestId(). Positional access over an intentionally repeated element is fine.',
+      suggestion: alreadyTargeted
+        ? `The ${context.parentApi}() already narrows this — if the match is ambiguous, prefer .filter({ hasText }) or a more specific name over an index. If the collection is intentionally repeated (a row, a list item), this is fine.`
+        : 'Where the element is distinguishable, target it directly — getByRole() with a name, or getByTestId(). Positional access over an intentionally repeated element is fine.',
     }
   },
 }
