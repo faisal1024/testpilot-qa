@@ -53,7 +53,7 @@ export async function fixCommand(
     scopes: resolved.scopes,
   })
   if (files.length === 0) {
-    failNoFilesMatched(globals, patterns, config, filepath, discovery)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
   // Exactly the base `analyze` reports against, so the two commands agree and a
   // dry-run diff still applies from the project root.

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import {
-  type ConfigDiscovery,
-  type TestPilotConfig,
+  type ResolvedDiscovery,
+  describeRoots,
   formatDiscoverySource,
   isDirectory,
 } from '@testpilot/core'
@@ -22,13 +22,18 @@ import type { GlobalOptions } from './global-options.js'
 export function failNoFilesMatched(
   globals: GlobalOptions,
   patterns: string[],
-  config: TestPilotConfig,
+  resolved: ResolvedDiscovery,
   configPath: string | null,
-  discovery: ConfigDiscovery,
+  rootDir: string,
 ): never {
-  // Name the real source. Attributing a Playwright-supplied glob to "the built-in
-  // defaults" sends the user to edit a file that has nothing to do with the problem.
-  const includeHint = `include ${JSON.stringify(config.include)} ${formatDiscoverySource(discovery, 'include')} (exclude ${formatDiscoverySource(discovery, 'exclude')})`
+  const { config, discovery } = resolved
+  // Name the real source AND the real selectors. Printing `config.include` here
+  // showed the user a glob that never ran, attributed to a file it isn't in.
+  const selectors = [
+    ...new Set(resolved.scopes.flatMap((scope) => scope.includeGlobs)),
+    ...new Set(resolved.scopes.flatMap((scope) => scope.matchRegex.map((r) => `/${r}/`))),
+  ]
+  const includeHint = `include ${JSON.stringify(selectors)} ${formatDiscoverySource(discovery, 'include')} (exclude ${formatDiscoverySource(discovery, 'exclude')})`
   if (patterns.length > 0) {
     const allDirectories = patterns.every((pattern) => isDirectory(resolve(globals.cwd, pattern)))
     if (allDirectories) {
@@ -50,7 +55,7 @@ export function failNoFilesMatched(
   fail(
     globals,
     [
-      `No test files matched ${includeHint} under ${discovery.roots.length > 0 ? discovery.roots.join(', ') : `testDir "${config.testDir}"`} (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
+      `No test files matched ${includeHint} under "${describeRoots(discovery.roots, rootDir)}" (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
       ...(discovery.playwrightConfigIgnored
         ? [
             `A Playwright config was found at ${discovery.playwrightConfigIgnored.path} but not used for discovery: ${discovery.playwrightConfigIgnored.reason}.`,

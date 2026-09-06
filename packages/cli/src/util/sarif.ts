@@ -1,4 +1,5 @@
-import { relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   type AnalysisReport,
   type Finding,
@@ -90,8 +91,15 @@ export interface SarifOptions {
 }
 
 function artifactUri(report: AnalysisReport, file: string, cwd: string | undefined): string {
-  if (!cwd || !report.rootDir) return file
-  return relative(cwd, resolve(report.rootDir, file)).split(sep).join('/') || file
+  const absolute = report.rootDir ? resolve(report.rootDir, file) : file
+  // A file outside the project itself (a Playwright `testDir: '../shared'`) has no
+  // valid checkout-relative URI; code scanning rejects one and drops the upload. An
+  // absolute file URI is at least well-formed. A path that merely escapes `--cwd`
+  // (running from a sub-directory) is fine and stays relative, as documented.
+  if (file.startsWith('..') || isAbsolute(file)) {
+    return pathToFileURL(absolute).href
+  }
+  return cwd ? relative(cwd, absolute).split(sep).join('/') || file : file
 }
 
 export function toSarif(report: AnalysisReport, options: SarifOptions = {}): SarifLog {

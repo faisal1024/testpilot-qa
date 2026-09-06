@@ -97,6 +97,43 @@ describe('runDoctor', () => {
     expect(check?.remediation).toContain('testpilot.config.ts')
   })
 
+  it('does not claim a test directory exists when the config failed to load', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'testpilot.config.ts'), 'export default { include: [123] }\n')
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(report, 'config')?.status).toBe('fail')
+    // Nothing was resolved, so there is no directory to pronounce on.
+    expect(checkById(report, 'test-directory')).toBeUndefined()
+  })
+
+  it('names only the roots that are actually missing', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { projects: [{ testDir: './a' }, { testDir: './nope' }] }\n",
+    )
+    mkdirSync(join(dir, 'a'))
+    const check = checkById(await runDoctor({ cwd: dir, nodeVersion: NODE_OK }), 'test-directory')
+    expect(check?.status).toBe('warn')
+    expect(check?.message).toContain('nope')
+    expect(check?.message).not.toContain('"a, nope"')
+    expect(check?.details?.missing).toEqual([join(dir, 'nope')])
+  })
+
+  it('tells a repo with several Playwright configs to pick one, not to add one', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    for (const name of ['pkg-a', 'pkg-b']) {
+      mkdirSync(join(dir, name), { recursive: true })
+      writeFileSync(join(dir, name, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    }
+    const check = checkById(
+      await runDoctor({ cwd: dir, nodeVersion: NODE_OK }),
+      'playwright-config',
+    )
+    expect(check?.message).toContain('Several Playwright configs found')
+    expect(check?.remediation).toContain('pick one')
+  })
+
   it('honors --no-playwright-discovery, so it still predicts analyze', async () => {
     writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
     writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")

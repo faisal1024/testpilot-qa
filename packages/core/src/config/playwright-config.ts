@@ -182,7 +182,8 @@ function exportedConfigObject(root: Node): Node | null {
 }
 
 interface RawSelectors {
-  testDir: string | null
+  /** `null` = not declared (inherit); `'unresolved'` = declared but not a literal. */
+  testDir: string | null | 'unresolved'
   match: PathPattern[] | null
   ignore: PathPattern[] | null
 }
@@ -236,8 +237,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     const testDirNode = propertyValue(object, 'testDir')
     if (testDirNode) {
       const value = staticString(testDirNode)
-      if (value === null) unresolved.push('testDir')
-      else result.testDir = value
+      if (value === null) {
+        // Declared but unreadable. Inheriting the parent's root here would scan a
+        // directory this project never selected and score it as if it had.
+        unresolved.push('testDir')
+        result.testDir = 'unresolved'
+      } else {
+        result.testDir = value
+      }
     }
     for (const [key, field] of [
       ['testMatch', 'match'],
@@ -253,29 +260,50 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   }
 
   const base = readSelectors(config)
-  const scopes: PlaywrightScope[] = []
   const declares = (raw: RawSelectors) =>
     raw.testDir !== null || raw.match !== null || raw.ignore !== null
 
   // Playwright resolves testDir against the config file's directory, and defaults
   // it to that directory. A project inherits any selector it doesn't set itself.
-  const toScope = (raw: RawSelectors): PlaywrightScope => ({
-    root: resolve(configDir, raw.testDir ?? base.testDir ?? '.'),
-    match: raw.match ?? base.match ?? [],
-    ignore: raw.ignore ?? base.ignore ?? [],
-  })
+  const toScope = (raw: RawSelectors): PlaywrightScope | null => {
+    const testDir = raw.testDir ?? base.testDir ?? '.'
+    if (testDir === 'unresolved') return null
+    return {
+      root: resolve(configDir, testDir),
+      match: raw.match ?? base.match ?? [],
+      ignore: raw.ignore ?? base.ignore ?? [],
+    }
+  }
 
+  const projectSelectors: RawSelectors[] = []
   const projects = propertyValue(config, 'projects')
   if (projects?.type === 'ArrayExpression') {
     for (const raw of (projects.elements as unknown[]) ?? []) {
       const project = asNode(raw)
-      if (project?.type !== 'ObjectExpression') continue
-      const selectors = readSelectors(project)
-      if (declares(selectors)) scopes.push(toScope(selectors))
+      if (project?.type === 'ObjectExpression') projectSelectors.push(readSelectors(project))
     }
   }
-  if (scopes.length === 0 && declares(base)) {
-    scopes.push(toScope(base))
+
+  // **Every** project becomes a scope, not only those declaring a selector.
+  // Playwright's documented auth pattern — one `setup` project with a testMatch
+  // beside browser projects with none — would otherwise analyze the setup files
+  // alone and report a clean score over a fraction of the suite.
+  const candidates =
+    projectSelectors.length > 0 && (declares(base) || projectSelectors.some(declares))
+      ? projectSelectors
+      : declares(base)
+        ? [base]
+        : []
+
+  const seen = new Set<string>()
+  const scopes: PlaywrightScope[] = []
+  for (const selectors of candidates) {
+    const scope = toScope(selectors)
+    if (!scope) continue
+    const key = JSON.stringify([scope.root, scope.match, scope.ignore])
+    if (seen.has(key)) continue
+    seen.add(key)
+    scopes.push(scope)
   }
 
   const unique = [...new Set(unresolved)]

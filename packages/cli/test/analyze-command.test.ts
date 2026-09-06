@@ -173,7 +173,7 @@ describe('analyze — nothing matched is never a pass', () => {
   it('explains where discovery settings came from under --verbose', async () => {
     const { stderr } = await runAnalyze(['--verbose'])
     expect(stderr).toContain('discovery: testDir "tests" (built-in default)')
-    expect(stderr).toContain('include (built-in default)')
+    expect(stderr).toContain('(built-in default)')
   })
 
   it("says on stderr when another tool's config chose the files", async () => {
@@ -228,9 +228,11 @@ describe('analyze — nothing matched is never a pass', () => {
     )
   })
 
-  it('keeps reported paths inside rootDir when a Playwright testDir escapes it', async () => {
-    // A sub-directory config with `testDir: '../shared'` would otherwise emit `../`
-    // SARIF URIs, which GitHub code scanning rejects.
+  it('keeps rootDir stable and emits a file URI when a Playwright testDir escapes it', async () => {
+    // `rootDir` must stay a pure function of repo layout: deriving it from the
+    // scanned roots made baseline identities shift whenever a config gained an
+    // unrelated project. A file outside the project is reported honestly with `..`,
+    // and SARIF — where `..` is rejected by code scanning — falls back to a file URI.
     writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
     mkdirSync(join(dir, 'repo'), { recursive: true })
     mkdirSync(join(dir, 'shared'), { recursive: true })
@@ -240,11 +242,38 @@ describe('analyze — nothing matched is never a pass', () => {
       "export default { testDir: '../shared' }\n",
     )
     writeFileSync(join(dir, 'repo', 'package.json'), '{"name":"inner"}\n')
+
     const { stdout } = await runAnalyze(['--json', '--cwd', join(dir, 'repo')])
     const report = JSON.parse(stdout)
-    expect(report.summary.filesAnalyzed).toBe(1)
-    expect(report.findings[0].file).not.toContain('..')
-    expect(report.findings[0].file).toBe('shared/a.spec.ts')
+    expect(report.rootDir).toBe(join(dir, 'repo'))
+    expect(report.findings[0].file).toBe('../shared/a.spec.ts')
+
+    const sarifRun = await runAnalyze(['--reporter', 'sarif', '--cwd', join(dir, 'repo')])
+    const uri = JSON.parse(sarifRun.stdout).runs[0].results[0].locations[0].physicalLocation
+      .artifactLocation.uri
+    expect(uri.startsWith('file://')).toBe(true)
+    expect(uri).not.toContain('/../')
+  })
+
+  it('keeps baseline identities stable when an unrelated project root is added', async () => {
+    // Adding a project that scans elsewhere must not rewrite existing findings'
+    // paths — that turned every baselined finding into a regression.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "page.locator('//button')\n")
+    const pw = join(dir, 'playwright.config.ts')
+    writeFileSync(pw, "export default { projects: [{ testDir: './e2e' }] }\n")
+    const before = JSON.parse((await runAnalyze(['--json'])).stdout).findings[0].file
+
+    mkdirSync(join(dir, 'legacy'), { recursive: true })
+    writeFileSync(join(dir, 'legacy', 'b.spec.ts'), "page.locator('//a')\n")
+    writeFileSync(
+      pw,
+      "export default { projects: [{ testDir: './e2e' }, { testDir: './legacy' }] }\n",
+    )
+    const after = JSON.parse((await runAnalyze(['--json'])).stdout)
+    expect(after.findings.map((f: { file: string }) => f.file)).toContain(before)
+    expect(before).toBe('e2e/a.spec.ts')
   })
 
   it('analyzes an explicitly named file inside an excluded directory', async () => {

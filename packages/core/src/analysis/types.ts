@@ -20,7 +20,7 @@ export interface Finding {
   category: RuleCategory
   severity: FindingSeverity
   message: string
-  /** Path relative to the analysis cwd, using POSIX separators (stable across machines). */
+  /** Path relative to `AnalysisReport.rootDir`, using POSIX separators (stable across machines). */
   file: string
   /** 1-based line. */
   line: number

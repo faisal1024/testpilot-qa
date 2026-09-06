@@ -540,9 +540,13 @@ When `testpilot.config.ts` does not set `testDir` (or does not exist), TestPilot
 them. If the root has no Playwright config, one first-level sub-directory is checked (real suites keep
 it in `e2e/`); an ambiguous result adopts nothing.
 
-- Each `projects[]` entry becomes its own scope: a root plus the `testMatch`/`testIgnore` that apply
-  **to it**, inheriting the top-level values it doesn't set. One project's `testIgnore` can never
-  delete another project's files.
+- **Every** `projects[]` entry becomes its own scope: a root plus the `testMatch`/`testIgnore` that
+  apply **to it**, inheriting the top-level values it doesn't set — including projects that declare no
+  selectors at all, as in Playwright's documented `setup` pattern. One project's `testIgnore` can
+  never delete another project's files. A project whose `testDir` is computed is skipped rather than
+  silently scanned at its parent's root.
+- An explicit `include` in `testpilot.config.ts` outranks Playwright's `testMatch`, exactly as an
+  explicit `testDir` does.
 - `node_modules` is **always** skipped, whatever `exclude` says.
 - The config is **parsed, never executed.** `analyze` is static and offline, and is routinely pointed
   at a repository the user is only evaluating. A value that isn't a literal (`testDir: process.env.DIR
@@ -554,8 +558,10 @@ it in `e2e/`); an ambiguous result adopts nothing.
 - Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
 - `--no-playwright-discovery` turns the fallback off, for `analyze`, `fix`, and `doctor` alike.
   Explicit CLI patterns skip it automatically, as does an explicit `testDir` in `testpilot.config.ts`.
-- Reported paths always stay inside `rootDir`: if an adopted `testDir` points outside the config's
-  directory, `rootDir` is re-anchored to the common ancestor so SARIF URIs never contain `..`.
+- `rootDir` is a pure function of repo layout, never of the roots discovery resolves — it is the
+  baseline identity anchor, so adding an unrelated `projects[]` entry can't rewrite existing findings'
+  paths. A test root outside the project is reported honestly with `../`, and the SARIF reporter emits
+  an absolute `file://` URI for it (code scanning rejects `..` and would drop the whole upload).
 
 ---
 

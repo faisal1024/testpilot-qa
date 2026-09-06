@@ -74,7 +74,51 @@ describe('readPlaywrightTestSettings — static parsing', () => {
     ])
   })
 
-  it('unions projects[] test roots and matchers with the top level', () => {
+  it("keeps a project that declares no selectors — Playwright's auth-setup shape", () => {
+    // One project declares a testMatch, the browser projects declare nothing and
+    // inherit the whole suite. Dropping them analyzed only the setup files and
+    // reported a clean score over a fraction of the suite.
+    const path = writeFile(
+      'playwright.config.ts',
+      `export default {
+  testDir: './e2e',
+  projects: [
+    { name: 'setup', testMatch: /.*\\.setup\\.ts/ },
+    { name: 'chromium', dependencies: ['setup'] },
+    { name: 'firefox', dependencies: ['setup'] },
+  ],
+}
+`,
+    )
+    const read = readSettings(path)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok') return
+    // setup's regex scope, plus one deduped inherited scope for the browsers.
+    expect(read.settings.scopes).toHaveLength(2)
+    expect(read.settings.scopes.every((scope) => scope.root === join(dir, 'e2e'))).toBe(true)
+    expect(read.settings.scopes[1]?.match).toEqual([])
+  })
+
+  it('skips a project whose testDir is computed, rather than scanning the parent root', () => {
+    const path = writeFile(
+      'playwright.config.ts',
+      `export default {
+  testDir: './e2e',
+  projects: [
+    { name: 'a', testDir: process.env.DIR, testMatch: '**/*.spec.ts' },
+    { name: 'b', testDir: './b' },
+  ],
+}
+`,
+    )
+    const read = readSettings(path)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok') return
+    expect(read.settings.scopes.map((scope) => scope.root)).toEqual([join(dir, 'b')])
+    expect(read.unresolved).toContain('testDir')
+  })
+
+  it('gives every projects[] entry its own root and selectors', () => {
     // cal.com's real shape: nothing at the top level, everything in projects[].
     const path = writeFile(
       'playwright.config.ts',

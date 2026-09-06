@@ -172,6 +172,9 @@ export function resolveDiscovery(
   }
 
   const scopes: DiscoveryScope[] = []
+  // An explicit `include` is the user's choice and outranks Playwright's `testMatch`,
+  // exactly as an explicit `testDir` does.
+  const includeIsOurs = discovery.include === 'default'
   let adoptedIgnore = false
   for (const scope of read.settings.scopes) {
     const match = splitPatterns(scope.match)
@@ -182,8 +185,10 @@ export function resolveDiscovery(
       // Fall back to our own globs when Playwright selects purely by RegExp, so a
       // scope always has a selector and `config.include` never has to be emptied.
       includeGlobs:
-        match.globs.length > 0 || match.regexes.length > 0 ? match.globs : config.include,
-      matchRegex: match.regexes,
+        includeIsOurs && (match.globs.length > 0 || match.regexes.length > 0)
+          ? match.globs
+          : config.include,
+      matchRegex: includeIsOurs ? match.regexes : [],
       excludeGlobs: [...config.exclude, ...ignore.globs],
       ignoreRegex: ignore.regexes,
     })
@@ -191,8 +196,10 @@ export function resolveDiscovery(
 
   discovery.testDir = 'playwright-config'
   discovery.roots = [...new Set(scopes.map((scope) => scope.root))]
+  // Identical scopes would each trigger their own glob pass over the same tree.
   discovery.playwrightConfigPath = configPath
   if (
+    includeIsOurs &&
     scopes.some((scope) => scope.matchRegex.length > 0 || scope.includeGlobs !== config.include)
   ) {
     discovery.include = 'playwright-config'

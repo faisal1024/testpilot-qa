@@ -69,7 +69,7 @@ export async function analyzeCommand(
   }
   // An empty baseline would grandfather nothing and hide the discovery problem.
   if (noFilesMatched && options.updateBaseline) {
-    failNoFilesMatched(globals, patterns, config, filepath, discovery)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
 
   // --- Baseline ---
@@ -120,7 +120,7 @@ export async function analyzeCommand(
   // The human table/HTML would just print a meaningless 100 (A), so those fail first.
   const machineReadable = reporter === 'json' || reporter === 'sarif'
   if (noFilesMatched && !machineReadable) {
-    failNoFilesMatched(globals, patterns, config, filepath, discovery)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
   const sarifReport = newFindings === undefined ? report : { ...report, findings: newFindings }
   if (options.output) {
@@ -160,7 +160,7 @@ export async function analyzeCommand(
   }
 
   if (noFilesMatched) {
-    failNoFilesMatched(globals, patterns, config, filepath, discovery)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
 
   // --- Gating ---

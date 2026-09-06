@@ -109,7 +109,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       code: 'no-files-matched',
       message: usingPatterns
         ? `No test files matched ${options.patterns?.join(', ')}.`
-        : `No test files matched under ${describeScanned(options)}.`,
+        : `No test files matched under ${describeScanned(options, reportBase)}.`,
     })
   }
 
@@ -190,12 +190,18 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 }
 
 /** Names what was actually scanned — never `config.testDir`, which discovery may not have used. */
-function describeScanned(options: AnalyzeOptions): string {
+function describeScanned(options: AnalyzeOptions, base: string): string {
   const roots = options.discovery?.roots ?? []
-  if (roots.length > 0) {
-    return `${roots.join(', ')} (include ${JSON.stringify(options.scopes?.[0]?.includeGlobs ?? options.config.include)})`
-  }
-  return `testDir "${options.config.testDir}" (include ${JSON.stringify(options.config.include)})`
+  const selectors = [
+    ...new Set((options.scopes ?? []).flatMap((scope) => scope.includeGlobs)),
+    ...new Set((options.scopes ?? []).flatMap((scope) => scope.matchRegex.map((r) => `/${r}/`))),
+  ]
+  const where =
+    roots.length > 0
+      ? roots.map((root) => toPosix(relative(base, root)) || '.').join(', ')
+      : `testDir "${options.config.testDir}"`
+  const include = selectors.length > 0 ? selectors : options.config.include
+  return `${where} (include ${JSON.stringify(include)})`
 }
 
 function errorMessage(error: unknown): string {

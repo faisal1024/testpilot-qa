@@ -18,12 +18,7 @@ import {
   resolveDiscovery,
 } from '../config/resolve-discovery.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
-import {
-  findPlaywrightConfig,
-  findProjectRoot,
-  isDirectory,
-  resolvePlaywrightBin,
-} from '../project/discovery.js'
+import { findProjectRoot, isDirectory, resolvePlaywrightBin } from '../project/discovery.js'
 
 /**
  * Bumped on changes to the doctor report shape.
@@ -134,7 +129,20 @@ function checkPlaywrightInstalled(binPath: string | null): DoctorCheck {
       }
 }
 
-function checkPlaywrightConfig(configPath: string | null): DoctorCheck {
+function checkPlaywrightConfig(configPath: string | null, ambiguous: string[] = []): DoctorCheck {
+  // "No Playwright config found — add one" is nonsense on a repo that has two.
+  if (!configPath && ambiguous.length > 0) {
+    return {
+      id: 'playwright-config',
+      title: 'Playwright config',
+      category: 'project',
+      status: 'warn',
+      message: `Several Playwright configs found: ${ambiguous.join(', ')}.`,
+      remediation:
+        'Set `playwrightConfig` in testpilot.config.ts to pick one, or set `testDir` explicitly.',
+      details: { candidates: ambiguous },
+    }
+  }
   return configPath
     ? {
         id: 'playwright-config',
@@ -154,13 +162,16 @@ function checkPlaywrightConfig(configPath: string | null): DoctorCheck {
 }
 
 function checkTestDirectory(
-  exists: boolean,
+  missingRoots: string[],
   discovery: ConfigDiscovery,
   rootDir: string,
 ): DoctorCheck {
   // Always name what discovery actually resolved. `config.testDir` is not it when
-  // the Playwright config supplied the roots, or when there are several.
+  // the Playwright config supplied the roots, or when there are several. Only the
+  // directories that are actually missing are named as missing.
   const testDir = describeRoots(discovery.roots, rootDir)
+  const missing = describeRoots(missingRoots, rootDir)
+  const exists = discovery.roots.length > 0 && missingRoots.length === 0
   // Naming the source turns "was not found" from a puzzle into an instruction.
   const source =
     discovery.testDir === 'playwright-config'
@@ -182,12 +193,15 @@ function checkTestDirectory(
         title: 'Test directory',
         category: 'project',
         status: 'warn',
-        message: `Test directory "${testDir}"${source} was not found.`,
+        message:
+          discovery.roots.length === 0
+            ? 'No test directory could be resolved.'
+            : `Test director${missingRoots.length === 1 ? 'y' : 'ies'} "${missing}"${source} ${missingRoots.length === 1 ? 'was' : 'were'} not found.`,
         remediation:
           discovery.testDir === 'default'
             ? 'Set `testDir` in testpilot.config.ts (or add a Playwright config), or scaffold with `testpilot init`.'
             : 'Create it, or point `testDir` at your suite.',
-        details: { testDir, source: discovery.testDir },
+        details: { testDir, missing: missingRoots, source: discovery.testDir },
       }
 }
 
@@ -398,21 +412,29 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   // after naming the one discovery just read.
   const located = findPlaywrightConfigNearby(configDir ?? projectRoot, config.playwrightConfig)
   const playwrightConfigPath = located && 'path' in located ? located.path : null
+  const ambiguousConfigs = located && 'ambiguous' in located ? located.ambiguous : []
   // Resolve testDir exactly as `analyze`/`fix` do (see resolveRootDir in the CLI):
   // the config file's directory, else the project root. `doctor` must predict what
   // `analyze` will do, so these two fallbacks have to stay in step.
-  const testDirExists = roots.every((root) => isDirectory(root))
+  const missingRoots = roots.filter((root) => !isDirectory(root))
+  const testDirExists = roots.length > 0 && missingRoots.length === 0
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),
     checkPackageJson(projectRoot, hasPackageJson),
     checkPlaywrightInstalled(resolvePlaywrightBin(projectRoot)),
-    checkPlaywrightConfig(playwrightConfigPath),
+    checkPlaywrightConfig(playwrightConfigPath, ambiguousConfigs),
     configCheck,
-    checkTestDirectory(testDirExists, discovery, configDir ?? projectRoot),
+    ...(configCheck.status === 'fail'
+      ? [] // A config that failed to load selects nothing; there is no directory to judge.
+      : [checkTestDirectory(missingRoots, discovery, configDir ?? projectRoot)]),
     checkIncludeGlobs(config.include),
     ...(discovery.playwrightConfigIgnored ? [checkPlaywrightDiscovery(discovery)] : []),
-    checkProjectStructure(configFilePresent, playwrightConfigPath !== null, testDirExists),
+    checkProjectStructure(
+      configFilePresent,
+      playwrightConfigPath !== null || ambiguousConfigs.length > 0,
+      testDirExists,
+    ),
   ]
   // Guidance files are a TestPilot-project concern. On a repo that has not adopted
   // TestPilot, reporting four "missing" files is noise about someone else's project.

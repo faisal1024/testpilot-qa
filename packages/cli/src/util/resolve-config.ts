@@ -1,11 +1,8 @@
 import { dirname } from 'node:path'
-import { relative, resolve, sep } from 'node:path'
 import {
-  type ConfigDiscovery,
   ConfigError,
   type LoadConfigResult,
   type ResolvedDiscovery,
-  type TestPilotConfig,
   describeRoots,
   findProjectRoot,
   formatDiscoverySource,
@@ -64,50 +61,45 @@ export async function resolveDiscoveryOrExit(
   patterns: string[],
 ): Promise<DiscoveryResult> {
   const loaded = await resolveConfigOrExit(globals)
-  const configRoot = resolveRootDir(globals.cwd, loaded.filepath)
+  // `rootDir` is a pure function of repo layout — never of the roots discovery
+  // happens to resolve. It is the baseline identity anchor: deriving it from the
+  // scanned set meant adding one unrelated `projects[]` entry silently rewrote every
+  // reported path and invalidated every baselined finding. Roots that fall outside
+  // it produce `../` paths, which the SARIF reporter clamps at its own boundary.
+  const rootDir = resolveRootDir(globals.cwd, loaded.filepath)
   const resolved = resolveDiscovery(loaded, {
-    rootDir: configRoot,
+    rootDir,
     disablePlaywrightFallback: patterns.length > 0 || globals.playwrightDiscovery === false,
   })
-  // A Playwright `testDir` may point outside the config's directory. Reported paths
-  // must stay inside `rootDir` — `../` segments make SARIF unusable to code scanning
-  // — so anchor at the common ancestor of everything actually scanned.
-  const rootDir = commonAncestor([configRoot, ...resolved.discovery.roots])
-  announceDiscovery(globals, resolved.config, resolved.discovery, rootDir)
+  announceDiscovery(globals, resolved, patterns, rootDir)
   return { ...resolved, filepath: loaded.filepath, rootDir }
 }
 
-/** Deepest directory containing every path given. */
-function commonAncestor(paths: string[]): string {
-  const split = paths.filter(Boolean).map((path) => resolve(path).split(sep))
-  const first = split[0]
-  if (!first) return process.cwd()
-  const shared: string[] = []
-  for (let i = 0; i < first.length; i += 1) {
-    const segment = first[i]
-    if (!split.every((parts) => parts[i] === segment)) break
-    shared.push(segment as string)
+/** The selectors actually used, across every scope — never `config.include`. */
+export function effectiveSelectors(resolved: ResolvedDiscovery): {
+  globs: string[]
+  regexes: string[]
+} {
+  return {
+    globs: [...new Set(resolved.scopes.flatMap((scope) => scope.includeGlobs))],
+    regexes: [...new Set(resolved.scopes.flatMap((scope) => scope.matchRegex))],
   }
-  return shared.join(sep) || sep
 }
 
 /**
  * One-line, human-readable account of where discovery settings came from. Names the
- * directories actually scanned, never `config.testDir` — which a Playwright-sourced
- * run does not use, and which several `projects[]` roots cannot be squeezed into.
+ * directories actually scanned and the selectors actually used — never
+ * `config.testDir`/`config.include`, which a Playwright-sourced run does not use.
  */
-export function describeDiscovery(
-  config: TestPilotConfig,
-  discovery: ConfigDiscovery,
-  rootDir: string,
-): string {
-  const scanned =
-    discovery.roots.length > 0 ? describeRoots(discovery.roots, rootDir) : `${config.testDir}`
+export function describeDiscovery(resolved: ResolvedDiscovery, rootDir: string): string {
+  const { discovery } = resolved
+  const { globs, regexes } = effectiveSelectors(resolved)
+  const selectors = [...globs, ...regexes.map((source) => `/${source}/`)]
   const parts = [
-    `testDir "${scanned}" (${formatDiscoverySource(discovery, 'testDir')})`,
-    `include (${formatDiscoverySource(discovery, 'include')})`,
+    `testDir "${describeRoots(discovery.roots, rootDir)}" (${formatDiscoverySource(discovery, 'testDir')})`,
+    `include ${JSON.stringify(selectors)} (${formatDiscoverySource(discovery, 'include')})`,
   ]
-  if (discovery.exclude !== 'default') {
+  if (discovery.exclude !== 'default' || resolved.scopes.some((s) => s.ignoreRegex.length > 0)) {
     parts.push(`exclude (${formatDiscoverySource(discovery, 'exclude')})`)
   }
   return `discovery: ${parts.join(', ')}`
@@ -120,15 +112,18 @@ export function describeDiscovery(
  */
 function announceDiscovery(
   globals: GlobalOptions,
-  config: TestPilotConfig,
-  discovery: ConfigDiscovery,
+  resolved: ResolvedDiscovery,
+  patterns: string[],
   rootDir: string,
 ): void {
   if (globals.quiet) return
-  if (globals.verbose) {
-    console.error(`[testpilot] ${describeDiscovery(config, discovery, rootDir)}`)
+  const { discovery } = resolved
+  // With explicit patterns nothing was discovered — describing a testDir that was
+  // never consulted (and often does not exist) is just noise.
+  if (globals.verbose && patterns.length === 0) {
+    console.error(`[testpilot] ${describeDiscovery(resolved, rootDir)}`)
   }
-  if (discovery.playwrightConfigPath && !globals.verbose) {
+  if (discovery.playwrightConfigPath && !globals.verbose && patterns.length === 0) {
     console.error(
       `[testpilot] Scanning ${describeRoots(discovery.roots, rootDir)} from ${discovery.playwrightConfigPath} (no testpilot.config.ts setting for testDir).`,
     )
