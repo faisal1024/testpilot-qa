@@ -70,9 +70,11 @@ function scoreCard(score: AnalysisReport['score'], summary: AnalysisReport['summ
     .join('')
   return [
     '<section class="score-card">',
-    `<div class="headline ${gradeClass(score.grade)}">`,
-    `<div class="score-number">${score.score}</div>`,
-    `<div class="score-grade">Grade ${esc(score.grade)}</div>`,
+    `<div class="headline ${score.grade === null ? '' : gradeClass(score.grade)}">`,
+    `<div class="score-number">${score.score === null ? '&mdash;' : score.score}</div>`,
+    score.grade === null
+      ? '<div class="score-grade">Not enough evidence — no call-site could be inspected</div>'
+      : `<div class="score-grade">Grade ${esc(score.grade)}</div>`,
     `<div class="score-meta">Locator Quality Score · ${score.callSites} call-site(s)</div>`,
     '</div>',
     `<ul class="subscores">${rows}</ul>`,

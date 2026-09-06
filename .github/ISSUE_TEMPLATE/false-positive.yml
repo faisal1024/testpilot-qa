@@ -11,8 +11,8 @@ body:
     id: rule
     attributes:
       label: Rule id
-      description: The `ruleId` from the report, e.g. `prefer-user-facing-locator`.
-      placeholder: prefer-user-facing-locator
+      description: The `ruleId` from the report, e.g. `prefer-semantic-locator`.
+      placeholder: prefer-semantic-locator
     validations:
       required: true
   - type: textarea

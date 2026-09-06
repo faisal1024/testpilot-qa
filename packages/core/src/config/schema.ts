@@ -111,6 +111,19 @@ export const configSchema = z
           })
           .strict()
           .default({}),
+        'prefer-get-by-test-id': z
+          .object({
+            /**
+             * Attribute names that count as a test id. Mirror the project's
+             * Playwright `testIdAttribute` here; the default list is the three
+             * spellings Playwright's own docs name.
+             */
+            testIdAttributes: z
+              .array(z.string().min(1))
+              .default(['data-testid', 'data-test-id', 'data-test']),
+          })
+          .strict()
+          .default({}),
       })
       // Not `.strict()`: an unknown id here should warn like a typo in `rules`
       // does, not fail the whole config load. A rule that is renamed later

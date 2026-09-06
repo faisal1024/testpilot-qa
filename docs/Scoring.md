@@ -46,9 +46,9 @@ Findings are weighted by severity. The defaults:
 | `info`  | **0.5** | A minor nudge. |
 
 The shipped default severities are: **`error`** — `no-xpath`, `no-css-class-selector`,
-`no-nth-child`, `no-hard-wait`; **`warn`** — `no-deep-css-chain`, `prefer-user-facing-locator`,
-`avoid-positional-access`; **`info`** — `avoid-parent-traversal`. One further rule,
-`require-test-tag`, is **off** by default and is not scored at all (see above).
+`no-nth-child`, `no-hard-wait`; **`warn`** — `no-deep-css-chain`, `prefer-get-by-test-id`,
+`avoid-positional-access`; **`info`** — `avoid-parent-traversal`, `prefer-semantic-locator`. One
+further rule, `require-test-tag`, is **off** by default and is not scored at all (see above).
 
 Weights are configurable in `testpilot.config.ts` under `scoring.weights`, and **per-rule severity** is
 configurable under `rules` (setting a rule to `off` removes its findings from the score entirely):
@@ -88,7 +88,7 @@ hide one.
 ## Worked examples
 
 **A fragile file — 53 (F).** 3 call-sites; one `error` (an XPath locator, weight 5) and one `warn`
-(a non-user-facing locator, weight 2).
+(a test id addressed as a raw CSS attribute, weight 2).
 
 ```
 penalty = 5 + 2 = 7
@@ -123,6 +123,23 @@ penalty = 15, maxPenalty = 2 × 5 = 10   →   1 − 15/10 = −0.5   →   clam
 
 ---
 
+## When there is no score at all
+
+If there **are** locator call-sites but not one of them could be inspected — every selector is an
+interpolated template literal, a variable, or syntax the parser declined to guess at — the score is
+`null`, printed as *"not enough evidence"*, and `score.grade` is `null` too. A `100 (A)` there would
+be the strongest claim the tool can make over the least evidence it can have.
+
+`--min-score` **fails** on a `null` score. The gate asked for evidence of locator quality and there
+is none; passing would make the threshold easiest to satisfy exactly where it is least informed.
+
+Short of that, `summary.uninspectedCallSites` counts how many call-sites went unread, and a run
+where they exceed **10%** of call-sites prints a warning. Those call-sites still count toward the
+denominator today — moving them out of it is a score change, and score changes belong to Phase 12,
+not to a run that only started disclosing the problem.
+
+---
+
 ## Why zero call-sites scores 100
 
 If the analyzer finds **no locator call-sites at all**, `maxPenalty` is 0, there's no possible penalty,
@@ -142,7 +159,7 @@ penalty:
 
 | Sub-score | Driven by | Status |
 |---|---|---|
-| **Resilience** | locator rules (`no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, `avoid-positional-access`, `avoid-parent-traversal`) | active |
+| **Resilience** | locator rules (`no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-get-by-test-id`, `prefer-semantic-locator`, `avoid-positional-access`, `avoid-parent-traversal`) | active |
 | **Flakiness** | flakiness rules (`no-hard-wait`) | active |
 | **Accessibility** | *(no rules yet)* | reserved — stays 100 |
 | **Maintainability** | `require-test-tag` — but it is **unscored** (see above) | reserved — stays 100 |

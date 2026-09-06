@@ -6,7 +6,7 @@
 > **Alignment note (approved plan):** The **MVP (Tier 1) rule set is six scored rules** (plus
 > `require-test-tag`, added in Phase 10e — `off` by default and excluded from the score) —
 > `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`,
-> `prefer-user-facing-locator`, `no-hard-wait`. Sub-scores are Resilience, Accessibility,
+> `prefer-get-by-test-id`, `prefer-semantic-locator`, `no-hard-wait`. Sub-scores are Resilience, Accessibility,
 > Maintainability, Flakiness. Tier 1 must **never emit a concrete locator it cannot prove**
 > (no `getByRole('button', { name: 'Save' })` without DOM context) — only category-level guidance.
 > All other rules in the catalog below are tagged for V1+.
@@ -146,7 +146,8 @@ Headline = weighted mean (default weights configurable). This is why "100% test-
 | `no-nth-child` | locator | error | no | no | `:nth-child`, positional CSS. |
 | `no-css-class-selector` | locator | error | no | no | `.class` selectors tied to styling. |
 | `no-deep-css-chain` | locator | warn | no | no | Long ` > ` / descendant CSS chains. |
-| `prefer-user-facing-locator` | locator | warn | no | no | Raw css/`text=` that should be a user-facing locator (`getByRole`/`getByLabel`/`getByText`/`getByTestId`). **Category guidance only — no concrete rewrite in Tier 1.** |
+| `prefer-get-by-test-id` | locator | warn | no | yes (Phase 13) | A test id addressed through a raw CSS attribute selector, when `getByTestId()` says the same thing. Attribute list configurable via `ruleOptions`. |
+| `prefer-semantic-locator` | locator | info | no | no | A `locator()` selector with no role/label/ARIA handle. Abstains on `[role=]`/`[aria-*]`, `has`/`hasText` composition, a `getBy*()` parent, and test ids. **Category guidance only — no concrete rewrite in Tier 1.** |
 | `no-hard-wait` | flakiness | error | no | no¹ | `waitForTimeout(<n>)` hard sleeps. |
 | `require-test-tag` | maintainability | **off** (`info` when enabled) | no | no¹ | A `test()` carrying no tag, so no tag-based run can select it. Evaluates a **test declaration**, not a locator call site. Counted but **not scored**. |
 

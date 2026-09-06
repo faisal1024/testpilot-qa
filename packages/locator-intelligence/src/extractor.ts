@@ -197,3 +197,29 @@ function readLocatorOptions(arg: AstNode | undefined): LocatorContext['options']
   }
   return Object.keys(options).length > 0 ? options : undefined
 }
+
+/**
+ * True when a call site takes a selector the analyzer could not read — an
+ * interpolated template literal, a variable, an `as string`, or a selector the
+ * tokenizer refused to guess at.
+ *
+ * Lives here rather than in `analyze` because it has to agree with what the
+ * extractor decided: `isDynamic` and `parsed` are set in one place, and a
+ * second definition of "readable" is a second answer waiting to disagree.
+ * Call sites that take no selector at all (`.nth(2)`, `waitForTimeout(500)`)
+ * are fully inspected by their own rules and are never counted here.
+ */
+export function isUninspected(context: LocatorContext): boolean {
+  if (!SELECTOR_ARG_APIS.has(context.apiCall as LocatorApi)) {
+    return false
+  }
+  if (context.isDynamic) {
+    return true
+  }
+  // A selector-taking call with no string argument at all — `locator()` with a
+  // Locator argument, say. Nothing was read, so nothing was inspected.
+  if (context.parsed === undefined) {
+    return true
+  }
+  return context.parsed.unparsed.length > 0
+}

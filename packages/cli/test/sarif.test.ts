@@ -88,7 +88,7 @@ describe('toSarif', () => {
       reportWith([
         finding({ severity: 'error' }),
         finding({ ruleId: 'no-hard-wait', severity: 'warn' }),
-        finding({ ruleId: 'prefer-user-facing-locator', severity: 'info' }),
+        finding({ ruleId: 'prefer-semantic-locator', severity: 'info' }),
       ]),
     )
     expect(sarif.runs[0]?.results.map((r) => r.level)).toEqual(['error', 'warning', 'note'])
@@ -130,7 +130,7 @@ describe('toSarif', () => {
           finding({ severity: 'error' }),
           finding({ ruleId: 'no-hard-wait', severity: 'warn', docsUrl: '' }),
           finding({
-            ruleId: 'prefer-user-facing-locator',
+            ruleId: 'prefer-semantic-locator',
             severity: 'info',
             suggestion: undefined,
           }),

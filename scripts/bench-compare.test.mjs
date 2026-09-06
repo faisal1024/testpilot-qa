@@ -154,7 +154,7 @@ describe('bench comparison', () => {
     it('does not flag half a rule’s findings being removed', () => {
       // Exactly the shape Phase 11 will produce: fewer findings, same files, same
       // call sites. If this fails the gate, the gate gets ignored.
-      const rule = 'prefer-user-facing-locator'
+      const rule = 'prefer-semantic-locator'
       const removed = Math.floor(recorded.byRule[rule] / 2)
       const after = measurement({
         findings: recorded.findings - removed,
@@ -170,8 +170,8 @@ describe('bench comparison', () => {
       const after = measurement({
         byRule: {
           ...recorded.byRule,
-          'prefer-user-facing-locator': 0,
-          'prefer-get-by-test-id': recorded.byRule['prefer-user-facing-locator'],
+          'prefer-semantic-locator': 0,
+          'prefer-aria-locator': recorded.byRule['prefer-semantic-locator'],
         },
       })
       expect(formatDiff([measurement()], [after]).signalLoss).toBe(false)

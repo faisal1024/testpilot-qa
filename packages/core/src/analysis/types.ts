@@ -50,6 +50,7 @@ export interface AnalysisWarning {
     | 'test-root-missing'
     | 'helpers-not-recognized'
     | 'helpers-not-analyzed'
+    | 'uninspected-call-sites'
   message: string
   ruleId?: string
 }
@@ -84,6 +85,15 @@ export interface AnalysisSummary {
    * hardcoding rule ids. Only rules that actually produced findings.
    */
   unscoredRuleIds?: string[]
+  /**
+   * Call sites that take a selector argument the analyzer could **not** read —
+   * an interpolated template literal, a variable, a selector the tokenizer
+   * refused. They still count toward `QualityScore.callSites` today (the
+   * denominator moves in Phase 12), so a suite that interpolates heavily is
+   * scored partly over locators no rule ever looked at. Reported so that is
+   * visible rather than folded silently into a grade.
+   */
+  uninspectedCallSites?: number
   findings: number
   bySeverity: Record<FindingSeverity, number>
 }
@@ -111,8 +121,14 @@ export interface SubScores {
  * the same penalty down by dimension. Not DOM-aware.
  */
 export interface QualityScore {
-  score: number
-  grade: Grade
+  /**
+   * `null` when every call site was uninspectable: there were locators, and not
+   * one of them could be read. A `100 (A)` there would be a grade over evidence
+   * that does not exist — the one case where no number is the honest answer.
+   * (Zero call sites is different and still scores 100; see `docs/Scoring.md`.)
+   */
+  score: number | null
+  grade: Grade | null
   /** Analyzed call-sites — the scoring denominator basis. */
   callSites: number
   subScores: SubScores
@@ -164,7 +180,7 @@ export interface AnalysisReport {
  * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`;
  * 1.10 `baseline.matchedByPreviousId`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.10'
+export const ANALYSIS_SCHEMA_VERSION = '1.11'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

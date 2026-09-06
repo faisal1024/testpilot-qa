@@ -6,7 +6,8 @@ import { noDeepCssChain } from './rules/no-deep-css-chain.js'
 import { noHardWait } from './rules/no-hard-wait.js'
 import { noNthChild } from './rules/no-nth-child.js'
 import { noXpath } from './rules/no-xpath.js'
-import { preferUserFacingLocator } from './rules/prefer-user-facing-locator.js'
+import { preferGetByTestId } from './rules/prefer-get-by-test-id.js'
+import { preferSemanticLocator } from './rules/prefer-semantic-locator.js'
 import { requireTestTag } from './rules/require-test-tag.js'
 import type { AnyRule } from './rules/types.js'
 
@@ -91,18 +92,46 @@ const EXPLANATIONS: RuleExplanation[] = [
       `page.locator('[title="a b c d"]')     // whitespace inside a value is not a combinator`,
     ],
   }),
-  fromRule(preferUserFacingLocator, {
-    title: 'Prefer user-facing locators',
+  fromRule(preferGetByTestId, {
+    title: 'Use getByTestId() for test ids',
     summary:
-      'Raw CSS/text locator() strings are less resilient than Playwright user-facing locators.',
+      'A test id addressed through a raw CSS attribute selector has an exact getByTestId() equivalent.',
     whyItMatters:
-      'Playwright recommends locating elements the way users and assistive technology perceive them — by role, label, placeholder, or text. Those locators survive refactors and double as lightweight accessibility checks; raw locator() css/text strings bypass that resilience.',
-    badExample: `await page.locator('input[name="email"]').fill('user@example.com')`,
-    betterExample: `await page.getByLabel('Email').fill('user@example.com')`,
+      "When a locator's only handle is a test id, `locator('[data-testid=\"save\"]')` and `getByTestId('save')` select the same element — but only the second says so. The CSS form hides the intent behind attribute syntax, silently ignores a project's configured `testIdAttribute`, and does not survive a change to it. This is the one case in this category with a mechanical, behavior-preserving rewrite, which is why it is a `warn` where the general nudge is an `info`.",
+    badExample: `await page.locator('[data-testid="save-button"]').click()`,
+    betterExample: `await page.getByTestId('save-button').click()`,
+    guidance: [
+      'Set `testIdAttribute` in `playwright.config.ts` if your project uses something other than `data-testid`, then use getByTestId() everywhere.',
+      "Tell TestPilot which attributes are test ids with `ruleOptions: { 'prefer-get-by-test-id': { testIdAttributes: ['data-qa'] } }` — the default list is `data-testid`, `data-test-id`, `data-test`.",
+      "When the test id is on an ancestor rather than the target, make it the scope: `getByTestId('list').locator('li a')`.",
+      'A non-equality match such as `[data-testid^="row-"]` has no getByTestId() form; the rule names the attribute without inventing an argument.',
+    ],
+    notFlagged: [
+      `page.getByTestId('save-button')      // already the recommended form`,
+      `page.locator('[data-qa="save"]')     // data-qa is not a test id unless you configure it`,
+      `page.locator('[aria-label="Save"]')  // not a test id at all`,
+    ],
+  }),
+  fromRule(preferSemanticLocator, {
+    title: 'Prefer a semantic locator',
+    summary:
+      'A raw tag, class, #id or text= selector says nothing about what the element is to a user.',
+    whyItMatters:
+      'Playwright recommends locating elements the way users and assistive technology perceive them — by role, label, placeholder, or text. Those locators survive refactors and double as lightweight accessibility checks. A selector built from structure alone breaks whenever the markup moves, for reasons unrelated to the feature under test. Tier 1 is static, so this rule cannot name the replacement — it is a nudge to look, which is why it ships at `info` and not `warn`.',
+    badExample: `await page.locator('#login-form div.actions > button').click()`,
+    betterExample: `await page.getByRole('button', { name: 'Log in' }).click()`,
     guidance: [
       'Reach for getByRole / getByLabel / getByPlaceholder / getByText first.',
-      'Use getByTestId when there is no good semantic handle.',
-      'Keep locator() for cases none of the above can express.',
+      'Use getByTestId when there is genuinely no semantic handle — and add the test id to the markup rather than reaching for a class.',
+      'Keep locator() for what none of the above can express; set this rule to `off` if your suite has made that call deliberately.',
+    ],
+    notFlagged: [
+      `page.locator('[role="tab"]')                    // a role is a semantic handle`,
+      `page.locator('[aria-label="Close"]')            // so is any aria-* attribute`,
+      `page.locator('.row', { hasText: 'Save' })       // composed: the selector is a scope`,
+      `page.locator('li:has-text("Save")')             // the same composition, in selector syntax`,
+      `page.getByRole('row').locator('td')             // narrowing a user-facing parent`,
+      `page.locator('[data-testid="save"]')            // see prefer-get-by-test-id`,
     ],
   }),
   fromRule(noHardWait, {

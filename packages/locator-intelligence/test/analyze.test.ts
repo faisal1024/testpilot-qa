@@ -15,7 +15,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-// A spec exercising all six MVP rules (plus clean cases that must not fire).
+// A spec exercising every scored built-in rule (plus clean cases that must not fire).
 const ALL_RULES = [
   "import { test } from '@playwright/test'",
   "test('violations', async ({ page }) => {",
@@ -23,7 +23,8 @@ const ALL_RULES = [
   "  await page.locator('//button').click()", // no-xpath
   "  await page.locator('ul li:nth-child(2)').click()", // no-nth-child + prefer
   "  await page.locator('header nav ul li a').click()", // no-deep-css-chain + prefer
-  "  await page.getByRole('list').nth(3).click()", // no-nth-child (.nth)
+  "  await page.getByRole('list').nth(3).click()", // avoid-positional-access
+  '  await page.locator(\'[data-testid="save"]\').click()', // prefer-get-by-test-id
   '  await page.waitForTimeout(1000)', // no-hard-wait
   "  await page.getByRole('button', { name: 'Save' }).click()", // clean
   '})',
@@ -44,17 +45,20 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.10')
+    expect(report.schemaVersion).toBe('1.11')
     expect(report.summary).toEqual({
       helperFiles: 0,
       helpersNotAnalyzed: 0,
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
-      findings: 9,
+      findings: 10,
       unscoredFindings: 0,
       unscoredRuleIds: [],
-      // `.nth(3)` moved from no-nth-child (error) to avoid-positional-access (warn).
-      bySeverity: { error: 4, warn: 5, info: 0 },
+      uninspectedCallSites: 0,
+      // `.nth(3)` moved from no-nth-child (error) to avoid-positional-access (warn);
+      // the three `prefer-user-facing-locator` warns became `prefer-semantic-locator`
+      // infos, and the test id is the one case with a mechanical fix, so it stays warn.
+      bySeverity: { error: 4, warn: 3, info: 3 },
     })
 
     const ids = [...new Set(report.findings.map((f) => f.ruleId))].sort()
@@ -65,7 +69,8 @@ describe('analyze — Tier 1 rule set', () => {
       'no-hard-wait',
       'no-nth-child',
       'no-xpath',
-      'prefer-user-facing-locator',
+      'prefer-get-by-test-id',
+      'prefer-semantic-locator',
     ])
 
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
@@ -339,14 +344,15 @@ describe('analyze — Tier 1 rule set', () => {
     it('lowers the score for fragile locators with dimension breakdown', async () => {
       writeFixture('tests/all.spec.ts', ALL_RULES)
       const report = await analyze({ cwd: dir, config: config() })
-      // 8 call-sites; penalty 30 (4 errors × 5 + 5 warns × 2) / max 40 → 25 (F).
-      // Was 33/18: `.nth(3)` is now a warn, which is the point of the split.
-      expect(report.score.callSites).toBe(8)
-      expect(report.score).toMatchObject({ score: 25, grade: 'F' })
-      // Resilience penalty 25 (css-class 5 + xpath 5 + nth-child 5 + deep 2
-      // + positional 2 + prefer 3×2) / 40 → 38.
-      expect(report.score.subScores.resilience).toEqual({ score: 38, grade: 'F' })
-      expect(report.score.subScores.flakiness).toEqual({ score: 88, grade: 'B' })
+      // 9 call-sites; penalty 27.5 (4 errors × 5 + 3 warns × 2 + 3 infos × 0.5)
+      // / max 45 → 39 (F). Was 30/40 → 25: the three general-nudge findings are
+      // `info` since the 11b split, which is most of the 14-point rise.
+      expect(report.score.callSites).toBe(9)
+      expect(report.score).toMatchObject({ score: 39, grade: 'F' })
+      // Resilience penalty 22.5 (css-class 5 + xpath 5 + nth-child 5 + deep 2
+      // + positional 2 + test-id 2 + semantic 3×0.5) / 45 → 50.
+      expect(report.score.subScores.resilience).toEqual({ score: 50, grade: 'F' })
+      expect(report.score.subScores.flakiness).toEqual({ score: 89, grade: 'B' })
       expect(report.score.subScores.accessibility.score).toBe(100)
       expect(report.score.subScores.maintainability.score).toBe(100)
     })
@@ -361,6 +367,8 @@ describe('analyze — Tier 1 rule set', () => {
             'no-css-class-selector': 'off',
             'no-nth-child': 'off',
             'no-deep-css-chain': 'off',
+            // The pre-11b id: proof that a config written before the split
+            // still silences both rules it became.
             'prefer-user-facing-locator': 'off',
             'no-hard-wait': 'off',
             'avoid-positional-access': 'off',
@@ -370,6 +378,12 @@ describe('analyze — Tier 1 rule set', () => {
       })
       expect(allOff.score.score).toBe(100)
       expect(allOff.findings).toEqual([])
+      // Silently honouring the old id would be its own surprise: say so.
+      expect(allOff.warnings.map((warning) => warning.code)).toContain('deprecated-rule-id')
+      // ...and only that. Calling a retired id "unknown — ignored" in the same
+      // report that says it is being honoured is two opposite claims about one
+      // line of the user's config.
+      expect(allOff.warnings.map((warning) => warning.code)).not.toContain('unknown-rule')
     })
 
     it('respects custom scoring weights', async () => {
@@ -378,8 +392,51 @@ describe('analyze — Tier 1 rule set', () => {
         cwd: dir,
         config: config({ scoring: { weights: { error: 5, warn: 0, info: 0 } } }),
       })
-      // warns now cost nothing: penalty 20 (4 errors × 5) / max 40 → 50 (F).
-      expect(report.score.score).toBe(50)
+      // warns and infos now cost nothing: penalty 20 (4 errors × 5) / max 45 → 56 (F).
+      expect(report.score.score).toBe(56)
+    })
+
+    it('counts call sites whose selector it could not read', async () => {
+      writeFixture(
+        'tests/dyn.spec.ts',
+        [
+          'const id = "save"',
+          'page.locator(`[data-testid=${id}]`)', // interpolated
+          'page.locator(sel)', // a variable
+          "page.locator('[unterminated=\"a')", // the tokenizer abstains
+          "page.locator('.btn')", // readable
+          'page.getByRole("button").nth(2)', // takes no selector: fully inspected
+        ].join('\n'),
+      )
+      const report = await analyze({ cwd: dir, config: config() })
+      expect(report.score.callSites).toBe(6)
+      expect(report.summary.uninspectedCallSites).toBe(3)
+      // Half the call sites, so the reader is told before they read the grade.
+      const note = report.warnings.find((w) => w.code === 'uninspected-call-sites')
+      expect(note?.message).toContain('3 of 6')
+      expect(report.score.score).not.toBeNull()
+    })
+
+    it('gives no score at all when nothing could be inspected', async () => {
+      writeFixture(
+        'tests/opaque.spec.ts',
+        ['const s = "x"', 'page.locator(s)', 'page.locator(`a${s}`)'].join('\n'),
+      )
+      const report = await analyze({ cwd: dir, config: config() })
+      expect(report.score.callSites).toBe(2)
+      expect(report.summary.uninspectedCallSites).toBe(2)
+      // Not 100 (A). There were locators and not one of them was read.
+      expect(report.score.score).toBeNull()
+      expect(report.score.grade).toBeNull()
+    })
+
+    it('still scores 100 for a suite with no call sites at all', async () => {
+      // Different case, documented in docs/Scoring.md: an absent denominator is
+      // "nothing to judge", not "we could not look".
+      writeFixture('tests/empty.spec.ts', "import { test } from '@playwright/test'\n")
+      const report = await analyze({ cwd: dir, config: config() })
+      expect(report.summary.uninspectedCallSites).toBe(0)
+      expect(report.score.score).toBe(100)
     })
 
     it('does not penalize the score for parse errors', async () => {

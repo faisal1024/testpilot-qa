@@ -201,7 +201,7 @@ testpilot analyze [globs...] [options]
 
 > **As implemented (Milestone 3B–3C):** the full MVP Tier 1 rule set runs —
 > `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`,
-> `prefer-user-facing-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
+> `prefer-get-by-test-id` and `prefer-semantic-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
 > positional globs (a positional that is a **directory** is expanded into its test files, so
 > `analyze examples/fragile-suite` works), else `config.include` resolved under `config.testDir`,
 > which is relative to the **config file's directory** (see §7 — a run that matches nothing fails).
@@ -449,7 +449,7 @@ education surface. Available for every Tier 1 rule.
 
 ```
 testpilot explain no-xpath
-testpilot explain prefer-user-facing-locator --json
+testpilot explain prefer-semantic-locator --json
 ```
 
 **Output (human):** rule id, default severity, category, title, summary, *why it matters*,
@@ -534,7 +534,7 @@ export default defineConfig({
     'no-nth-child': 'error',
     'no-css-class-selector': 'error',
     'no-deep-css-chain': 'warn',
-    'prefer-user-facing-locator': 'warn',
+    'prefer-semantic-locator': 'off',
     'no-hard-wait': 'error',
     'avoid-positional-access': 'warn',
     'avoid-parent-traversal': 'info',

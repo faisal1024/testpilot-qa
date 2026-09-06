@@ -25,6 +25,14 @@ describe('isBelowThreshold', () => {
     expect(isBelowThreshold(80, 80)).toBe(false)
     expect(isBelowThreshold(81, 80)).toBe(false)
   })
+
+  it('fails a threshold on a null score, and passes when none is set', () => {
+    // No score means no evidence. Passing here would make `--min-score` easiest
+    // to satisfy on the suite it knows least about.
+    expect(isBelowThreshold(null, 80)).toBe(true)
+    expect(isBelowThreshold(null, 0)).toBe(true)
+    expect(isBelowThreshold(null, undefined)).toBe(false)
+  })
 })
 
 describe('isValidMinScore', () => {

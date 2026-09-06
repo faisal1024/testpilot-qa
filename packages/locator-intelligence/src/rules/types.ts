@@ -45,6 +45,11 @@ export interface RuleMeta {
 export interface RuleOptions {
   /** `no-deep-css-chain`: combinator steps at which a chain is "deep". */
   maxChainDepth?: number
+  /**
+   * `prefer-get-by-test-id`: attribute names that count as a test id, to match
+   * a project's Playwright `testIdAttribute`.
+   */
+  testIdAttributes?: readonly string[]
 }
 
 export interface Rule extends RuleMeta {

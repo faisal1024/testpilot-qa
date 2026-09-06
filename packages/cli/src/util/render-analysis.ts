@@ -38,7 +38,9 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
     )
   }
   lines.push(
-    `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
+    score.score === null
+      ? `Locator Quality Score: not enough evidence  [${score.callSites} call-site(s), none inspectable]`
+      : `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
   )
   lines.push(scoreLine('Resilience', score.subScores.resilience))
   lines.push(scoreLine('Accessibility', score.subScores.accessibility))

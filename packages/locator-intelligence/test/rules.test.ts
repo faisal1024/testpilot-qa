@@ -7,7 +7,8 @@ import { noDeepCssChain } from '../src/rules/no-deep-css-chain.js'
 import { noHardWait } from '../src/rules/no-hard-wait.js'
 import { noNthChild } from '../src/rules/no-nth-child.js'
 import { noXpath } from '../src/rules/no-xpath.js'
-import { preferUserFacingLocator } from '../src/rules/prefer-user-facing-locator.js'
+import { preferGetByTestId } from '../src/rules/prefer-get-by-test-id.js'
+import { preferSemanticLocator } from '../src/rules/prefer-semantic-locator.js'
 import { maxChainDepth } from '../src/selector/depth.js'
 import { tokenizeSelector } from '../src/selector/tokenize.js'
 
@@ -92,24 +93,132 @@ describe('no-deep-css-chain', () => {
   })
 })
 
-describe('prefer-user-facing-locator', () => {
-  it('flags css and text engine locator() calls', () => {
-    expect(preferUserFacingLocator.evaluate(css('#submit'))).not.toBeNull()
+describe('prefer-get-by-test-id', () => {
+  it('flags a test id addressed as a CSS attribute, and names the replacement', () => {
+    const violation = preferGetByTestId.evaluate(css('[data-testid="save"]'))
+    expect(violation?.suggestion).toContain('getByTestId("save")')
+  })
+
+  it('asks for a scope, not a replacement, when the test id is on an ancestor', () => {
+    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
+    // The target is the anchor. Telling the reader to write `getByTestId('list')`
+    // full stop would be advice about a different element.
+    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
+  })
+
+  it('asks for a scope when the target carries more than the test id', () => {
+    // `getByTestId('row')` alone would match the row, not the button inside it.
+    expect(preferGetByTestId.evaluate(css('button[data-testid="row"]'))?.suggestion).toContain(
+      'Scope with',
+    )
+  })
+
+  it('names the attribute without inventing an argument for a non-equality match', () => {
+    const violation = preferGetByTestId.evaluate(css('[data-testid^="row-"]'))
+    expect(violation).not.toBeNull()
+    expect(violation?.suggestion).not.toContain('getByTestId("')
+  })
+
+  it('reads the configured attribute list, and only it', () => {
+    expect(preferGetByTestId.evaluate(css('[data-qa="save"]'))).toBeNull()
     expect(
-      preferUserFacingLocator.evaluate(ctx({ selector: 'text=Hi', selectorEngine: 'text' })),
+      preferGetByTestId.evaluate(css('[data-qa="save"]'), { testIdAttributes: ['data-qa'] }),
+    ).not.toBeNull()
+    // An explicit list replaces the defaults rather than extending them.
+    expect(
+      preferGetByTestId.evaluate(css('[data-testid="save"]'), { testIdAttributes: ['data-qa'] }),
+    ).toBeNull()
+  })
+
+  it('finds a test id nested in :has()', () => {
+    expect(preferGetByTestId.evaluate(css('li:has([data-test="badge"])'))).not.toBeNull()
+  })
+
+  it('abstains on an unreadable selector rather than guessing', () => {
+    expect(preferGetByTestId.evaluate(css('[data-testid="a'))).toBeNull()
+  })
+
+  it('ignores getByTestId itself, dynamic selectors and xpath', () => {
+    expect(preferGetByTestId.evaluate(ctx({ apiCall: 'getByTestId', selector: 'save' }))).toBeNull()
+    expect(preferGetByTestId.evaluate(ctx({ isDynamic: true }))).toBeNull()
+    expect(
+      preferGetByTestId.evaluate(ctx({ selector: '//*[@data-testid]', selectorEngine: 'xpath' })),
+    ).toBeNull()
+  })
+
+  it('is warn severity — it is the case with a mechanical fix', () => {
+    expect(preferGetByTestId.defaultSeverity).toBe('warn')
+  })
+})
+
+describe('prefer-semantic-locator', () => {
+  it('flags a structural selector and a text= string', () => {
+    expect(preferSemanticLocator.evaluate(css('#submit'))).not.toBeNull()
+    expect(preferSemanticLocator.evaluate(css('div.row > span'))).not.toBeNull()
+    expect(
+      preferSemanticLocator.evaluate(
+        ctx({ selector: 'text=Hi', selectorEngine: 'text', parsed: tokenizeSelector('text=Hi') }),
+      ),
     ).not.toBeNull()
   })
-  it('ignores xpath, dynamic, and non-locator APIs', () => {
+
+  it('does not fire on a role or aria attribute', () => {
+    expect(preferSemanticLocator.evaluate(css('[role="tab"]'))).toBeNull()
+    expect(preferSemanticLocator.evaluate(css('[aria-label="Close"]'))).toBeNull()
+    expect(preferSemanticLocator.evaluate(css('button[aria-expanded]'))).toBeNull()
+    // Nested inside :not() still counts — the test depends on it either way.
+    expect(preferSemanticLocator.evaluate(css('div:not([role="presentation"])'))).toBeNull()
+  })
+
+  it('does not fire on the role= engine', () => {
+    const selector = 'role=button[name="Save"]'
     expect(
-      preferUserFacingLocator.evaluate(ctx({ selector: '//a', selectorEngine: 'xpath' })),
-    ).toBeNull()
-    expect(preferUserFacingLocator.evaluate(ctx({ isDynamic: true }))).toBeNull()
-    expect(
-      preferUserFacingLocator.evaluate(ctx({ apiCall: 'getByRole', selector: 'button' })),
+      preferSemanticLocator.evaluate(
+        ctx({ selector, selectorEngine: 'css', parsed: tokenizeSelector(selector) }),
+      ),
     ).toBeNull()
   })
-  it('is warn severity', () => {
-    expect(preferUserFacingLocator.defaultSeverity).toBe('warn')
+
+  it('does not fire on a composed locator, in either spelling', () => {
+    expect(
+      preferSemanticLocator.evaluate(ctx({ ...css('.row'), options: { hasText: true } })),
+    ).toBeNull()
+    expect(preferSemanticLocator.evaluate(css('li:has-text("Save")'))).toBeNull()
+    expect(preferSemanticLocator.evaluate(css('li:has(button)'))).toBeNull()
+  })
+
+  it('does not fire when narrowing a user-facing parent', () => {
+    expect(preferSemanticLocator.evaluate(ctx({ ...css('td'), parentApi: 'getByRole' }))).toBeNull()
+    expect(
+      preferSemanticLocator.evaluate(ctx({ ...css('td'), parentApi: 'getByTestId' })),
+    ).toBeNull()
+    // A `locator()` parent is not user-facing, so the child is still judged.
+    expect(
+      preferSemanticLocator.evaluate(ctx({ ...css('td'), parentApi: 'locator' })),
+    ).not.toBeNull()
+  })
+
+  it('leaves test ids to prefer-get-by-test-id, so one call site gets one line', () => {
+    expect(preferSemanticLocator.evaluate(css('[data-testid="save"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
+  })
+
+  it('abstains on an unreadable selector rather than guessing', () => {
+    expect(preferSemanticLocator.evaluate(css('div[unclosed="a'))).toBeNull()
+  })
+
+  it('ignores xpath, dynamic, and non-locator APIs', () => {
+    expect(
+      preferSemanticLocator.evaluate(ctx({ selector: '//a', selectorEngine: 'xpath' })),
+    ).toBeNull()
+    expect(preferSemanticLocator.evaluate(ctx({ isDynamic: true }))).toBeNull()
+    expect(
+      preferSemanticLocator.evaluate(ctx({ apiCall: 'getByRole', selector: 'button' })),
+    ).toBeNull()
+  })
+
+  it('is info severity — Tier 1 cannot name the replacement', () => {
+    expect(preferSemanticLocator.defaultSeverity).toBe('info')
   })
 })
 
