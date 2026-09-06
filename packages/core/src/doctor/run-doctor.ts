@@ -9,6 +9,7 @@ import {
   classifyGuidanceFile,
   selectedAgents,
 } from '@testpilot/ai'
+import { type ConfigDiscovery, DEFAULT_DISCOVERY } from '../config/discovery.js'
 import { ConfigError } from '../config/errors.js'
 import { loadConfig } from '../config/load-config.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
@@ -53,6 +54,12 @@ export interface DoctorReport {
 export interface DoctorOptions {
   cwd: string
   configPath?: string
+  /**
+   * Check AI guidance files even when the project has no `testpilot.config.ts`.
+   * Off by default: `doctor` is useful on a repo you're only evaluating, and
+   * "you're missing CLAUDE.md" is noise there.
+   */
+  strictGuidance?: boolean
   /** Override Node version (defaults to the running Node). Injectable for tests. */
   nodeVersion?: string
 }
@@ -135,22 +142,38 @@ function checkPlaywrightConfig(configPath: string | null): DoctorCheck {
       }
 }
 
-function checkTestDirectory(testDir: string, exists: boolean): DoctorCheck {
+function checkTestDirectory(
+  testDir: string,
+  exists: boolean,
+  discovery: ConfigDiscovery,
+): DoctorCheck {
+  // Naming the source turns "was not found" from a puzzle into an instruction.
+  const source =
+    discovery.testDir === 'playwright-config'
+      ? ` (from ${discovery.playwrightConfigPath})`
+      : discovery.testDir === 'default'
+        ? ' (built-in default)'
+        : ''
   return exists
     ? {
         id: 'test-directory',
         title: 'Test directory',
         category: 'project',
         status: 'pass',
-        message: `Test directory "${testDir}" exists.`,
+        message: `Test directory "${testDir}"${source} exists.`,
+        details: { testDir, source: discovery.testDir },
       }
     : {
         id: 'test-directory',
         title: 'Test directory',
         category: 'project',
         status: 'warn',
-        message: `Test directory "${testDir}" was not found.`,
-        remediation: 'Create it, or scaffold a project with `testpilot init`.',
+        message: `Test directory "${testDir}"${source} was not found.`,
+        remediation:
+          discovery.testDir === 'default'
+            ? 'Set `testDir` in testpilot.config.ts (or add a Playwright config), or scaffold with `testpilot init`.'
+            : 'Create it, or point `testDir` at your suite.',
+        details: { testDir, source: discovery.testDir },
       }
 }
 
@@ -303,12 +326,14 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   let config: TestPilotConfig = defaultConfig
   let configFilePresent = false
   let configDir: string | null = null
+  let discovery: ConfigDiscovery = DEFAULT_DISCOVERY
   let configCheck: DoctorCheck
   try {
     const result = await loadConfig({ cwd, configPath: options.configPath })
     config = result.config
     configFilePresent = result.filepath !== null
     configDir = result.filepath === null ? null : dirname(result.filepath)
+    discovery = result.discovery
     configCheck = {
       id: 'config',
       title: 'TestPilot config',
@@ -316,7 +341,9 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
       status: 'pass',
       message: configFilePresent
         ? `Loaded ${result.filepath}.`
-        : 'No testpilot.config.ts found — using defaults.',
+        : result.discovery.playwrightConfigPath
+          ? `No testpilot.config.ts — discovery falls back to ${result.discovery.playwrightConfigPath}.`
+          : 'No testpilot.config.ts found — using defaults.',
     }
   } catch (error) {
     configCheck = {
@@ -341,11 +368,15 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     checkPlaywrightInstalled(resolvePlaywrightBin(projectRoot)),
     checkPlaywrightConfig(playwrightConfigPath),
     configCheck,
-    checkTestDirectory(config.testDir, testDirExists),
+    checkTestDirectory(config.testDir, testDirExists, discovery),
     checkIncludeGlobs(config.include),
     checkProjectStructure(configFilePresent, playwrightConfigPath !== null, testDirExists),
-    checkAiGuidance(projectRoot, selectedAgents(config.ai.agents)),
   ]
+  // Guidance files are a TestPilot-project concern. On a repo that has not adopted
+  // TestPilot, reporting four "missing" files is noise about someone else's project.
+  if (configFilePresent || options.strictGuidance === true) {
+    checks.push(checkAiGuidance(projectRoot, selectedAgents(config.ai.agents)))
+  }
 
   return {
     schemaVersion: DOCTOR_SCHEMA_VERSION,

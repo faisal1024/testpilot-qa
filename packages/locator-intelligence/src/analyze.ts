@@ -4,6 +4,8 @@ import {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
   type AnalysisWarning,
+  type ConfigDiscovery,
+  DEFAULT_DISCOVERY,
   type Finding,
   type FindingSeverity,
   type ParseError,
@@ -29,6 +31,8 @@ export interface AnalyzeOptions {
    * project root when there is no config file. Defaults to `cwd`.
    */
   rootDir?: string
+  /** How the files were selected; surfaced verbatim in the report. */
+  discovery?: ConfigDiscovery
 }
 
 interface EnabledRule {
@@ -168,6 +172,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     command: 'analyze',
     rootDir: reportBase,
+    discovery: options.discovery ?? DEFAULT_DISCOVERY,
     summary: {
       filesAnalyzed: files.length,
       filesWithParseErrors: parseErrors.length,

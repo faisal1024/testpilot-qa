@@ -63,6 +63,37 @@ describe('runDoctor', () => {
     expect(checkById(report, 'test-directory')?.status).toBe('pass')
   })
 
+  it('skips AI guidance checks on a project that has not adopted TestPilot', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"someone-elses-repo"}\n')
+    mkdirSync(join(dir, 'tests'))
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(report, 'ai-guidance')).toBeUndefined()
+    // Nothing in the report mentions guidance files for a repo that never asked for them.
+    expect(report.nextActions.join(' ')).not.toContain('add ai')
+
+    const strict = await runDoctor({ cwd: dir, nodeVersion: NODE_OK, strictGuidance: true })
+    expect(checkById(strict, 'ai-guidance')?.status).toBe('warn')
+  })
+
+  it('names the Playwright config when testDir came from it', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    mkdirSync(join(dir, 'e2e'))
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    const check = checkById(report, 'test-directory')
+    expect(check?.status).toBe('pass')
+    expect(check?.message).toContain('playwright.config.ts')
+    expect(check?.details?.source).toBe('playwright-config')
+  })
+
+  it('tells a bare project that its testDir is only a built-in default', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    const check = checkById(await runDoctor({ cwd: dir, nodeVersion: NODE_OK }), 'test-directory')
+    expect(check?.status).toBe('warn')
+    expect(check?.message).toContain('built-in default')
+    expect(check?.remediation).toContain('testpilot.config.ts')
+  })
+
   it('passes a complete, healthy project', async () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })

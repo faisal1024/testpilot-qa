@@ -20,9 +20,10 @@ function finding(overrides: Partial<Finding> = {}): Finding {
 
 function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
   return {
-    schemaVersion: '1.4',
+    schemaVersion: '1.5',
     command: 'analyze',
     rootDir: '/repo',
+    discovery: { testDir: 'default', include: 'default', playwrightConfigPath: null },
     summary: {
       filesAnalyzed: 1,
       filesWithParseErrors: 0,

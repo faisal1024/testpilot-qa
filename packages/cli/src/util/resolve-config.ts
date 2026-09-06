@@ -1,5 +1,12 @@
 import { dirname } from 'node:path'
-import { ConfigError, type LoadConfigResult, findProjectRoot, loadConfig } from '@testpilot/core'
+import {
+  type ConfigDiscovery,
+  ConfigError,
+  type LoadConfigResult,
+  type TestPilotConfig,
+  findProjectRoot,
+  loadConfig,
+} from '@testpilot/core'
 import { ExitCode } from './exit-codes.js'
 import type { GlobalOptions } from './global-options.js'
 
@@ -33,4 +40,15 @@ export async function resolveConfigOrExit(globals: GlobalOptions): Promise<LoadC
  */
 export function resolveRootDir(cwd: string, filepath: string | null): string {
   return filepath ? dirname(filepath) : findProjectRoot(cwd)
+}
+
+/** One-line, human-readable account of where discovery settings came from. */
+export function describeDiscovery(config: TestPilotConfig, discovery: ConfigDiscovery): string {
+  const from = (source: ConfigDiscovery['testDir']) =>
+    source === 'playwright-config'
+      ? `from ${discovery.playwrightConfigPath ?? 'playwright config'}`
+      : source === 'testpilot-config'
+        ? 'from testpilot.config'
+        : 'default'
+  return `discovery: testDir "${config.testDir}" (${from(discovery.testDir)}), include ${JSON.stringify(config.include)} (${from(discovery.include)})`
 }

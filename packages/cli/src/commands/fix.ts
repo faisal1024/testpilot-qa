@@ -12,7 +12,7 @@ import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
-import { resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
+import { describeDiscovery, resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
@@ -40,10 +40,13 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const { config, filepath } = await resolveConfigOrExit(globals)
+  const { config, filepath, discovery } = await resolveConfigOrExit(globals)
   const write = options.write === true
 
   const rootDir = resolveRootDir(globals.cwd, filepath)
+  if (globals.verbose && !globals.quiet) {
+    console.error(`[testpilot] ${describeDiscovery(config, discovery)}`)
+  }
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
   const files = await resolveTestFiles(globals.cwd, explicitPatterns, config, rootDir)
   if (files.length === 0) {

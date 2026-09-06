@@ -1,3 +1,4 @@
+import type { ConfigDiscovery } from '../config/discovery.js'
 /**
  * Shared analysis contract.
  *
@@ -103,6 +104,8 @@ export interface AnalysisReport {
    * patterns. Consumers that need repo-relative paths (SARIF) re-resolve from here.
    */
   rootDir: string
+  /** How the analyzed files were selected (config, Playwright config, or defaults). */
+  discovery: ConfigDiscovery
   summary: AnalysisSummary
   score: QualityScore
   findings: Finding[]
@@ -114,9 +117,9 @@ export interface AnalysisReport {
 
 /**
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
- * 1.4 `rootDir` + `no-files-matched` warning code.
+ * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.4'
+export const ANALYSIS_SCHEMA_VERSION = '1.5'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

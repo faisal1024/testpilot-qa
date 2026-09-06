@@ -35,6 +35,15 @@ export {
 } from './baseline/baseline.js'
 
 export { defineConfig } from './config/define-config.js'
+export {
+  type ConfigDiscovery,
+  DEFAULT_DISCOVERY,
+  type DiscoverySource,
+} from './config/discovery.js'
+export {
+  type PlaywrightTestSettings,
+  readPlaywrightTestSettings,
+} from './config/playwright-config.js'
 export { ConfigError } from './config/errors.js'
 export {
   findConfigFile,

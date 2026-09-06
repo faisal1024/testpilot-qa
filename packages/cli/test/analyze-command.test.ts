@@ -133,6 +133,42 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.findings.map((f: { ruleId: string }) => f.ruleId)).toContain('no-hard-wait')
   })
 
+  it('finds a suite the built-in globs would miss, via playwright.config.ts', async () => {
+    // The cal.com / immich shape: `*.e2e.ts` under `e2e/`, no testpilot.config.ts.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }\n",
+    )
+    mkdirSync(join(dir, 'e2e'))
+    writeFileSync(join(dir, 'e2e', 'login.e2e.ts'), "page.locator('//button')\n")
+
+    const { stdout, exitCode } = await runAnalyze(['--json'])
+    expect(exitCode).toBeUndefined()
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0].file).toBe('e2e/login.e2e.ts')
+    expect(report.discovery).toEqual({
+      testDir: 'playwright-config',
+      include: 'playwright-config',
+      playwrightConfigPath: join(dir, 'playwright.config.ts'),
+    })
+  })
+
+  it('reports built-in defaults in the envelope when nothing else supplied them', async () => {
+    const { stdout } = await runAnalyze(['--json'])
+    expect(JSON.parse(stdout).discovery).toEqual({
+      testDir: 'default',
+      include: 'default',
+      playwrightConfigPath: null,
+    })
+  })
+
+  it('explains where discovery settings came from under --verbose', async () => {
+    const { stderr } = await runAnalyze(['--verbose'])
+    expect(stderr).toContain('discovery: testDir "tests" (default)')
+  })
+
   it('analyzes an explicitly named file inside an excluded directory', async () => {
     mkdirSync(join(dir, 'dist', 'e2e'), { recursive: true })
     writeFileSync(join(dir, 'dist', 'e2e', 'a.spec.js'), "page.locator('//button')\n")

@@ -65,6 +65,10 @@ export function buildProgram(): Command {
   program
     .command('doctor')
     .description('Diagnose project readiness and common setup issues.')
+    .option(
+      '--strict-guidance',
+      'Also check AI guidance files on a project with no testpilot.config.ts.',
+    )
     .action(doctorCommand)
 
   program
