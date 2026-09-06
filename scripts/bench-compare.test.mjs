@@ -101,11 +101,15 @@ describe('bench comparison', () => {
       // `--only` is the fastest iteration loop; firing the gate's scariest message for
       // an intended one-repo calibration is how the vocabulary stops being believed.
       const cal = baseline.results.find((result) => result.name === 'cal.com')
+      // Pick a rule the baseline actually records rather than naming one: these
+      // tests are about the comparison logic, and hardcoding `no-xpath` broke
+      // them the moment a rule split zeroed it out.
+      const [silenced, silencedCount] = Object.entries(cal.byRule)[0]
       const quieter = {
         ...cal,
-        findings: cal.findings - cal.byRule['no-xpath'],
+        findings: cal.findings - silencedCount,
         byRule: Object.fromEntries(
-          Object.entries(cal.byRule).filter(([rule]) => rule !== 'no-xpath'),
+          Object.entries(cal.byRule).filter(([rule]) => rule !== silenced),
         ),
       }
       expect(formatDiff([cal], [quieter], { corpusWide: false }).signalLoss).toBe(false)
@@ -115,11 +119,14 @@ describe('bench comparison', () => {
     it('reports but does not gate silence when new rule ids appeared', () => {
       // A split explains the silence. Bailing out entirely would switch the check off
       // for every rule during exactly the phase that introduces new ids.
+      // Rename whichever rule the first repo records into an id that is not in
+      // the baseline, so this stays a test of the split-detection logic.
+      const renamed = Object.keys(baseline.results[0].byRule)[0]
       const split = baseline.results.map((result) => ({
         ...result,
         byRule: Object.fromEntries(
           Object.entries(result.byRule).map(([rule, count]) =>
-            rule === 'no-xpath' ? ['avoid-parent-traversal', count] : [rule, count],
+            rule === renamed ? ['a-brand-new-rule-id', count] : [rule, count],
           ),
         ),
       }))
