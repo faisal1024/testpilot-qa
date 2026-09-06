@@ -1,3 +1,5 @@
+import { avoidParentTraversal } from './avoid-parent-traversal.js'
+import { avoidPositionalAccess } from './avoid-positional-access.js'
 import { noCssClassSelector } from './no-css-class-selector.js'
 import { noDeepCssChain } from './no-deep-css-chain.js'
 import { noHardWait } from './no-hard-wait.js'
@@ -27,6 +29,8 @@ export const builtinRules: Rule[] = [
   noDeepCssChain,
   preferUserFacingLocator,
   noHardWait,
+  avoidPositionalAccess,
+  avoidParentTraversal,
 ]
 
 /**

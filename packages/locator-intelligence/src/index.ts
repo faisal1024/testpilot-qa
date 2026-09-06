@@ -23,7 +23,8 @@ export type {
   SelectorEngine,
 } from './locator-context.js'
 export { type AstNode, parseSource, walk } from './parser.js'
-export { cssChainDepth } from './rules/no-deep-css-chain.js'
+export { DEFAULT_MAX_CHAIN_DEPTH } from './rules/no-deep-css-chain.js'
+export { maxChainDepth } from './selector/depth.js'
 export {
   discoveryBase,
   type ResolvedFiles,

@@ -3,6 +3,8 @@ import type { ParsedSelector } from './selector/types.js'
 export type LocatorApi =
   | 'locator'
   | 'frameLocator'
+  | 'first'
+  | 'last'
   | 'getByRole'
   | 'getByText'
   | 'getByLabel'

@@ -25,6 +25,11 @@ export {
   type SubScores,
 } from './analysis/types.js'
 export {
+  DEPRECATED_RULE_IDS,
+  RULE_PREDECESSORS,
+  RULE_SUCCESSORS,
+} from './analysis/rule-aliases.js'
+export {
   type Baseline,
   BASELINE_SCHEMA_VERSION,
   type BaselineComparison,

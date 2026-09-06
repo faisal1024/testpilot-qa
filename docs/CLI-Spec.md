@@ -10,7 +10,7 @@
 > Commands below are tagged *(MVP)* or *(V1)* accordingly.
 >
 > **Implemented today:** `init` (scaffold, 2.5), `run` (thin Playwright pass-through, 2.5), `analyze`
-> (static Locator Intelligence — six Tier 1 rules, Locator Quality Score, `--min-score` gating,
+> (static Locator Intelligence — Tier 1 rules, Locator Quality Score, `--min-score` gating,
 > `--baseline` no-regression gate, `--reporter table|json|sarif|html`; 3A–3C, 6A–6B, 7A), `doctor`
 > (project diagnostics + AI guidance drift; 4B, 5B), `explain` (rule education; 4A), `fix` (safe
 > mechanical rewrites, dry-run by default; 8A), and `add ai` (safe AI guidance regeneration; 6C).
@@ -445,7 +445,7 @@ invalid; `4` for environment/project setup problems (e.g. missing Playwright or 
 ### 3.5 `testpilot explain <ruleId>` *(MVP — implemented in 4A)*
 
 Explain a rule: why it matters, a bad example, a better example, and guidance — the terminal-side
-education surface. Available for all six MVP Tier 1 rules.
+education surface. Available for every Tier 1 rule.
 
 ```
 testpilot explain no-xpath
@@ -536,8 +536,14 @@ export default defineConfig({
     'no-deep-css-chain': 'warn',
     'prefer-user-facing-locator': 'warn',
     'no-hard-wait': 'error',
+    'avoid-positional-access': 'warn',
+    'avoid-parent-traversal': 'info',
     // Off by default — opt in once the suite has a tag vocabulary.
     'require-test-tag': 'info',
+  },
+  // Per-rule settings, separate from `rules` so a severity stays a severity.
+  ruleOptions: {
+    'no-deep-css-chain': { maxChainDepth: 3 },
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
   // `doctor` warns when a referenced tag exists in no test, so a typo surfaces
@@ -583,11 +589,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.9`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.10`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.9",
+  "schemaVersion": "1.10",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -675,7 +681,10 @@ no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps w
 still have something to read; the table and HTML reporters print only the error.
 
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
-against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
+against the saved baseline. `matchedByPreviousId` (1.10) is present **only when non-zero**, and counts findings that matched
+under a rule's **previous** id — a baseline recorded before that rule was split or renamed. A finding's identity is
+`(ruleId, file, snippet)`, so without this a rule split would re-report every grandfathered finding
+as new and fail a gate on a suite that did not change. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.
 
 ### `tags --json` (`schemaVersion` `1.0`)

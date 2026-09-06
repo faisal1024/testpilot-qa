@@ -6,8 +6,9 @@ import { createHash } from 'node:crypto'
  * v2: agent globs follow the widened default `include` (JS/`*.e2e.ts` suites).
  * v3: `.mts`/`.cts` added to those globs.
  * v4: tag conventions — reuse the project's existing vocabulary, and how a subset is run.
+ * v5: positional access and `locator('..')` are nudges, not prohibitions (Phase 11e/11f).
  */
-export const GUIDANCE_VERSION = 4
+export const GUIDANCE_VERSION = 5
 
 const TOKEN = '@testpilot/guidance'
 const MARKER_RE = /@testpilot\/guidance v(\d+) sha256:([0-9a-f]+)/

@@ -2,6 +2,13 @@ import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './
 import { type AstNode, walk } from './parser.js'
 import { tokenizeSelector } from './selector/tokenize.js'
 
+/**
+ * Note `first`/`last` are absent deliberately. `avoid-positional-access`
+ * already handles them, but extracting them makes them **call sites** — the
+ * score's denominator. Measured: callSites +4% to +50% depending on the repo,
+ * and scores -1 to -13. That belongs with Phase 12, which owns the denominator.
+ * See `avoid-positional-access.ts` for the per-repo figures.
+ */
 const LOCATOR_METHODS = new Set<LocatorApi>([
   'locator',
   'frameLocator',
@@ -145,15 +152,7 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
   return contexts
 }
 
-/**
- * The recognized locator method a call is chained off, if any.
- *
- * Note `first`/`last` are deliberately NOT in `LOCATOR_METHODS`: extracting
- * them would add them to `callSites`, which is the score's denominator, and a
- * precision PR must not move the score by enlarging the denominator — Ghost
- * went 98 -> 99 and mattermost 66 -> 69 with no quality change at all. 11e
- * adds them together with the denominator handling that has to accompany them.
- */
+/** The recognized locator method a call is chained off, if any. */
 function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
   if (!receiver || receiver.type !== 'CallExpression') {
     return undefined

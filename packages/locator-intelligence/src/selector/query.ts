@@ -50,3 +50,31 @@ export function classTokens(parsed: ParsedSelector): string[] | null {
   visit(selectors)
   return [...classes]
 }
+
+/**
+ * Whether any compound uses one of the given pseudo-classes, nested ones
+ * included. `null` when the selector could not be read.
+ */
+export function hasPseudo(parsed: ParsedSelector, names: ReadonlySet<string>): boolean | null {
+  const selectors = cssSelectors(parsed)
+  if (selectors === null) {
+    return null
+  }
+  let found = false
+  const visit = (list: ComplexSelector[]): void => {
+    for (const selector of list) {
+      for (const compound of selector.compounds) {
+        for (const pseudo of compound.pseudos) {
+          if (names.has(pseudo.name)) {
+            found = true
+          }
+          if (pseudo.selectors) {
+            visit(pseudo.selectors)
+          }
+        }
+      }
+    }
+  }
+  visit(selectors)
+  return found
+}

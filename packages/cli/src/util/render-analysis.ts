@@ -46,12 +46,19 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
   lines.push(scoreLine('Flakiness', score.subScores.flakiness))
   lines.push('')
 
+  const previousIdNote = baseline?.matchedByPreviousId
+    ? [
+        `  ${baseline.matchedByPreviousId} of them matched under a rule's previous id — that rule was split or renamed since this baseline was recorded. Re-record it to keep the file current.`,
+      ]
+    : []
+
   if (baseline && newFindings) {
     // Baseline mode: show only regressions over the baseline.
     if (newFindings.length === 0) {
       lines.push(
         `No new findings vs baseline (${baseline.baselinedFindings} baselined) across ${summary.filesAnalyzed} file(s).`,
       )
+      lines.push(...previousIdNote)
     } else {
       for (const finding of newFindings) {
         lines.push(findingLine(finding))
@@ -61,6 +68,7 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
         `${newFindings.length} new finding(s) vs baseline ${baseline.path} ` +
           `(${baseline.baselinedFindings} baselined) across ${summary.filesAnalyzed} file(s).`,
       )
+      lines.push(...previousIdNote)
     }
   } else if (findings.length === 0) {
     lines.push(`No locator issues found across ${summary.filesAnalyzed} file(s).`)

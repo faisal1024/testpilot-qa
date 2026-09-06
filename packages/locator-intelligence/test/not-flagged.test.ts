@@ -1,8 +1,9 @@
 import type { LocatorContext } from '@testpilot/locator-intelligence'
 import { describe, expect, it } from 'vitest'
 import { ruleExplanations } from '../src/explanations.js'
+import { extractLocators } from '../src/extractor.js'
+import { parseSource } from '../src/parser.js'
 import { getRule } from '../src/rules/index.js'
-import { tokenizeSelector } from '../src/selector/tokenize.js'
 
 /**
  * Every "Does not fire on" example in the docs is executed against its own
@@ -12,24 +13,17 @@ import { tokenizeSelector } from '../src/selector/tokenize.js'
  * reason: a "does not fire on" list that nothing runs is a promise, not a fact,
  * and every entry in it was a false positive at some point.
  */
-const CALL = /\.(locator|frameLocator)\(\s*(['"`])([\s\S]*?)\2\s*\)/
-
-function contextFor(example: string): LocatorContext | null {
-  const match = CALL.exec(example)
-  if (!match) {
-    return null
-  }
-  const selector = match[3] as string
-  return {
-    apiCall: match[1] as LocatorContext['apiCall'],
-    selector,
-    selectorEngine: 'css',
-    isDynamic: false,
-    parsed: tokenizeSelector(selector),
-    raw: example,
-    line: 1,
-    column: 1,
-  }
+/**
+ * Builds contexts the way `analyze` does — parse the example, extract every
+ * call site — rather than regexing one API out of it. The regex version only
+ * understood `.locator(...)` and hardcoded `selectorEngine: 'css'`, so it could
+ * not express an example about `getByRole()` at all, and asserted a context
+ * shape the engine never produces.
+ */
+function contextsFor(example: string): LocatorContext[] {
+  // Parsed whole, comment included: an example is valid JavaScript as written,
+  // and splitting on `//` cut `page.locator('//button')` in half.
+  return extractLocators(example, parseSource(example, 'example.ts'))
 }
 
 const withExamples = Object.values(ruleExplanations).filter(
@@ -55,16 +49,43 @@ describe('docs "Does not fire on" examples', () => {
       const rule = getRule(explanation.id)
 
       for (const example of explanation.notFlagged ?? []) {
-        it(`stays quiet on ${example.split('//')[0]?.trim()}`, () => {
+        it(`stays quiet on ${example.split(/\s{2,}\/\//)[0]?.trim()}`, () => {
           expect(rule, explanation.id).toBeDefined()
-          const context = contextFor(example)
-          expect(context, `could not build a context from: ${example}`).not.toBeNull()
-          if (!rule || rule.kind === 'test' || !context) {
+          if (!rule || rule.kind === 'test') {
             throw new Error('unreachable')
           }
-          expect(rule.evaluate(context)).toBeNull()
+          const contexts = contextsFor(example)
+          expect(contexts.length, `no call site found in: ${example}`).toBeGreaterThan(0)
+          for (const context of contexts) {
+            expect(rule.evaluate(context), example).toBeNull()
+          }
         })
       }
+    })
+  }
+})
+
+/**
+ * The mirror of the above: every documented "Avoid" example must actually
+ * produce a finding from its own rule.
+ *
+ * Nothing executed `badExample`, which is how two rule pages drifted in
+ * opposite directions at once — `avoid-positional-access` illustrated itself
+ * with `.first()`, which it cannot detect, while `no-nth-child` still showed
+ * `.nth()` as its Avoid case after that moved to another rule. `explain` prints
+ * these, so a wrong one is advice the tool contradicts.
+ */
+describe('docs "Avoid" examples', () => {
+  for (const explanation of Object.values(ruleExplanations)) {
+    const rule = getRule(explanation.id)
+    if (!rule || rule.kind === 'test') {
+      continue
+    }
+    it(`${explanation.id} flags its own bad example`, () => {
+      const contexts = contextsFor(explanation.badExample)
+      expect(contexts.length, `no call site in: ${explanation.badExample}`).toBeGreaterThan(0)
+      const fired = contexts.some((context) => rule.evaluate(context) !== null)
+      expect(fired, `${explanation.id} does not flag its own badExample`).toBe(true)
     })
   }
 })

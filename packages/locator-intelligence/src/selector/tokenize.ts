@@ -289,6 +289,16 @@ const NON_SELECTOR_PSEUDOS = new Set([
   'part',
 ])
 
+/**
+ * Reads `:hover`, `:nth-child(2)`, `::before`.
+ *
+ * Pseudo-*elements* (`::before`) are parsed although Playwright rejects them
+ * outright — a deliberate choice, not an oversight. Refusing them would abstain
+ * on the whole selector, losing the classes it does contain; parsing them at
+ * worst reports a finding on a selector that was already broken. Recorded here
+ * because `tokenize.test.ts` asserts both this and "rejects what Playwright
+ * rejects", and the two look contradictory without the reason.
+ */
 function readPseudo(cursor: Cursor): PseudoSelector {
   cursor.take() // ':'
   const element = cursor.peek() === ':'
@@ -316,7 +326,11 @@ function readPseudo(cursor: Cursor): PseudoSelector {
   }
   if (NTH_OF_PSEUDOS.has(name)) {
     // `An+B` alone, or `An+B of <selector list>`.
-    const of = /\sof\s/i.exec(argument)
+    // `of` is an ident token; CSS-4 permits `of.foo` with no space after it, and
+    // Playwright accepts that. Requiring a trailing space silently dropped the
+    // selector — a clean parse over input we did not read, one spacing variant
+    // away from the defect this branch was added to fix.
+    const of = /\sof(?=[\s.#[:*>~+]|$)/i.exec(argument)
     if (!of) {
       return { name, argument, element }
     }

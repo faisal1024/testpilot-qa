@@ -41,9 +41,15 @@ export interface RuleMeta {
  * defaults; the engine resolves the effective severity from config and builds
  * the {@link import('@testpilot/core').Finding}.
  */
+/** Per-rule settings from `testpilot.config.ts`. */
+export interface RuleOptions {
+  /** `no-deep-css-chain`: combinator steps at which a chain is "deep". */
+  maxChainDepth?: number
+}
+
 export interface Rule extends RuleMeta {
   kind?: 'locator'
-  evaluate(context: LocatorContext): RuleViolation | null
+  evaluate(context: LocatorContext, options?: RuleOptions): RuleViolation | null
 }
 
 /**

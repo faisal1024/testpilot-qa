@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11a/11c: a selector tokenizer replaces the no-css-class-selector regex. Measured rule-vs-rule over the analyzed set: 29 findings removed (cal.com -6, documenso -12, mattermost -11), 0 added. Every removal is a genuine false positive \u2014 a dot inside a quoted attribute value (`input[name=\"meta.subject\"]`, `p[data-testid=\"...+seats@cal.com\"]`, `#admin\\.access_control\\....`). filesAnalyzed, callSites and parseErrors are unchanged, so the evidence gate is untouched. Note: an earlier version of this reason claimed a true positive was recovered and that text=/regex/ findings were removed. Both were wrong. Nothing was recovered relative to main \u2014 the old regex already matched the one :has()-nested class, and my first tokenizer missed it; I fixed my own regression and mis-described it as a recovery. The old rule gated on selectorEngine==='css', so it never fired on a text= part and none could be removed.",
+  "reason": "Phase 11d/11e/11f: precision and severity, with the denominator deliberately untouched (callSites identical on all five repos: 1326/352/95/3774/2954). 11d - no-deep-css-chain measures depth per selector from the tokenizer, so a comma list is no longer a chain: 5 findings removed across the checkouts, 4 in the analyzed set (all comma lists, e.g. 'strong em, em strong'), 0 added. It now has NO corpus evidence at all (fires on 0 of 5 repos), as does no-nth-child - both are covered only by unit tests, which is worth knowing when reading this record. 11e - .nth() moves out of no-nth-child into avoid-positional-access at warn. All 276 of no-nth-child's corpus findings were .nth(); the CSS pseudo it is named for produced none, so error was in practice grading only the idiomatic case. A 1:1 swap (cal.com 113, documenso 126, mattermost 29, immich 6, Ghost 2), no count change. no-nth-child also widened from a ':nth-child(' substring to the parsed pseudo, which additionally covers :nth-last-child (corpus-neutral). 11f - locator('..') moves out of no-xpath into avoid-parent-traversal at info: 9 of the 11 xpath findings were the '..' idiom, so the error-level rule was mostly reporting the quiet case. Scores rise (cal.com 69->74, immich 89->91, Ghost 98->99, documenso 89->91, mattermost 66->67), dominated by the two severity reductions: cal.com is 113 findings x 3 weight points plus one xpath finding x 4.5 = 343.5 / (1326 x 5) = 5.18%. Not from the denominator: extracting .first()/.last() is deferred to Phase 12, which owns it. Measured with the real code path (adding them to LOCATOR_METHODS and re-running): callSites +7.9/+4.0/+50.5/+7.4/+8.4%, scores 74->73, 91->90, 99->86, 91->89, 67->66. An earlier version of this reason said '~10% more call sites' and '3-8 points' in the other direction; that figure was measured before avoid-positional-access existed, and adding a rule that fires on those calls reversed the sign. Re-measured, not re-reasoned. Correction: an earlier version of this reason said '6 of 8' xpath findings and 'exactly 5.1%'. Both were wrong. The 6-of-8 came from a probe script that scanned only single-quoted .locator() calls in spec files rather than the analyzer's own extraction - the third time in this phase that measuring with a different code path than the shipped rule produced a wrong published number.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -21,14 +21,14 @@
       "filesAnalyzed": 61,
       "parseErrors": 0,
       "findings": 827,
-      "score": 69,
-      "grade": "D",
+      "score": 74,
+      "grade": "C",
       "callSites": 1326,
       "byRule": {
+        "avoid-parent-traversal": 1,
+        "avoid-positional-access": 113,
         "no-css-class-selector": 13,
         "no-hard-wait": 16,
-        "no-nth-child": 113,
-        "no-xpath": 1,
         "prefer-user-facing-locator": 684
       },
       "warnings": {
@@ -52,14 +52,14 @@
       "filesAnalyzed": 21,
       "parseErrors": 0,
       "findings": 76,
-      "score": 89,
-      "grade": "B",
+      "score": 91,
+      "grade": "A",
       "callSites": 352,
       "byRule": {
+        "avoid-parent-traversal": 3,
+        "avoid-positional-access": 6,
         "no-css-class-selector": 1,
         "no-hard-wait": 3,
-        "no-nth-child": 6,
-        "no-xpath": 3,
         "prefer-user-facing-locator": 63
       },
       "warnings": {},
@@ -81,11 +81,11 @@
       "filesAnalyzed": 94,
       "parseErrors": 0,
       "findings": 2,
-      "score": 98,
+      "score": 99,
       "grade": "A",
       "callSites": 95,
       "byRule": {
-        "no-nth-child": 2
+        "avoid-positional-access": 2
       },
       "warnings": {
         "helpers-not-analyzed": 1
@@ -108,14 +108,14 @@
       "filesAnalyzed": 127,
       "parseErrors": 0,
       "findings": 607,
-      "score": 89,
-      "grade": "B",
+      "score": 91,
+      "grade": "A",
       "callSites": 3774,
       "byRule": {
+        "avoid-parent-traversal": 3,
+        "avoid-positional-access": 126,
         "no-css-class-selector": 31,
         "no-hard-wait": 112,
-        "no-nth-child": 126,
-        "no-xpath": 3,
         "prefer-user-facing-locator": 335
       },
       "warnings": {
@@ -138,16 +138,16 @@
       },
       "filesAnalyzed": 298,
       "parseErrors": 0,
-      "findings": 1533,
-      "score": 66,
+      "findings": 1529,
+      "score": 67,
       "grade": "D",
       "callSites": 2954,
       "byRule": {
+        "avoid-parent-traversal": 2,
+        "avoid-positional-access": 29,
         "no-css-class-selector": 433,
-        "no-deep-css-chain": 4,
         "no-hard-wait": 172,
-        "no-nth-child": 29,
-        "no-xpath": 4,
+        "no-xpath": 2,
         "prefer-user-facing-locator": 891
       },
       "warnings": {

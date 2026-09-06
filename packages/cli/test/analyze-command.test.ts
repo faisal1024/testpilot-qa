@@ -681,3 +681,105 @@ describe('unscored findings are disclosed where the reader is', () => {
     expect(stdout).not.toContain('not scored')
   })
 })
+
+describe('a baseline recorded before a rule split', () => {
+  // The successor map exists so a rule split does not re-report every
+  // grandfathered finding as new. Absorbing them *silently* would be the same
+  // defect wearing a different hat, so the count is reported.
+  beforeEach(() => {
+    writeFileSync(
+      join(dir, 'tests', 'a.spec.ts'),
+      "test('x', async ({ page }) => { await page.getByRole('row').nth(2).click() })\n",
+    )
+    writeFileSync(
+      join(dir, 'bl.json'),
+      JSON.stringify({
+        schemaVersion: '1.0',
+        entries: [
+          {
+            ruleId: 'no-nth-child',
+            file: 'tests/a.spec.ts',
+            snippet: "page.getByRole('row').nth(2)",
+            count: 1,
+          },
+        ],
+      }),
+    )
+  })
+
+  it('still passes the gate', async () => {
+    const { exitCode, stdout } = await runAnalyze(['--baseline', 'bl.json'])
+    expect(exitCode).toBeUndefined()
+    expect(stdout).toContain('No new findings vs baseline')
+  })
+
+  it('says how many matched under the previous id', async () => {
+    const { stdout } = await runAnalyze(['--baseline', 'bl.json'])
+    expect(stdout).toContain("matched under a rule's previous id")
+  })
+
+  it('names it in the HTML report too, which is the shared artifact', async () => {
+    await runAnalyze(['--baseline', 'bl.json', '--reporter', 'html', '--output', 'r.html'])
+    expect(readFileSync(join(dir, 'r.html'), 'utf8')).toContain(
+      "matched under a rule's previous id",
+    )
+  })
+
+  it('reports it in JSON too', async () => {
+    const { stdout } = await runAnalyze(['--baseline', 'bl.json', '--json'])
+    expect(JSON.parse(stdout).baseline.matchedByPreviousId).toBe(1)
+  })
+
+  it('says nothing when no id changed', async () => {
+    writeFileSync(
+      join(dir, 'bl.json'),
+      JSON.stringify({
+        schemaVersion: '1.0',
+        entries: [
+          {
+            ruleId: 'avoid-positional-access',
+            file: 'tests/a.spec.ts',
+            snippet: "page.getByRole('row').nth(2)",
+            count: 1,
+          },
+        ],
+      }),
+    )
+    const { stdout } = await runAnalyze(['--baseline', 'bl.json'])
+    expect(stdout).not.toContain('previous id')
+  })
+})
+
+describe('ruleOptions end to end', () => {
+  it('threshold from config reaches the rule', async () => {
+    writeFileSync(
+      join(dir, 'tests', 'a.spec.ts'),
+      "test('x', async ({ page }) => { await page.locator('a b c').click() })\n",
+    )
+    // Distinct config files: the loader is memoized per path within a process,
+    // which is right for a one-shot CLI and would make a rewrite invisible here.
+    writeFileSync(
+      join(dir, 'tight.config.ts'),
+      "export default { ruleOptions: { 'no-deep-css-chain': { maxChainDepth: 2 } } }\n",
+    )
+    writeFileSync(
+      join(dir, 'loose.config.ts'),
+      "export default { ruleOptions: { 'no-deep-css-chain': { maxChainDepth: 6 } } }\n",
+    )
+    const fired = async (config: string) =>
+      JSON.parse(
+        (await runAnalyze(['--json', '--config', join(dir, config)])).stdout,
+      ).findings.some((finding: { ruleId: string }) => finding.ruleId === 'no-deep-css-chain')
+    expect(await fired('tight.config.ts')).toBe(true)
+    expect(await fired('loose.config.ts')).toBe(false)
+  })
+
+  it('rejects an out-of-range threshold at config load', async () => {
+    writeFileSync(
+      join(dir, 'bad.config.ts'),
+      "export default { ruleOptions: { 'no-deep-css-chain': { maxChainDepth: 0 } } }\n",
+    )
+    const { exitCode } = await runAnalyze(['--config', join(dir, 'bad.config.ts')])
+    expect(exitCode).toBe(3)
+  })
+})

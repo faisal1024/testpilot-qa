@@ -115,10 +115,12 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 
 ## Analyze locator quality
 
-`analyze` statically flags fragile locators with six Tier 1 rules — `no-xpath`,
+`analyze` statically flags fragile locators with Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
-`no-hard-wait` — and prints a human table or stable JSON. Severity is configurable per rule
-(`off` disables a rule).
+`no-hard-wait` — plus `avoid-positional-access` (`.nth()`, `warn`) and
+`avoid-parent-traversal` (`locator('..')`, `info`), and prints a human table or stable JSON.
+Severity is configurable per rule (`off` disables a rule), and `no-deep-css-chain`'s threshold is
+configurable via `ruleOptions`.
 
 One further rule, **`require-test-tag`**, is **off by default** and flags tests carrying no tag. It
 is opt-in because a suite that never adopted tags would otherwise light up with one finding per
@@ -418,7 +420,7 @@ TestPilot generates is plain, ejectable Playwright.
 
 - `init` — scaffold a TypeScript Playwright project (UI + API examples) **+ AI agent guidance files**
 - `run` — thin Playwright pass-through (not a custom runner)
-- `analyze` — static Tier 1 locator analysis (six rules) + Locator Quality Score + `--min-score` gating
+- `analyze` — static Tier 1 locator analysis (the Tier 1 rules) + Locator Quality Score + `--min-score` gating
 - **brownfield baseline** — record known findings and gate CI on *new* ones only (`--baseline`)
 - **reporters** — `--reporter table|json|sarif|html`: SARIF for GitHub code scanning, a shareable HTML report, plus a wrapper GitHub Action
 - `fix` — safe, behavior-preserving mechanical locator rewrites (dry-run by default)
@@ -462,12 +464,15 @@ Written down because a tool that hides these is worse than one that doesn't have
   counts as a call site — the score's denominator — while no rule can read it. A suite that
   interpolates heavily can therefore score `100 (A)` over locators the tool never looked at. Fixed in
   Phase 11.
-- **Some `error`-severity findings are false positives, and silencing the noisy rule does not clear
-  them.** `no-css-class-selector` fires on an escaped `#id`, on a dot inside an attribute *value*
-  (`input[name="meta.subject"]`), and on a test id containing `@`; `no-deep-css-chain` counts
-  combinators across comma-separated selector lists; `no-nth-child` fires on `.nth(1)` but not
-  `.first()`. Setting `prefer-user-facing-locator` to `info` leaves all of these at `error` — set
-  them down too if they are noisy for you.
+- **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
+  The other two are the same pattern, but counting them changes the score's denominator, so they
+  arrive with the scoring work in Phase 12.
+- **Your score will change when you upgrade to the next alpha.** `.nth()` dropped from `error` to `warn`
+  and `locator('..')` from `error` to `info`, which raises most scores by a few points (measured on
+  five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — one you had tuned
+  tightly is now looser than you meant. In the other direction, `no-nth-child` now also covers
+  `:nth-last-child()`, so a suite using it gains one new `error` finding.
+  `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
   `analyze` reports the count when they sit in a conventional directory (`pages/`, `page-objects/`,

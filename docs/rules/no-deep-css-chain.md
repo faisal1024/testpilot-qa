@@ -28,6 +28,15 @@ await page.getByRole('link', { name: 'Docs' }).click()
 
 - Prefer a single user-facing locator over a structural path.
 - Use locator chaining (locator.getByRole(...)) only to scope, not to encode DOM depth.
+- Depth is counted per selector, so a comma-separated list of shallow selectors is not a deep chain.
+- The threshold defaults to 3 and is configurable: `ruleOptions: { 'no-deep-css-chain': { maxChainDepth: 4 } }` (1-20).
+
+## Does not fire on
+
+```ts
+page.locator('strong em, em strong')  // two one-step selectors, not a three-step chain
+page.locator('[title="a b c d"]')     // whitespace inside a value is not a combinator
+```
 
 ## In the CLI
 

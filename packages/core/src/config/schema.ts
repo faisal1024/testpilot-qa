@@ -98,6 +98,25 @@ export const configSchema = z
      */
     suites: z.record(suiteSchema).default({}),
     rules: z.record(severitySchema).default({}),
+    /**
+     * Per-rule settings, separate from `rules` so a severity stays a severity.
+     * Only rules with a genuine knob appear here.
+     */
+    ruleOptions: z
+      .object({
+        'no-deep-css-chain': z
+          .object({
+            /** Combinator steps at which a chain counts as deep. */
+            maxChainDepth: z.number().int().min(1).max(20).default(3),
+          })
+          .strict()
+          .default({}),
+      })
+      // Not `.strict()`: an unknown id here should warn like a typo in `rules`
+      // does, not fail the whole config load. A rule that is renamed later
+      // would otherwise hard-break every project that set an option on it.
+      .passthrough()
+      .default({}),
     scoring: scoringSchema,
     ai: aiSchema,
   })
