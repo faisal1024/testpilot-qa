@@ -35,6 +35,8 @@ function scope(overrides: Partial<DiscoveryScope> & { root: string }): Discovery
     matchGlobs: [],
     matchRegex: [],
     excludeGlobs: defaultConfig.exclude,
+    helperGlobs: [],
+    helperRoot: overrides.root,
     ignoreGlobs: [],
     ignoreRegex: [],
     ...overrides,

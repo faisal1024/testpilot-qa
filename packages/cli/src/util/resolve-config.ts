@@ -61,6 +61,7 @@ export interface DiscoveryResult extends ResolvedDiscovery {
 export async function resolveDiscoveryOrExit(
   globals: GlobalOptions,
   patterns: string[],
+  options: { includeHelpers?: boolean } = {},
 ): Promise<DiscoveryResult> {
   const loaded = await resolveConfigOrExit(globals)
   // `rootDir` is a pure function of repo layout — never of the roots discovery
@@ -72,6 +73,7 @@ export async function resolveDiscoveryOrExit(
   const resolved = resolveDiscovery(loaded, {
     rootDir,
     disablePlaywrightFallback: patterns.length > 0 || globals.playwrightDiscovery === false,
+    includeHelpers: options.includeHelpers,
   })
   announceDiscovery(globals, resolved, patterns, rootDir)
   return { ...resolved, filepath: loaded.filepath, rootDir }

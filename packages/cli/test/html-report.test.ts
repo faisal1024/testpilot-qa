@@ -20,7 +20,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
 
 function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
   return {
-    schemaVersion: '1.6',
+    schemaVersion: '1.7',
     command: 'analyze',
     rootDir: '/repo',
     discovery: {

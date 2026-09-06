@@ -53,6 +53,10 @@ export function buildProgram(): Command {
     )
     .option('--reporter <format>', 'Output format: table | json | sarif | html.')
     .option('--output <path>', 'Write the report to a file instead of stdout.')
+    .option(
+      '--with-helpers',
+      'Also analyze page objects, fixtures and helpers (files Playwright does not run).',
+    )
     .option('--baseline <path>', 'Compare against a baseline; fail only on new findings.')
     .option(
       '--update-baseline',
@@ -64,6 +68,10 @@ export function buildProgram(): Command {
     .command('fix [patterns...]')
     .description('Apply safe, mechanical locator rewrites. Dry-run (diff) by default.')
     .option('--write', 'Write the fixes to disk (default is a dry-run preview).', false)
+    .option(
+      '--with-helpers',
+      'Also fix page objects, fixtures and helpers (files Playwright does not run).',
+    )
     .action(fixCommand)
 
   program

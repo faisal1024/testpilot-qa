@@ -60,3 +60,20 @@ export function formatDiscoverySource(
       return 'built-in default'
   }
 }
+
+/**
+ * Where suites conventionally keep page objects, fixtures and helpers. Used by
+ * `--with-helpers` when the project has not named its own locations.
+ *
+ * Deliberately narrow: these directories hold locator code, not application code.
+ * `utils/` and `lib/` are excluded — they are as likely to hold unrelated source.
+ */
+export const DEFAULT_HELPER_PATTERNS = [
+  '**/pages/**',
+  '**/page-objects/**',
+  '**/pageobjects/**',
+  '**/pom/**',
+  '**/fixtures/**',
+  '**/helpers/**',
+  '**/support/**',
+]

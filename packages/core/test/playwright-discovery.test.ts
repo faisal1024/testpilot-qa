@@ -521,6 +521,28 @@ describe('resolveDiscovery', () => {
     expect(resolved.discovery.playwrightConfigPartial?.reason).toContain('spread')
   })
 
+  it('adds helper globs only when asked, anchored beside the test root', async () => {
+    writeFile('playwright.config.ts', "export default { testDir: './e2e/tests' }\n")
+    const off = await resolveIn(dir)
+    expect(off.scopes[0]?.helperGlobs).toEqual([])
+
+    const loaded = await loadConfig({ cwd: dir })
+    const on = resolveDiscovery(loaded, { rootDir: dir, includeHelpers: true })
+    // Helpers sit beside the test root far more often than inside it, so the scan
+    // anchors at the config's directory rather than at `testDir`.
+    expect(on.scopes[0]?.helperGlobs).toContain('**/pages/**')
+    expect(on.scopes[0]?.helperRoot).toBe(dir)
+    expect(on.scopes[0]?.root).toBe(join(dir, 'e2e/tests'))
+  })
+
+  it("uses the project's own helper patterns when it names them", async () => {
+    writeFile('playwright.config.ts', "export default { testDir: './e2e' }\n")
+    writeFile('testpilot.config.ts', "export default { includeHelpers: ['**/po/**'] }\n")
+    const resolved = await resolveIn(dir)
+    // Naming them is itself the opt-in; no flag required.
+    expect(resolved.scopes[0]?.helperGlobs).toEqual(['**/po/**'])
+  })
+
   it('reports built-in defaults when there is no Playwright config at all', async () => {
     const resolved = await resolveIn(dir)
     expect(resolved.config.testDir).toBe('tests')

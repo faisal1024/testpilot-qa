@@ -105,10 +105,27 @@ function compile(patterns: RegexPattern[] | undefined): RegExp[] {
  * faithful glob translation. They are matched against the absolute path, as
  * Playwright does, over a broad candidate set.
  */
+/** Discovered files, split by whether they are the suite's own or its helper layer. */
+export interface ResolvedFiles {
+  files: string[]
+  /** Absolute paths within `files` that came from `helperGlobs`. */
+  helpers: Set<string>
+}
+
 export async function resolveTestFiles(options: ResolveFilesOptions): Promise<string[]> {
+  return (await resolveFiles(options)).files
+}
+
+/**
+ * Like {@link resolveTestFiles}, but keeps the helper/page-object files distinguishable.
+ * Playwright never runs those, so their findings are real but belong in a different
+ * bucket from the suite's own.
+ */
+export async function resolveFiles(options: ResolveFilesOptions): Promise<ResolvedFiles> {
   const { cwd, patterns, config } = options
   const usingPatterns = patterns !== undefined && patterns.length > 0
   const matches: string[] = []
+  const helpers = new Set<string>()
 
   // `ALWAYS_IGNORED` is unconditional: `exclude` replaces its default when the user
   // sets it, and nothing — least of all `fix --write` — may touch dependency code.
@@ -121,7 +138,7 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
     const { literal, expanded } = splitPatterns(cwd, patterns, config.include)
     matches.push(...(await run(cwd, literal, [])))
     matches.push(...(await run(cwd, expanded, config.exclude)))
-    return [...new Set(matches)].sort()
+    return { files: [...new Set(matches)].sort(), helpers: new Set() }
   }
 
   const scopes: FileScope[] = options.scopes?.length
@@ -133,6 +150,8 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
           matchGlobs: [],
           matchRegex: [],
           excludeGlobs: config.exclude,
+          helperGlobs: [],
+          helperRoot: resolve(discoveryBase(cwd, patterns, options.rootDir)),
           ignoreGlobs: [],
           ignoreRegex: [],
         },
@@ -157,6 +176,19 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
         ),
       )
     }
+    // Page objects and fixtures are not selected by `testMatch` — Playwright never runs
+    // them — so they are scanned separately and tagged, never silently mixed in.
+    if (scope.helperGlobs.length > 0) {
+      const isHelper = picomatch(scope.helperGlobs, { dot: true })
+      const candidates = await run(scope.helperRoot, ANY_SOURCE_FILE, scope.excludeGlobs, true)
+      for (const file of candidates) {
+        if (isHelper(toPosix(file))) {
+          found.push(file)
+          helpers.add(file)
+        }
+      }
+    }
+
     // A scope's ignores apply only to that scope's files, as Playwright scopes them —
     // and `testIgnore` globs match the absolute path, exactly like `testMatch`.
     const ignoreGlob =
@@ -169,5 +201,5 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
     )
   }
 
-  return [...new Set(matches)].sort()
+  return { files: [...new Set(matches)].sort(), helpers }
 }
