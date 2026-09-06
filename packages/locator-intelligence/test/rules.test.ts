@@ -271,3 +271,40 @@ describe('avoid-parent-traversal — repeated parent steps', () => {
     expect(noXpath.evaluate(xpath('../div'))).not.toBeNull()
   })
 })
+
+describe('no-deep-css-chain — same-element pseudos do not add depth', () => {
+  // These pin the model the rule actually uses. An "accumulate through nesting"
+  // version was written and reverted: `:not()`, `:is()` and `:where()` match the
+  // SAME element, so adding a step for them reported `form .row > label:not(…)`
+  // as three deep with a number that was simply wrong. Without these, that
+  // implementation can be reinstated with the whole suite still green.
+  it.each([
+    ['form .row > label:not([hidden])', 2],
+    ['.a .b > .c:not(.d)', 2],
+    ['.a:is(.x, .y)', 0],
+    ['div:is(.a .b) span', 1],
+    ['.a:where(.x .y)', 1],
+    ['input:right-of(.label)', 0],
+    ['a:nth-child(2 of .foo)', 0],
+  ])('%s is %i steps deep', (selector, expected) => {
+    expect(maxChainDepth(tokenizeSelector(selector))).toBe(expected)
+  })
+
+  it('does not flag a selector whose depth comes from a same-element pseudo', () => {
+    expect(noDeepCssChain.evaluate(css('form .row > label:not([hidden])'))).toBeNull()
+    expect(noDeepCssChain.evaluate(css('.a .b > .c:not(.d)'))).toBeNull()
+  })
+
+  it('reports the deepest single selector, the documented under-count included', () => {
+    // `.a b:has(c > d)` couples to a longer path than this; the floor is
+    // deliberate, and stated in `depth.ts`. Pinned so it stays a decision.
+    expect(maxChainDepth(tokenizeSelector('.a b:has(c > d)'))).toBe(1)
+  })
+
+  it('states in its message the same number it measured', () => {
+    const finding = noDeepCssChain.evaluate(css('header nav ul li a'))
+    expect(finding?.message).toContain(
+      `${maxChainDepth(tokenizeSelector('header nav ul li a'))} combinator`,
+    )
+  })
+})

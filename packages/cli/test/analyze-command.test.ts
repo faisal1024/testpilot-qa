@@ -718,6 +718,13 @@ describe('a baseline recorded before a rule split', () => {
     expect(stdout).toContain("matched under a rule's previous id")
   })
 
+  it('names it in the HTML report too, which is the shared artifact', async () => {
+    await runAnalyze(['--baseline', 'bl.json', '--reporter', 'html', '--output', 'r.html'])
+    expect(readFileSync(join(dir, 'r.html'), 'utf8')).toContain(
+      "matched under a rule's previous id",
+    )
+  })
+
   it('reports it in JSON too', async () => {
     const { stdout } = await runAnalyze(['--baseline', 'bl.json', '--json'])
     expect(JSON.parse(stdout).baseline.matchedByPreviousId).toBe(1)

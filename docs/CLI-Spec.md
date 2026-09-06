@@ -645,7 +645,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     { "code": "playwright-config-partial", "message": "…/playwright.config.ts was used for test discovery, but part of it could not be read: …" }
   ],
   "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
-  "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8, "matchedByPreviousId": 0 }
+  "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
 }
 ```
 
@@ -681,8 +681,8 @@ no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps w
 still have something to read; the table and HTML reporters print only the error.
 
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
-against the saved baseline. `matchedByPreviousId` (1.10) counts findings that matched under a rule's
-**previous** id — a baseline recorded before that rule was split or renamed. A finding's identity is
+against the saved baseline. `matchedByPreviousId` (1.10) is present **only when non-zero**, and counts findings that matched
+under a rule's **previous** id — a baseline recorded before that rule was split or renamed. A finding's identity is
 `(ruleId, file, snippet)`, so without this a rule split would re-report every grandfathered finding
 as new and fail a gate on a suite that did not change. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.

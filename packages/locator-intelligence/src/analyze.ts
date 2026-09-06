@@ -219,7 +219,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     // Every extracted call site counts. A call that can produce a finding must
     // also contribute to the denominator — penalty without denominator is not a
     // ratio, and excluding `.first()` while still flagging it dropped Ghost
-    // from 98 to 79 on a suite whose locators did not change.
+    // from 99 to 79 on a suite whose locators did not change.
     callSites += contexts.length
 
     // A second AST pass, so only when a test-level rule is actually enabled.

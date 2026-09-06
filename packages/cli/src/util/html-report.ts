@@ -109,8 +109,11 @@ function summarySection(
     statCard(String(warn), 'warn', 'sev-warn'),
     statCard(String(info), 'info', 'sev-info'),
   ].join('')
+  const previousId = baseline?.matchedByPreviousId
+    ? ` ${baseline.matchedByPreviousId} of those matched under a rule's previous id — that rule was split or renamed since this baseline was recorded.`
+    : ''
   const baselineNote = baseline
-    ? `<p class="baseline">Baseline <code>${esc(baseline.path)}</code>: <strong>${baseline.newFindings}</strong> new finding(s), ${baseline.baselinedFindings} already baselined.</p>`
+    ? `<p class="baseline">Baseline <code>${esc(baseline.path)}</code>: <strong>${baseline.newFindings}</strong> new finding(s), ${baseline.baselinedFindings} already baselined.${previousId}</p>`
     : ''
   return `<section class="summary"><div class="stats">${cards}</div>${baselineNote}</section>`
 }

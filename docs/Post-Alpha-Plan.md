@@ -292,7 +292,7 @@ denominator is call sites (on Ghost, 95 call sites against 321 tests, scoring it
 a 98 to ~64). `summary.unscoredFindings` reports that exclusion rather than applying it silently —
 a quiet score adjustment would be the same dishonesty this plan spent Phase 9 removing.
 
-### Phase 11 — Signal precision (`alpha.3`)
+### Phase 11 — Signal precision (next alpha)
 
 Goal: **every finding at `warn`/`error` is one an engineer would act on.** Corpus target: hard
 false-positive rate < 5% per rule.
@@ -334,7 +334,7 @@ handles them.
 1326 × 5 — 5.18%. `callSites` is identical on all five repos, which is how you can tell the rise is
 the re-grading and not the denominator.
 
-**A lesson worth keeping.** *Three times* in this phase a published claim about the corpus was wrong
+**A lesson worth keeping.** *Four times* in this phase a published claim about the corpus was wrong
 because the measurement script differed from the shipped rule: once omitting the rule's engine gate,
 once excluding selectors containing a backslash so the oracle never saw the syntax the bugs lived in,
 once counting `.locator('…')` only in spec files, which reported "6 of 8" xpath findings where the

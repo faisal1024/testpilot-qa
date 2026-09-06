@@ -469,8 +469,9 @@ Written down because a tool that hides these is worse than one that doesn't have
   arrive with the scoring work in Phase 12.
 - **Your score will change when you upgrade to the next alpha.** `.nth()` dropped from `error` to `warn`
   and `locator('..')` from `error` to `info`, which raises most scores by a few points (measured on
-  five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — a gate that was
-  passing will still pass, but one you had tuned tightly may now be looser than you meant.
+  five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — one you had tuned
+  tightly is now looser than you meant. In the other direction, `no-nth-child` now also covers
+  `:nth-last-child()`, so a suite using it gains one new `error` finding.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
