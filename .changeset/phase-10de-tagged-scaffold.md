@@ -22,8 +22,9 @@ Tagged scaffold, tag guidance for AI agents, and an opt-in `require-test-tag` ru
   statically: that title may well carry a tag, and flagging it would be an accusation based on our
   own blind spot.
   It also abstains wherever it cannot see: a title or `tag` entry that is not statically readable —
-  its own **or an enclosing `test.describe`'s, title included** — and any suite whose Playwright
-  config declares a global `testConfig.tag`, which tags every test so none is untagged. It judges on
+  its own **or an enclosing `test.describe`'s, title included** — a `test.describe` whose body is a
+  function reference (its tests are declared elsewhere and inherit the block's tag), and any suite
+  whose Playwright config declares — **or may declare** — a global `testConfig.tag`. It judges on
   **selectable** tags, so a tag fused into a word (`user@example.com`) does not count; the finding
   says exactly that ("no tag `--tag` can select"), because such a tag *is* a Playwright tag and
   `--grep` can reach it.

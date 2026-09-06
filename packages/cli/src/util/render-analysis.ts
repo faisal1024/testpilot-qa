@@ -105,6 +105,8 @@ function unscoredNote(summary: AnalysisReport['summary']): string[] {
   }
   const rules = summary.unscoredRuleIds ?? []
   return [
-    `  ${unscored} of those are not scored${rules.length > 0 ? ` (${rules.join(', ')})` : ''} — measured per test, while the score is per locator call-site.`,
+    // Not "of those": the note now prints in baseline mode too, where the
+    // preceding line counts *new* findings and "those" would name the wrong set.
+    `  ${unscored} finding(s)${rules.length > 0 ? ` from ${rules.join(', ')}` : ''} are not scored — measured per test, while the score is per locator call-site.`,
   ]
 }

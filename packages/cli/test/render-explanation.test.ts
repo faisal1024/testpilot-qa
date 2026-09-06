@@ -31,3 +31,23 @@ describe('renderExplanationText', () => {
     )
   })
 })
+
+describe('opt-in rules', () => {
+  it('says a defaultOff rule is off, not that it ships at its enabled severity', () => {
+    // The one place a user asks "what is this rule?" must not imply it is on.
+    const text = renderExplanationText({
+      id: 'require-test-tag',
+      category: 'maintainability',
+      defaultSeverity: 'info',
+      defaultOff: true,
+      docsUrl: 'https://example.test/require-test-tag.md',
+      title: 'Tag every test',
+      summary: 'summary',
+      whyItMatters: 'why',
+      badExample: 'bad',
+      betterExample: 'better',
+      guidance: ['g'],
+    })
+    expect(text).toContain('off — info when enabled')
+  })
+})

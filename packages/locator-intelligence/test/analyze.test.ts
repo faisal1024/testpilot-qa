@@ -620,7 +620,7 @@ describe('require-test-tag (opt-in)', () => {
       discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
     })
     const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
-    expect(rollup?.message).toContain('the Playwright config declares a `tag`')
+    expect(rollup?.message).toContain('the Playwright config may declare a `tag`')
     expect(rollup?.message).not.toContain('not statically readable')
   })
 
@@ -662,6 +662,57 @@ describe('require-test-tag (opt-in)', () => {
       config: config({ rules: { 'require-test-tag': 'info' } }),
     })
     expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+  })
+
+  it('does not judge a file whose describe body is a function reference', async () => {
+    // The tests inside are declared elsewhere and inherit the block's tag at
+    // runtime; we cannot tell which declarations in this file those are.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "function sharedTests() { test('inner', async ({ page }) => { await page.click() }) }",
+        "test.describe('group @shared', sharedTests)",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('body is a function reference')
+  })
+
+  it('reports no coverage figure rather than 100% when it judged nothing', async () => {
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'const GROUP = "g"',
+        "test.describe(GROUP, () => { test('one', async ({ page }) => { await page.click() }) })",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('judged none of 1 test declaration(s)')
+    expect(rollup?.message).not.toContain('100% tagged')
+  })
+
+  it('says the config *may* declare a tag, never asserts it from a hedge', async () => {
+    // `playwrightConfigDeclaresTags` is deliberately true when the config could
+    // not be fully read. Restating that hedge as fact contradicts the
+    // playwright-config-partial warning printed beside it.
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+      discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('may declare')
+    expect(rollup?.message).not.toContain('the Playwright config declares')
   })
 
   it('emits no rollup when the rule is off', async () => {

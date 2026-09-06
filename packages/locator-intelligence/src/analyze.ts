@@ -180,6 +180,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   let callSites = 0
   let testDeclarations = 0
   let unreadableTests = 0
+  let filesWithUnreadDescribeBody = 0
   let configTaggedTests = 0
 
   for (const absolute of files) {
@@ -210,13 +211,29 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       const testContext = {
         playwrightConfigDeclaresTags: options.discovery?.playwrightConfigDeclaresTags === true,
       }
-      for (const declaration of extractTests(program).tests) {
+      const extracted = extractTests(program)
+      // A `test.describe('g @tag', sharedTests)` declares its tests elsewhere,
+      // so they are recorded at their own location with no way to know they are
+      // nested — and they do inherit the block's tag at runtime. We cannot tell
+      // which of this file's declarations those are, so none of them can be
+      // judged. Coarse, but the alternative is a confident per-test claim over
+      // a body we never read. `tags` already discloses this; `analyze` did not.
+      const bodyNotInlined = extracted.describesNotInlined > 0
+      if (bodyNotInlined) {
+        filesWithUnreadDescribeBody += 1
+      }
+      for (const declaration of extracted.tests) {
         testDeclarations += 1
-        const abstention = abstentionFor(declaration, testContext)
+        const abstention = bodyNotInlined ? 'unreadable' : abstentionFor(declaration, testContext)
         if (abstention === 'unreadable') {
           unreadableTests += 1
         } else if (abstention === 'config-tags') {
           configTaggedTests += 1
+        }
+        if (abstention !== null) {
+          // Counted above as unjudged; evaluating anyway would emit exactly the
+          // confident claim the abstention exists to prevent.
+          continue
         }
         for (const { rule, severity } of testRules) {
           const violation = rule.evaluate(declaration, testContext)
@@ -273,7 +290,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // every untagged test including the ones this rule abstains on.
   if (testRules.length > 0 && testDeclarations > 0) {
     warnings.push(
-      ...tagCoverageWarning(findings, testDeclarations, unreadableTests, configTaggedTests),
+      ...tagCoverageWarning(
+        findings,
+        testDeclarations,
+        unreadableTests,
+        configTaggedTests,
+        filesWithUnreadDescribeBody,
+      ),
     )
   }
 
@@ -364,12 +387,17 @@ function tagCoverageWarning(
   declarations: number,
   unreadable: number,
   configTagged: number,
+  filesWithUnreadDescribeBody: number,
 ): AnalysisWarning[] {
   if (configTagged > 0) {
     return [
       {
         code: 'test-tag-coverage',
-        message: `${requireTestTag.id} found nothing to flag: the Playwright config declares a \`tag\`, which applies to every test in every file, so no test in this suite is untagged.`,
+        // "may declare", not "declares": the flag is deliberately true when the
+        // config could not be fully read (a spread, a factory call), because a
+        // vocabulary has to widen on unknown. Restating that hedge as a fact
+        // would contradict the `playwright-config-partial` warning above it.
+        message: `${requireTestTag.id} judged nothing: the Playwright config may declare a \`tag\`, which would apply to every test in every file. Until that is ruled out, no test here can be called untagged.`,
       },
     ]
   }
@@ -378,16 +406,30 @@ function tagCoverageWarning(
     return []
   }
   const judged = declarations - unreadable
+  const because =
+    filesWithUnreadDescribeBody > 0
+      ? ` ${filesWithUnreadDescribeBody} file(s) have a \`test.describe\` whose body is a function reference, so every declaration in them is excluded — the tests inside are declared elsewhere and inherit the block's tag.`
+      : ''
+  // No percentage over a zero denominator: "(100% tagged)" beside "0 of 0" is
+  // the same reassuring wrong number that made this switch from round to floor.
+  if (judged === 0) {
+    return [
+      {
+        code: 'test-tag-coverage',
+        message: `${requireTestTag.id} judged none of ${declarations} test declaration(s) — a title or \`tag\` entry is not statically readable in every one, so no coverage figure is available.${because}`,
+      },
+    ]
+  }
   // Floor, not round: "100% tagged" printed beside a non-zero flagged count is
   // exactly the kind of reassuring wrong number a team would gate on.
-  const coverage = judged > 0 ? Math.floor(((judged - flagged) / judged) * 100) : 100
+  const coverage = Math.floor(((judged - flagged) / judged) * 100)
   return [
     {
       code: 'test-tag-coverage',
       message: `${requireTestTag.id}: ${flagged} of ${judged} readable test declaration(s) carry no tag \`--tag\` can select (${coverage}% tagged)${
         unreadable > 0
-          ? `; a further ${unreadable} could not be judged — a title or \`tag\` entry, theirs or an enclosing describe's, is not statically readable, so they are neither flagged here nor counted as tagged.`
-          : '.'
+          ? `; a further ${unreadable} could not be judged — a title or \`tag\` entry, theirs or an enclosing describe's, is not statically readable, so they are neither flagged here nor counted as tagged.${because}`
+          : `.${because}`
       }`,
     },
   ]
