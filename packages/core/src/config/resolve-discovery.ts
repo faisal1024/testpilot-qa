@@ -212,33 +212,27 @@ function helperPatterns(config: TestPilotConfig, requested: boolean): string[] {
  * `testpilot init` (which sets `testDir` and not `include`).
  */
 /**
- * Whether any located Playwright config declares a config-level `tag`.
+ * Whether the Playwright config this project actually runs under declares a
+ * config-level `tag` — or might, in a region we could not read.
  *
- * Deliberately independent of whether we adopt that config's `testDir`:
- * `testConfig.tag` applies to every test in every file, so it is a fact about
- * the suite's tag vocabulary even when the config contributes nothing else.
- * Ambiguous candidates are all probed — any one of them could carry it.
+ * Deliberately independent of whether that config's `testDir` was adopted:
+ * `testConfig.tag` applies to every test in every file either way.
+ *
+ * Resolved with `findPlaywrightConfig`, the *same* call `testpilot run` makes
+ * (`run.ts`), rather than the nearby-search discovery uses. That is the whole
+ * point: the question is "what will Playwright be given when this suite runs",
+ * so the answer has to come from the same lookup. Filtering the nearby search
+ * by directory instead looked equivalent and was not — it swallowed an explicit
+ * `playwrightConfig` hint pointing at a sub-directory, which `run` honours.
  */
-function declaresTagsIn(
-  located: { path: string } | { ambiguous: string[] } | null,
-  rootDir: string,
-): boolean {
-  if (!located) {
+function declaresTagsIn(rootDir: string, hint: string): boolean {
+  const path = findPlaywrightConfig(rootDir, hint)
+  if (!path) {
     return false
   }
-  const paths = 'ambiguous' in located ? located.ambiguous : [located.path]
-  return paths.some((path) => {
-    // `testpilot run` invokes Playwright from the project root, so only a config
-    // Playwright would itself pick up there can apply a tag to this suite. A
-    // config found one directory down (an `examples/` demo) governs its own
-    // tests, not ours, and hedging on it would suppress real counts.
-    if (dirname(resolve(path)) !== resolve(rootDir)) {
-      return false
-    }
-    // `mayDeclareTags`, not `declaresTags`: a key hidden behind a spread or an
-    // unparseable layer is "unknown", and for a vocabulary unknown must widen.
-    return mayDeclareTags(readPlaywrightTestSettings(path))
-  })
+  // `mayDeclareTags`, not `declaresTags`: a key hidden behind a spread or an
+  // unparseable layer is "unknown", and for a vocabulary unknown must widen.
+  return mayDeclareTags(readPlaywrightTestSettings(path))
 }
 
 export function resolveDiscovery(
@@ -259,12 +253,6 @@ export function resolveDiscovery(
     return { config, discovery, scopes: [own] }
   }
 
-  const located = findPlaywrightConfigNearby(
-    options.rootDir,
-    config.playwrightConfig,
-    loaded.explicitKeys.has('playwrightConfig'),
-  )
-
   // Adoption is all-or-nothing on `testDir`, so an explicit one ends it here —
   // reading a config we could never use would only produce misleading warnings.
   // One thing is still read: a config-level `tag`, which Playwright applies to
@@ -273,10 +261,18 @@ export function resolveDiscovery(
   // and missing it made `tags` count the wrong set and `doctor` call a correct
   // suite a typo.
   if (options.disablePlaywrightFallback === true || discovery.testDir !== 'default') {
-    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located, options.rootDir)
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
+  const located = findPlaywrightConfigNearby(
+    options.rootDir,
+    config.playwrightConfig,
+    loaded.explicitKeys.has('playwrightConfig'),
+  )
   if (!located) {
     if (loaded.explicitKeys.has('playwrightConfig')) {
       discovery.playwrightConfigIgnored = {
@@ -291,7 +287,10 @@ export function resolveDiscovery(
       path: located.ambiguous.join(', '),
       reason: 'several sub-directories declare a Playwright config, so none was assumed',
     }
-    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located, options.rootDir)
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 

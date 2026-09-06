@@ -696,6 +696,29 @@ describe('config-level tag detection across discovery paths', () => {
     expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(false)
   })
 
+  it('reads a config the `playwrightConfig` hint points at, even in a sub-directory', async () => {
+    // `run` honours the hint, so the probe has to as well. Filtering the nearby
+    // search by directory looked equivalent and silently dropped this case.
+    writeFile('e2e/playwright.config.ts', "export default { testDir: './tests', tag: '@cfgtag' }\n")
+    writeFile('e2e/tests/a.spec.ts', "test('x', async () => {})\n")
+    writeFile(
+      'testpilot.config.ts',
+      "export default { testDir: 'e2e/tests', playwrightConfig: 'e2e/playwright.config.ts' }\n",
+    )
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+  })
+
+  it('falls back to the root config when the hint points at nothing, as run does', async () => {
+    writeFile('playwright.config.ts', "export default { testDir: './tests', tag: '@cfgtag' }\n")
+    writeFile(
+      'testpilot.config.ts',
+      "export default { testDir: 'tests', playwrightConfig: 'nope.config.ts' }\n",
+    )
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+  })
+
   it('ignores a config one directory down, which governs its own tests', async () => {
     // `testpilot run` starts Playwright at the project root, so an examples/
     // demo config cannot tag this suite — hedging on it would suppress real counts.
