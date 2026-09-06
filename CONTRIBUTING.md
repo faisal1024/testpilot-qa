@@ -46,13 +46,37 @@ committed pages drift from the generator.
 `pnpm bench` runs the built CLI against pinned commits of five real open-source Playwright suites and
 diffs the result against `bench/baseline.json`. It exists because unit tests cannot see the failure
 that matters most here: a rule or discovery change that quietly narrows what gets analyzed on a real
-repo. A drop in `filesAnalyzed`, or findings vanishing with no rule change, **fails the run**.
+repo.
 
-- First run clones into `.bench-cache/` (gitignored) and needs the network; later runs reuse it.
-- Requires a prior `pnpm -r build`.
-- Accept an intended change with `pnpm bench --update-baseline`, and say in the PR why the numbers
-  moved. A baseline bump with no explanation is how signal loss gets normalized.
-- `bench/corpus.json` pins each repo's commit, so a diff measures TestPilot, not upstream churn.
+**What gates, and why.** `findings` is by construction the sum of the per-rule counts, so any drop in
+findings always moves a rule row — "a rule row moved" tells you nothing about whether the change was
+intended. The gate therefore watches the **evidence that the analysis happened**, which is orthogonal
+to rule precision:
+
+| gate | meaning |
+|---|---|
+| `filesAnalyzed` decreased | we opened fewer files |
+| `callSites` decreased | we opened the files and stopped seeing the locators |
+| `parseErrors` increased | we opened the files and could not read them |
+| `discovery.*` fell back to `default` | we stopped reading the project's config |
+| a warning appeared, or appeared more often | the tool is saying it could not see something |
+| a repo vanished from the run | the corpus itself narrowed |
+
+Findings and per-rule counts are **reporting, not gating** — removing false positives moves them and
+leaves the gate untouched, which is exactly what a precision change should look like.
+
+- First run clones into `.bench-cache/` (gitignored) and needs the network; later runs reuse it. The
+  cache is keyed on the pin *and* the sparse patterns, so editing either re-checks-out.
+- Requires a prior `pnpm -r build`. Needs git ≥ 2.25 (`sparse-checkout`).
+- Accept an intended change with `pnpm bench --update-baseline --reason "..."`. The reason is stored
+  in the file, so an unexplained bump is visibly empty. `--update-baseline` always runs the whole
+  corpus — a partial baseline silently drops repos.
+- A baseline may not carry warnings, a zero-file repo, or discovery anchored outside the checkout.
+  Those are harness bugs, and recording them normalizes the exact false green this catches.
+- `bench/corpus.json` pins each repo's commit; the runner refuses to diff when a pin moves, because
+  the resulting churn would be indistinguishable from a tool regression. Every sparse pattern must
+  match something, and every directory the repo's Playwright config declares as a test root must be
+  checked out.
 
 ## Conventions
 

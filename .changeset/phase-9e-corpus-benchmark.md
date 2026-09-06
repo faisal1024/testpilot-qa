@@ -5,10 +5,13 @@
 Phase 9e — a corpus benchmark, so signal loss cannot ship quietly.
 
 `pnpm bench` runs the built CLI against pinned commits of five real open-source Playwright suites
-(cal.com, immich, Ghost, documenso, mattermost) and diffs files, findings-by-rule, score, and
-warnings against a committed baseline. **A narrowed scan fails the run** — fewer files analyzed, or
-findings vanishing with no accompanying rule change — because that is the one regression the score
-itself cannot reveal.
+(cal.com, immich, Ghost, documenso, mattermost) and diffs the result against a committed baseline.
+
+The gate is the **evidence that the analysis happened** — files opened, locator call sites extracted,
+parse errors, discovery source, and whether the tool emitted a warning — not the findings count.
+`findings` is by construction the sum of the per-rule counts, so it always moves when a rule changes;
+"a rule row moved" says nothing about whether the change was intended. Findings and per-rule counts
+are reporting, and the reviewer reads the table.
 
 This is developer tooling; nothing in the published package changes. It exists because every
 discovery defect found while building Phase 9 was caught by hand, one fixture at a time, invented

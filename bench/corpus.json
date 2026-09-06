@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned commits so a benchmark run measures TestPilot changes, not upstream churn. Bump deliberately, in a PR that explains the diff. Sparse patterns are non-cone (gitignore-style); the root package.json matters \u2014 without it project-root discovery escapes the checkout.",
+  "$comment": "Pinned commits so a benchmark run measures TestPilot changes, not upstream churn \u2014 the runner refuses to diff when a pin moves. Sparse patterns are non-cone (gitignore-style) and every one must match something: a dead pattern silently shrinks the corpus. Check out every directory the repo's Playwright config declares as a test root, or the benchmark manufactures the missing-root warning it exists to detect.",
   "repos": [
     {
       "name": "cal.com",
@@ -7,11 +7,10 @@
       "ref": "abffde336e744e15cf69626c10e436d6172bc406",
       "sparse": [
         "/package.json",
-        "/playwright.config.*",
-        "/pnpm-workspace.yaml",
+        "/playwright.config.ts",
         "apps/web/playwright/",
         "packages/embeds/",
-        "apps/web/package.json"
+        "packages/app-store/"
       ],
       "note": "projects[] with RegExp testMatch; the most test-id-driven suite in the corpus."
     },
@@ -19,32 +18,21 @@
       "name": "immich",
       "url": "https://github.com/immich-app/immich.git",
       "ref": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
-      "sparse": ["/package.json", "/playwright.config.*", "/pnpm-workspace.yaml", "e2e/"],
+      "sparse": ["/package.json", "e2e/"],
       "note": "Playwright config lives in e2e/, RegExp testMatch, *.e2e-spec.ts naming."
     },
     {
       "name": "Ghost",
       "url": "https://github.com/TryGhost/Ghost.git",
       "ref": "26746d30ce30e3a2a3e69c77f5d460ea6992bfc3",
-      "sparse": [
-        "/package.json",
-        "/playwright.config.*",
-        "/pnpm-workspace.yaml",
-        "ghost/core/test/e2e-browser/",
-        "e2e/"
-      ],
-      "note": "Page objects hold the locators; most real findings live outside the spec files."
+      "sparse": ["/package.json", "e2e/"],
+      "note": "Page objects under e2e/helpers hold most of the locators, and Playwright's testMatch does not run them \u2014 so Ghost's high grade is a measure of what Playwright executes, not of the suite's locator quality. It is the corpus's standing argument for Phase 9c."
     },
     {
       "name": "documenso",
       "url": "https://github.com/documenso/documenso.git",
       "ref": "2cac63a000e22422bdea449f68b8025e709aa73a",
-      "sparse": [
-        "/package.json",
-        "/playwright.config.*",
-        "/pnpm-workspace.yaml",
-        "packages/app-tests/"
-      ],
+      "sparse": ["/package.json", "packages/app-tests/"],
       "note": "High getByRole adoption \u2014 the control for 'does the score reward good practice'. Run from the package that owns the suite, as its own contributors would \u2014 its Playwright config is two levels down, past the one-level lookup.",
       "cwd": "packages/app-tests"
     },
@@ -52,13 +40,8 @@
       "name": "mattermost",
       "url": "https://github.com/mattermost/mattermost.git",
       "ref": "502cf7e3e5379ce054bee24e279ec1779911aa38",
-      "sparse": [
-        "/package.json",
-        "/playwright.config.*",
-        "/pnpm-workspace.yaml",
-        "e2e-tests/playwright/"
-      ],
-      "note": "Largest suite; the runtime and false-positive volume check. Run from the package that owns the suite, as its own contributors would \u2014 its Playwright config is two levels down, past the one-level lookup.",
+      "sparse": ["e2e-tests/playwright/"],
+      "note": "Largest suite; the runtime and false-positive volume check. No root package.json upstream, so it is measured from the package that owns the suite, as its contributors do.",
       "cwd": "e2e-tests/playwright"
     }
   ]

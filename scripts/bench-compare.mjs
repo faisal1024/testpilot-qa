@@ -1,22 +1,64 @@
 /**
- * Pure comparison for `pnpm bench`, separated from the runner so it can be tested
- * without cloning anything. The whole point of the benchmark is that a change which
- * quietly narrows what gets analyzed shows up — so that logic is worth pinning.
+ * Pure comparison and validation for `pnpm bench`, separated from the runner so it can
+ * be tested without cloning anything.
+ *
+ * The gate's job is to catch **signal loss** — the tool quietly analyzing less than it
+ * used to — while letting deliberate precision work through. Those look identical if
+ * you only watch `findings`: `findings` is by construction the sum of `byRule`, so any
+ * drop in findings always moves a rule row, and "did a rule row move" carries no
+ * information about intent.
+ *
+ * So the gate watches the **evidence that the analysis happened at all**, which is
+ * orthogonal to rule precision: how many files were opened, how many locator call
+ * sites were extracted from them, and how many failed to parse. Removing false
+ * positives moves findings and leaves those untouched; a broken rule, a narrowed
+ * discovery, or a parser regression moves them.
  */
 
-/** Metrics compared numerically. `elapsedMs` is deliberately absent: it is machine-dependent. */
-export const COMPARED_METRICS = ['filesAnalyzed', 'parseErrors', 'findings', 'score', 'callSites']
+/** Metrics rendered in the diff table. `elapsedMs`/`grade` are excluded on purpose. */
+export const COMPARED_METRICS = [
+  'filesAnalyzed',
+  'parseErrors',
+  'findings',
+  'score',
+  'callSites',
+  'exitCode',
+]
 
 /**
- * Rows describing how one repo's measurement moved. Empty when nothing changed.
- * A row is `{ metric, before, after }`; callers render them.
+ * Metrics whose movement in the stated direction means we are seeing less than we did.
+ * These, not `findings`, are the gate.
+ */
+export const EVIDENCE_METRICS = {
+  filesAnalyzed: 'decrease',
+  callSites: 'decrease',
+  parseErrors: 'increase',
+}
+
+/** Discovery sources that mean a real config was read; anything else is a fallback. */
+const INFORMED_SOURCES = new Set(['playwright-config', 'testpilot-config', 'mixed'])
+
+const warningCounts = (result) => result?.warnings ?? {}
+
+/**
+ * Rows describing how one repo's measurement moved: `{ metric, before, after }`.
+ * Empty when nothing meaningful changed.
  */
 export function diffRepo(before, after) {
   if (!before) return [{ metric: '(new repo)', before: '—', after: after.name }]
+  if (!after) return [{ metric: '(missing from run)', before: before.name, after: '—' }]
+
   const rows = []
   for (const metric of COMPARED_METRICS) {
     if (before[metric] !== after[metric]) {
       rows.push({ metric, before: before[metric], after: after[metric] })
+    }
+  }
+  for (const key of ['testDir', 'include']) {
+    const wasSource = before.discovery?.[key] ?? null
+    const nowSource = after.discovery?.[key] ?? null
+    if (wasSource !== nowSource) {
+      rows.push({ metric: `discovery.${key}`, before: wasSource, after: nowSource })
     }
   }
   const rules = new Set([...Object.keys(before.byRule ?? {}), ...Object.keys(after.byRule ?? {})])
@@ -25,45 +67,90 @@ export function diffRepo(before, after) {
     const nowCount = after.byRule?.[rule] ?? 0
     if (wasCount !== nowCount) rows.push({ metric: rule, before: wasCount, after: nowCount })
   }
-  const wasWarnings = (before.warnings ?? []).join(',')
-  const nowWarnings = (after.warnings ?? []).join(',')
-  if (wasWarnings !== nowWarnings) {
-    rows.push({
-      metric: 'warnings',
-      before: wasWarnings || '(none)',
-      after: nowWarnings || '(none)',
-    })
+  // Counted, not de-duplicated: a second missing test root must not hide behind the
+  // first one's code already being in the list.
+  const codes = new Set([
+    ...Object.keys(warningCounts(before)),
+    ...Object.keys(warningCounts(after)),
+  ])
+  for (const code of [...codes].sort()) {
+    const wasCount = warningCounts(before)[code] ?? 0
+    const nowCount = warningCounts(after)[code] ?? 0
+    if (wasCount !== nowCount) {
+      rows.push({ metric: `warning:${code}`, before: wasCount, after: nowCount })
+    }
   }
   return rows
 }
 
 /**
- * True when a row is the shape that should stop a release: fewer files analyzed, or
- * fewer findings without an accompanying rule change. Both mean "we stopped seeing
- * something we used to see", which is exactly the regression a score cannot reveal.
+ * True when the rows show the tool seeing less than it did. Deliberately indifferent to
+ * `findings` and per-rule counts — those move for good reasons too, and the reviewer
+ * reads the table.
  */
 export function isSignalLoss(rows) {
-  const files = rows.find((row) => row.metric === 'filesAnalyzed')
-  if (files && files.after < files.before) return true
-  const findings = rows.find((row) => row.metric === 'findings')
-  const ruleRows = rows.filter(
-    (row) => !COMPARED_METRICS.includes(row.metric) && row.metric !== 'warnings',
-  )
-  return Boolean(findings && findings.after < findings.before && ruleRows.length === 0)
+  return rows.some((row) => {
+    if (row.metric === '(missing from run)') return true
+    const direction = EVIDENCE_METRICS[row.metric]
+    if (direction === 'decrease') return row.after < row.before
+    if (direction === 'increase') return row.after > row.before
+    if (row.metric === 'exitCode') return row.after !== row.before
+    if (row.metric.startsWith('discovery.')) {
+      return INFORMED_SOURCES.has(row.before) && !INFORMED_SOURCES.has(row.after)
+    }
+    // A warning that starts appearing (or appears more often) is the tool telling us it
+    // could not see something.
+    if (row.metric.startsWith('warning:')) return row.after > row.before
+    return false
+  })
+}
+
+/**
+ * Problems that make a measurement unfit to record as a reference, whichever side
+ * caused them. A baseline that accepts these enshrines the false green the benchmark
+ * exists to catch.
+ */
+export function validateResults(results) {
+  const problems = []
+  for (const result of results) {
+    if (result.error) {
+      problems.push(`${result.name}: ${result.error}`)
+      continue
+    }
+    if (result.filesAnalyzed === 0) {
+      problems.push(`${result.name}: analyzed 0 files — check the sparse checkout and the config`)
+    }
+    if (result.rootOutsideCheckout) {
+      problems.push(
+        `${result.name}: discovery anchored at ${result.rootDir}, outside the checkout — the corpus is not measuring this repo`,
+      )
+    }
+    const codes = Object.keys(warningCounts(result))
+    if (codes.length > 0) {
+      problems.push(
+        `${result.name}: the run reported ${codes.join(', ')} — fix the checkout rather than recording the warning as expected`,
+      )
+    }
+  }
+  return problems
 }
 
 /** Renders the whole comparison as Markdown, or `null` when nothing moved. */
 export function formatDiff(baselineResults, results) {
-  const byName = new Map((baselineResults ?? []).map((result) => [result.name, result]))
+  const baseByName = new Map((baselineResults ?? []).map((result) => [result.name, result]))
+  const nowByName = new Map(results.map((result) => [result.name, result]))
+  const names = [...new Set([...baseByName.keys(), ...nowByName.keys()])]
+
   const sections = []
   let signalLoss = false
-  for (const result of results) {
-    const rows = diffRepo(byName.get(result.name), result)
+  for (const name of names) {
+    const rows = diffRepo(baseByName.get(name), nowByName.get(name))
     if (rows.length === 0) continue
-    if (isSignalLoss(rows)) signalLoss = true
+    const lost = isSignalLoss(rows)
+    if (lost) signalLoss = true
     sections.push(
       [
-        `\n#### ${result.name}${isSignalLoss(rows) ? ' ⚠ possible signal loss' : ''}\n`,
+        `\n#### ${name}${lost ? ' ⚠ signal loss' : ''}\n`,
         '| metric | baseline | now |',
         '|---|---:|---:|',
         ...rows.map((row) => `| ${row.metric} | ${row.before} | ${row.after} |`),
@@ -75,4 +162,16 @@ export function formatDiff(baselineResults, results) {
     markdown: ['### Corpus benchmark — changes vs baseline', ...sections].join('\n'),
     signalLoss,
   }
+}
+
+/** True when the pinned corpus moved, which makes any diff unattributable to the tool. */
+export function refsChanged(baselineRefs, currentRefs) {
+  const names = new Set([...Object.keys(baselineRefs ?? {}), ...Object.keys(currentRefs ?? {})])
+  const moved = []
+  for (const name of [...names].sort()) {
+    const before = baselineRefs?.[name]
+    const after = currentRefs?.[name]
+    if (before !== after) moved.push({ name, before: before ?? '—', after: after ?? '—' })
+  }
+  return moved
 }

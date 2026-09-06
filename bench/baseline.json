@@ -1,4 +1,6 @@
 {
+  "recordedAt": "2026-09-06",
+  "reason": "Phase 9e: first recorded baseline, with cal.com's app-store project root included and dead sparse patterns removed.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -10,25 +12,27 @@
     {
       "name": "cal.com",
       "exitCode": 0,
-      "filesAnalyzed": 60,
+      "filesAnalyzed": 61,
       "parseErrors": 0,
-      "findings": 828,
+      "findings": 833,
       "score": 68,
       "grade": "D",
-      "callSites": 1321,
+      "callSites": 1326,
       "byRule": {
         "no-css-class-selector": 19,
         "no-hard-wait": 16,
         "no-nth-child": 113,
         "no-xpath": 1,
-        "prefer-user-facing-locator": 679
+        "prefer-user-facing-locator": 684
       },
-      "warnings": ["test-root-missing"],
+      "warnings": {},
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
       },
-      "elapsedMs": 622
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false,
+      "elapsedMs": 723
     },
     {
       "name": "immich",
@@ -46,12 +50,14 @@
         "no-xpath": 3,
         "prefer-user-facing-locator": 63
       },
-      "warnings": [],
+      "warnings": {},
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
       },
-      "elapsedMs": 424
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false,
+      "elapsedMs": 428
     },
     {
       "name": "Ghost",
@@ -65,12 +71,14 @@
       "byRule": {
         "no-nth-child": 2
       },
-      "warnings": [],
+      "warnings": {},
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
       },
-      "elapsedMs": 580
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false,
+      "elapsedMs": 595
     },
     {
       "name": "documenso",
@@ -88,12 +96,14 @@
         "no-xpath": 3,
         "prefer-user-facing-locator": 335
       },
-      "warnings": [],
+      "warnings": {},
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
       },
-      "elapsedMs": 1200
+      "filesFromRepoRoot": 0,
+      "rootOutsideCheckout": false,
+      "elapsedMs": 1311
     },
     {
       "name": "mattermost",
@@ -112,12 +122,14 @@
         "no-xpath": 4,
         "prefer-user-facing-locator": 891
       },
-      "warnings": [],
+      "warnings": {},
       "discovery": {
         "testDir": "playwright-config",
         "include": "mixed"
       },
-      "elapsedMs": 1339
+      "filesFromRepoRoot": 0,
+      "rootOutsideCheckout": false,
+      "elapsedMs": 1450
     }
   ]
 }

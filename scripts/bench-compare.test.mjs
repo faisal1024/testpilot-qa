@@ -1,70 +1,166 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { diffRepo, formatDiff, isSignalLoss } from './bench-compare.mjs'
+import {
+  COMPARED_METRICS,
+  diffRepo,
+  formatDiff,
+  isSignalLoss,
+  refsChanged,
+  validateResults,
+} from './bench-compare.mjs'
 
-const measurement = (overrides = {}) => ({
-  name: 'cal.com',
-  filesAnalyzed: 60,
-  parseErrors: 0,
-  findings: 828,
-  score: 68,
-  callSites: 900,
-  byRule: { 'no-xpath': 8, 'prefer-user-facing-locator': 820 },
-  warnings: [],
-  elapsedMs: 622,
-  ...overrides,
-})
+const baseline = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../bench/baseline.json', import.meta.url)), 'utf8'),
+)
+const recorded = baseline.results.find((result) => result.name === 'cal.com')
+
+/**
+ * Builds a measurement from the real recorded baseline and enforces the invariant the
+ * tool guarantees: `findings` is the sum of `byRule`. An earlier version of this suite
+ * passed only because its fixture violated that — a green test over a state no run can
+ * produce, which is the failure mode this whole benchmark exists to end.
+ */
+function measurement(overrides = {}) {
+  const result = { ...structuredClone(recorded), ...overrides }
+  const total = Object.values(result.byRule ?? {}).reduce((sum, count) => sum + count, 0)
+  if (result.findings !== total) {
+    throw new Error(
+      `fixture is impossible: findings ${result.findings} but byRule sums to ${total}`,
+    )
+  }
+  return result
+}
 
 describe('bench comparison', () => {
-  it('reports nothing when only machine-dependent timing moved', () => {
-    expect(diffRepo(measurement(), measurement({ elapsedMs: 4321 }))).toEqual([])
-    expect(formatDiff([measurement()], [measurement({ elapsedMs: 4321 })])).toBeNull()
+  it('refuses to build a measurement the tool could never emit', () => {
+    expect(() => measurement({ findings: 10 })).toThrow('fixture is impossible')
   })
 
-  it('reports per-rule movement, not just the totals', () => {
-    const after = measurement({
-      findings: 300,
-      byRule: { 'no-xpath': 8, 'prefer-user-facing-locator': 292 },
+  it('ignores machine-dependent timing', () => {
+    expect(diffRepo(measurement(), measurement({ elapsedMs: 99999 }))).toEqual([])
+    expect(formatDiff([measurement()], [measurement({ elapsedMs: 99999 })])).toBeNull()
+  })
+
+  describe('signal loss — the tool seeing less than it did', () => {
+    const loses = (overrides) =>
+      formatDiff([measurement()], [measurement(overrides)])?.signalLoss ?? false
+
+    it('flags a narrowed scan', () => {
+      expect(loses({ filesAnalyzed: recorded.filesAnalyzed - 1 })).toBe(true)
     })
-    const rows = diffRepo(measurement(), after)
-    expect(rows).toContainEqual({ metric: 'findings', before: 828, after: 300 })
-    expect(rows).toContainEqual({
-      metric: 'prefer-user-facing-locator',
-      before: 820,
-      after: 292,
+
+    it('flags locator extraction regressing, even with findings intact', () => {
+      // `callSites` is the denominator: fewer of them means we opened the files and
+      // stopped seeing the locators in them.
+      expect(loses({ callSites: 40 })).toBe(true)
+    })
+
+    it('flags a parser regression', () => {
+      expect(loses({ parseErrors: 54 })).toBe(true)
+    })
+
+    it('flags discovery falling back from a real config to guessing', () => {
+      expect(loses({ discovery: { testDir: 'default', include: 'default' } })).toBe(true)
+    })
+
+    it('flags a repo that vanished from the run', () => {
+      // Otherwise `--only` plus a baseline write silently shrinks the corpus.
+      expect(formatDiff(baseline.results, [measurement()]).signalLoss).toBe(true)
+    })
+
+    it('flags a warning starting to appear, and a second occurrence of one', () => {
+      expect(loses({ warnings: { 'test-root-missing': 1 } })).toBe(true)
+      const before = measurement({ warnings: { 'test-root-missing': 1 } })
+      const after = measurement({ warnings: { 'test-root-missing': 2 } })
+      expect(formatDiff([before], [after]).signalLoss).toBe(true)
+    })
+
+    it('flags the exit code changing', () => {
+      expect(loses({ exitCode: 1 })).toBe(true)
     })
   })
 
-  it('flags a narrowed scan as signal loss', () => {
-    // The regression a score cannot show: fewer files, same grade.
-    const rows = diffRepo(measurement(), measurement({ filesAnalyzed: 12, findings: 100 }))
-    expect(isSignalLoss(rows)).toBe(true)
-    expect(formatDiff([measurement()], [measurement({ filesAnalyzed: 12 })])?.signalLoss).toBe(true)
-  })
-
-  it('flags findings vanishing with no rule change as signal loss', () => {
-    const rows = diffRepo(measurement(), measurement({ findings: 10 }))
-    expect(isSignalLoss(rows)).toBe(true)
-  })
-
-  it('does not flag findings that fell because a rule got more precise', () => {
-    // Phase 11 deliberately removes false positives; that is progress, not loss.
-    const after = measurement({
-      findings: 200,
-      byRule: { 'no-xpath': 8, 'prefer-user-facing-locator': 192 },
+  describe('precision work — findings moving without losing evidence', () => {
+    it('does not flag half a rule’s findings being removed', () => {
+      // Exactly the shape Phase 11 will produce: fewer findings, same files, same
+      // call sites. If this fails the gate, the gate gets ignored.
+      const rule = 'prefer-user-facing-locator'
+      const removed = Math.floor(recorded.byRule[rule] / 2)
+      const after = measurement({
+        findings: recorded.findings - removed,
+        byRule: { ...recorded.byRule, [rule]: recorded.byRule[rule] - removed },
+        score: 82,
+      })
+      const diff = formatDiff([measurement()], [after])
+      expect(diff.signalLoss).toBe(false)
+      expect(diff.markdown).toContain(rule)
     })
-    expect(isSignalLoss(diffRepo(measurement(), after))).toBe(false)
-  })
 
-  it('surfaces a new warning code', () => {
-    const rows = diffRepo(measurement(), measurement({ warnings: ['playwright-config-partial'] }))
-    expect(rows).toContainEqual({
-      metric: 'warnings',
-      before: '(none)',
-      after: 'playwright-config-partial',
+    it('does not flag a rule being split into new ones', () => {
+      const after = measurement({
+        byRule: {
+          ...recorded.byRule,
+          'prefer-user-facing-locator': 0,
+          'prefer-get-by-test-id': recorded.byRule['prefer-user-facing-locator'],
+        },
+      })
+      expect(formatDiff([measurement()], [after]).signalLoss).toBe(false)
+    })
+
+    it('surfaces every moved rule in the table, gate or no gate', () => {
+      const after = measurement({
+        findings: recorded.findings + 5,
+        byRule: { ...recorded.byRule, 'no-xpath': (recorded.byRule['no-xpath'] ?? 0) + 5 },
+      })
+      expect(diffRepo(measurement(), after)).toContainEqual({
+        metric: 'no-xpath',
+        before: recorded.byRule['no-xpath'] ?? 0,
+        after: (recorded.byRule['no-xpath'] ?? 0) + 5,
+      })
     })
   })
 
-  it('treats an unseen repo as new rather than as a regression', () => {
-    expect(formatDiff([], [measurement()])?.signalLoss).toBe(false)
+  describe('validateResults — what may not be recorded as a reference', () => {
+    it('rejects a repo that analyzed nothing', () => {
+      expect(validateResults([measurement({ filesAnalyzed: 0 })])[0]).toContain('analyzed 0 files')
+    })
+
+    it('rejects a run whose warnings the harness caused', () => {
+      // A baseline carrying `test-root-missing` normalizes the very signal the tool
+      // emits to say "I did not analyze this directory".
+      expect(validateResults([measurement({ warnings: { 'test-root-missing': 1 } })])[0]).toContain(
+        'test-root-missing',
+      )
+    })
+
+    it('rejects discovery anchored outside the checkout', () => {
+      const problems = validateResults([
+        measurement({ rootOutsideCheckout: true, rootDir: '/somewhere/else' }),
+      ])
+      expect(problems[0]).toContain('outside the checkout')
+    })
+
+    it('accepts the committed baseline', () => {
+      expect(validateResults(baseline.results)).toEqual([])
+    })
+  })
+
+  it('reports a moved corpus pin so churn is never read as a tool change', () => {
+    expect(refsChanged({ 'cal.com': 'aaa' }, { 'cal.com': 'bbb' })).toEqual([
+      { name: 'cal.com', before: 'aaa', after: 'bbb' },
+    ])
+    expect(refsChanged(baseline.corpusRefs, baseline.corpusRefs)).toEqual([])
+  })
+
+  it('pins the compared metric set, so dropping one is a deliberate act', () => {
+    expect(COMPARED_METRICS).toEqual([
+      'filesAnalyzed',
+      'parseErrors',
+      'findings',
+      'score',
+      'callSites',
+      'exitCode',
+    ])
   })
 })

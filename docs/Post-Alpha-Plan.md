@@ -175,14 +175,18 @@ Goal: **`analyze` can never report a score for files it did not open — and it 
   after. (Moved up from Phase 14.)
 - ✅ **9e — Corpus benchmark (#75).** `pnpm bench` runs the built CLI against pinned commits of the
   five repos (blobless sparse clones, cached) and diffs files/findings-by-rule/score/warnings against
-  `bench/baseline.json`. A **narrowed scan fails the run** — fewer files, or findings vanishing with
-  no rule change — because that is the one regression a score cannot reveal. Weekly in CI and on
-  demand; not on the PR path (it needs the network and takes minutes).
+  `bench/baseline.json`. The gate is the **evidence that analysis happened** — files opened, locator
+  call sites extracted, parse errors, discovery source — not the findings count. `findings` is the sum
+  of the per-rule counts, so it always moves when a rule changes, which makes it useless for telling a
+  precision fix from a broken rule. Weekly in CI and on demand; not on the PR path.
 
-  Recorded baseline: cal.com 60 files / 828 findings / 68 D · immich 21 / 76 / 89 B · Ghost 94 / 2 /
-  98 A · documenso 127 / 619 / 89 B · mattermost 298 / 1544 / 66 D. Discovery finds the files
-  Playwright runs, not every file present — cal.com's `testMatch` regex selects 60 of 77, immich's 21
-  of 75.
+  Recorded baseline: cal.com 61 files / 1326 call-sites / 833 findings / 68 D · immich 21 / 352 / 76 /
+  89 B · Ghost 94 / 95 / 2 / 98 A · documenso 127 / 3774 / 619 / 89 B · mattermost 298 / 2954 / 1544 /
+  66 D. Discovery finds the files Playwright *runs*, not every file present.
+
+  Ghost is the standing argument for 9c: 94 files but only **95 call sites**, because its locators
+  live in page objects under `e2e/helpers` that Playwright's `testMatch` never runs. Its 98 A measures
+  what Playwright executes, not the suite's locator quality.
 
 ### Phase 10 — Run tests by tag (`alpha.2`)
 
