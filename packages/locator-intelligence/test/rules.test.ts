@@ -199,6 +199,15 @@ describe('prefer-get-by-test-id', () => {
     // calling it an ancestor is false — even though the rewrite itself would
     // hold. The sentence is what this rule sells.
     expect(preferGetByTestId.evaluate(css('[data-testid="x"] >> .. >> div'))).toBeNull()
+    // ...and a leading SIBLING step on a later part leaves the subtree the same
+    // way. `'[data-testid=a] + div'` has abstained since round 2; the `>>`
+    // spelling of it had not, which is the same split an eighth time.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> ~ div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div >> span'))).toBeNull()
+    // A descendant or child step is still a scope.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> div'))).not.toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> > div'))).not.toBeNull()
     // Still fires where nothing precedes it, including under a getBy* parent —
     // there the chain preserves the scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()

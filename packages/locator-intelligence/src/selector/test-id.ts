@@ -130,12 +130,19 @@ export function testIdReplacement(
   // Otherwise an earlier `>>` part, which chains as a scope. The match has to
   // be on that part's own target — `[data-testid=a] + div >> button` scopes
   // from the div, and the test id is that div's sibling.
-  // `xpath=..` walks UP from the scope, so a later xpath part can put the
-  // target outside the test id's subtree: in `'[data-testid=x] >> .. >> div'`
-  // the target is under x's *parent*, and calling x an ancestor is false.
-  // The rewrite would still be sound — `>>` is a chained `locator()` — but the
-  // sentence would not be, and the sentence is what this rule sells.
-  if (parsed.parts.slice(1).some((part) => part.engine === 'xpath')) {
+  // A later `>>` part can put the target outside the test id's subtree in two
+  // ways, and both make "on an ancestor" a false sentence about the DOM:
+  //
+  //   `[data-testid=x] >> .. >> div`   — `xpath=..` walks UP to x's parent
+  //   `[data-testid=x] >> + div`       — a leading sibling step, x's neighbour
+  //
+  // The rewrite stays sound either way (`>>` *is* a chained `locator()`), so
+  // this is about the claim, not the fix — and the claim is what earns this
+  // rule its severity. The within-part spelling `'[data-testid=x] + div'` has
+  // been guarded since round 2 by SCOPING_COMBINATORS; leaving the `>>`
+  // spelling unguarded was the same two-spellings-one-answer split, an eighth
+  // time.
+  if (parsed.parts.slice(1).some(leavesTheSubtree)) {
     return null
   }
   // Only the *first* part: anything before the one holding the test id is a
@@ -158,6 +165,34 @@ export function testIdReplacement(
     }
   }
   return null
+}
+
+/**
+ * True when following this `>>` part can land outside the previous part's
+ * subtree — an xpath (which may walk up) or a leading sibling combinator.
+ */
+function leavesTheSubtree(part: SelectorPart): boolean {
+  if (part.engine === 'xpath') {
+    return true
+  }
+  // A list: any arm that steps sideways is enough.
+  return (part.css ?? []).some((arm) => {
+    const first = arm.combinators[0]
+    return first !== undefined && !SCOPING_COMBINATORS.has(first) && isBareScope(arm.compounds[0])
+  })
+}
+
+/** The synthetic `:scope` the tokenizer puts in front of a leading combinator. */
+function isBareScope(compound: CompoundSelector | undefined): boolean {
+  return (
+    compound !== undefined &&
+    compound.tag === undefined &&
+    compound.id === undefined &&
+    compound.classes.length === 0 &&
+    compound.attributes.length === 0 &&
+    compound.pseudos.length === 1 &&
+    compound.pseudos[0]?.name === 'scope'
+  )
 }
 
 /** The one selector in a part, or `null` when the part is a list (or unparsed). */
