@@ -81,6 +81,30 @@ describe('fix — nothing matched', () => {
   })
 })
 
+describe('fix --with-helpers', () => {
+  it('actually fixes page objects when asked', async () => {
+    // The flag was registered on the command and wired to nothing, so `fix` exited 0
+    // saying "no fixes available" — the worst failure mode a fix tool has.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './e2e' }\n")
+    mkdirSync(join(dir, 'e2e', 'helpers'), { recursive: true })
+    writeFileSync(
+      join(dir, 'e2e', 'a.spec.ts'),
+      "import { test } from '@playwright/test'\ntest('a', async ({ page }) => page.getByRole('button'))\n",
+    )
+    writeFileSync(
+      join(dir, 'e2e', 'helpers', 'po.ts'),
+      "import type { Page } from '@playwright/test'\nexport const save = (p: Page) => p.locator('text=Save')\n",
+    )
+    const off = JSON.parse((await runFix([], ['--json'])).stdout)
+    expect(off.files).toEqual([])
+
+    // `--with-helpers` is a command option, so it follows `fix`.
+    const on = JSON.parse((await runFix(['--with-helpers'], ['--json'])).stdout)
+    expect(on.files.map((file: { file: string }) => file.file)).toEqual(['e2e/helpers/po.ts'])
+  })
+})
+
 describe('fix — discovery disclosure', () => {
   it('carries discovery and warnings in its JSON, like analyze', async () => {
     // `fix` is the write path: it must be at least as loud about a file set chosen by

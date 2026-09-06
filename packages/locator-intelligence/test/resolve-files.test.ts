@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { type DiscoveryScope, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveTestFiles } from '../src/resolve-files.js'
+import { resolveFiles, resolveTestFiles } from '../src/resolve-files.js'
 
 /**
  * The selection layer, exercised end to end against real files. Every discovery bug
@@ -144,6 +144,105 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
         }),
       ]),
     ).toEqual(['e2e/keep.spec.ts'])
+  })
+
+  describe('helper discovery', () => {
+    const playwrightFile = (path: string) => {
+      const full = write(path)
+      writeFileSync(
+        full,
+        "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.x')\n",
+      )
+      return full
+    }
+
+    it('requires a Playwright signal, so a directory name alone is not evidence', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('helpers/po.ts')
+      const plain = write('helpers/date.js')
+      writeFileSync(plain, 'export const f = (d) => d.toISOString()\n')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f))).toEqual(['helpers/po.ts'])
+    })
+
+    it('never scans helpers when the suite itself was not found', async () => {
+      // Otherwise a wrong testDir stops being a hard failure and starts scoring the
+      // helper layer alone — turning a red gate green.
+      playwrightFile('helpers/po.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'nope'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.files).toEqual([])
+      expect(found.helpers.size).toBe(0)
+    })
+
+    it('keeps a spec that lives under a helper directory a test', async () => {
+      const spec = write('e2e/helpers/shared.spec.ts')
+      writeFileSync(
+        spec,
+        "import { test } from '@playwright/test'\ntest('a', async ({ page }) => page.locator('.x'))\n",
+      )
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.files.map((f) => relative(dir, f))).toEqual([
+        join('e2e', 'helpers', 'shared.spec.ts'),
+      ])
+      expect(found.helpers.size).toBe(0)
+    })
+
+    it('counts only helpers that survived the ignore filters', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('helpers/po.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+            excludeGlobs: [...defaultConfig.exclude, '**/helpers/**'],
+          }),
+        ],
+      })
+      expect(found.helpers.size).toBe(0)
+      expect(found.files.every((file) => !file.includes('helpers'))).toBe(true)
+    })
   })
 
   it('deduplicates a file selected by several scopes', async () => {

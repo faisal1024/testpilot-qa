@@ -151,7 +151,9 @@ when it does this; `--no-playwright-discovery` turns it off.
 
 Most suites keep their locators in page objects and fixtures, which Playwright's `testMatch` never
 runs — `npx testpilot-qa analyze --with-helpers` includes them, tagged separately so the two are never
-conflated. On the Ghost repository that is the difference between 2 findings and 116. **A run that matches no files fails** (exit
+conflated. On the Ghost repository that is the difference between 2 findings and 116. A candidate has to
+actually use Playwright to count, so a `pages/` directory of Next.js routes is not mistaken for page
+objects. **A run that matches no files fails** (exit
 `3` for config discovery, `2` for patterns) instead of reporting an empty 100/A — so a wrong `testDir`
 can't turn into a green CI gate.
 

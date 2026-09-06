@@ -27,6 +27,7 @@ export function toHtml(report: AnalysisReport): string {
     `<p class="lede">Static <strong>Tier&nbsp;1</strong> locator analysis — deterministic and offline. Category-level guidance only; <strong>no DOM-aware suggestions, no automatic rewrites</strong>.</p>`,
     scoreCard(score),
     summarySection(summary, baseline),
+    helperSection(report),
     discoverySection(report),
     warningsSection(warnings),
     findingsSection(findings),
@@ -99,6 +100,13 @@ function summarySection(
 
 function statCard(value: string, label: string, cls = ''): string {
   return `<div class="stat ${cls}"><div class="stat-value">${esc(value)}</div><div class="stat-label">${esc(label)}</div></div>`
+}
+
+/** Says when the report covers files Playwright does not run. */
+function helperSection(report: AnalysisReport): string {
+  const count = report.summary?.helperFiles ?? 0
+  if (count === 0) return ''
+  return `<section class="helpers"><p>Includes ${count} page object/helper file(s), which Playwright does not run — their findings are marked <code>helper</code>.</p></section>`
 }
 
 /** Names the directories scanned and who chose them, when it was not the user. */

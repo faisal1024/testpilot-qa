@@ -6,7 +6,10 @@ function scoreLine(label: string, breakdown: ScoreBreakdown): string {
 
 function findingLine(finding: Finding): string {
   const location = `${finding.file}:${finding.line}:${finding.column}`
-  return `  ${location}  ${finding.severity.toUpperCase()}  ${finding.ruleId}  ${finding.message}`
+  // A page object centralizing a selector is doing its job; a test doing it is not.
+  // The reader needs to know which one they are looking at.
+  const scope = finding.inHelper ? ' [helper]' : ''
+  return `  ${location}${scope}  ${finding.severity.toUpperCase()}  ${finding.ruleId}  ${finding.message}`
 }
 
 /**
@@ -29,6 +32,11 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
     lines.push(`⚠ ${warning.message}`)
   }
 
+  if (summary.helperFiles) {
+    lines.push(
+      `Including ${summary.helperFiles} page object/helper file(s), marked [helper] — Playwright does not run these.`,
+    )
+  }
   lines.push(
     `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
   )

@@ -530,7 +530,7 @@ describe('resolveDiscovery', () => {
     const on = resolveDiscovery(loaded, { rootDir: dir, includeHelpers: true })
     // Helpers sit beside the test root far more often than inside it, so the scan
     // anchors at the config's directory rather than at `testDir`.
-    expect(on.scopes[0]?.helperGlobs).toContain('**/pages/**')
+    expect(on.scopes[0]?.helperGlobs).toContain('**/page-objects/**')
     expect(on.scopes[0]?.helperRoot).toBe(dir)
     expect(on.scopes[0]?.root).toBe(join(dir, 'e2e/tests'))
   })

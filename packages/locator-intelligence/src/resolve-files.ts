@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   type DiscoveryScope,
@@ -9,6 +10,22 @@ import picomatch from 'picomatch'
 import { glob } from 'tinyglobby'
 
 const toPosix = (path: string): string => path.split('\\').join('/')
+
+/**
+ * Evidence that a file is part of the Playwright suite rather than application code
+ * that happens to sit in a directory with a suggestive name. Read once, cheaply, and
+ * only for helper candidates.
+ */
+const PLAYWRIGHT_SIGNAL =
+  /from\s+['"]@playwright\/test['"]|require\(['"]@playwright\/test['"]\)|\bLocator\b|\bpage\s*\.\s*(locator|getBy\w+|waitFor\w+)|\bexpect\s*\(/
+
+function usesPlaywright(file: string): boolean {
+  try {
+    return PLAYWRIGHT_SIGNAL.test(readFileSync(file, 'utf8'))
+  } catch {
+    return false
+  }
+}
 
 /** Never analyzed, whatever the config says: dependencies and tool caches. */
 const ALWAYS_IGNORED = [
@@ -124,8 +141,6 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
 export async function resolveFiles(options: ResolveFilesOptions): Promise<ResolvedFiles> {
   const { cwd, patterns, config } = options
   const usingPatterns = patterns !== undefined && patterns.length > 0
-  const matches: string[] = []
-  const helpers = new Set<string>()
 
   // `ALWAYS_IGNORED` is unconditional: `exclude` replaces its default when the user
   // sets it, and nothing — least of all `fix --write` — may touch dependency code.
@@ -136,9 +151,11 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
 
   if (usingPatterns) {
     const { literal, expanded } = splitPatterns(cwd, patterns, config.include)
-    matches.push(...(await run(cwd, literal, [])))
-    matches.push(...(await run(cwd, expanded, config.exclude)))
-    return { files: [...new Set(matches)].sort(), helpers: new Set() }
+    const matched = [
+      ...(await run(cwd, literal, [])),
+      ...(await run(cwd, expanded, config.exclude)),
+    ]
+    return { files: [...new Set(matched)].sort(), helpers: new Set() }
   }
 
   const scopes: FileScope[] = options.scopes?.length
@@ -157,6 +174,8 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
         },
       ]
 
+  // --- The suite's own files: what Playwright would run. ---
+  const tests: string[] = []
   for (const scope of scopes) {
     const ignoreRegex = compile(scope.ignoreRegex)
     const matchRegex = compile(scope.matchRegex)
@@ -176,30 +195,45 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
         ),
       )
     }
-    // Page objects and fixtures are not selected by `testMatch` — Playwright never runs
-    // them — so they are scanned separately and tagged, never silently mixed in.
-    if (scope.helperGlobs.length > 0) {
-      const isHelper = picomatch(scope.helperGlobs, { dot: true })
-      const candidates = await run(scope.helperRoot, ANY_SOURCE_FILE, scope.excludeGlobs, true)
-      for (const file of candidates) {
-        if (isHelper(toPosix(file))) {
-          found.push(file)
-          helpers.add(file)
-        }
-      }
-    }
-
     // A scope's ignores apply only to that scope's files, as Playwright scopes them —
     // and `testIgnore` globs match the absolute path, exactly like `testMatch`.
     const ignoreGlob =
       scope.ignoreGlobs.length > 0 ? picomatch(scope.ignoreGlobs, { dot: true }) : null
-    matches.push(
+    tests.push(
       ...found.filter(
         (file) =>
           !ignoreRegex.some((re) => re.test(file)) && !(ignoreGlob?.(toPosix(file)) ?? false),
       ),
     )
   }
+  const testFiles = new Set(tests)
 
-  return { files: [...new Set(matches)].sort(), helpers }
+  // --- The helper layer: page objects and fixtures Playwright never runs. ---
+  // Scanned once, not per scope: `helperGlobs`/`helperRoot` are the same in every scope
+  // of a config, so a five-project repo was walking the same tree five times.
+  //
+  // Only when the suite itself was found. Otherwise a wrong `testDir` would stop being
+  // a hard failure and start scoring the helper layer alone — turning the red gate #71
+  // exists for back into a green one.
+  const helpers = new Set<string>()
+  const helperScope = scopes.find((scope) => scope.helperGlobs.length > 0)
+  if (helperScope && testFiles.size > 0) {
+    const isHelper = picomatch(helperScope.helperGlobs, { dot: true })
+    const candidates = await run(
+      helperScope.helperRoot,
+      ANY_SOURCE_FILE,
+      helperScope.excludeGlobs,
+      true,
+    )
+    for (const file of candidates) {
+      // Membership as a test always wins: a spec that happens to live under
+      // `fixtures/` is still a test, and demoting its findings would hide them.
+      if (testFiles.has(file) || !isHelper(toPosix(file))) continue
+      // Directory names alone are not evidence: `pages/` is Next.js's routes and
+      // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
+      if (usesPlaywright(file)) helpers.add(file)
+    }
+  }
+
+  return { files: [...testFiles, ...helpers].sort(), helpers }
 }

@@ -65,11 +65,12 @@ export function formatDiscoverySource(
  * Where suites conventionally keep page objects, fixtures and helpers. Used by
  * `--with-helpers` when the project has not named its own locations.
  *
- * Deliberately narrow: these directories hold locator code, not application code.
- * `utils/` and `lib/` are excluded — they are as likely to hold unrelated source.
+ * Directory names are only a hint — `pages/` is Next.js's and Nuxt's route directory,
+ * `helpers/` is Ember's — so a candidate is also required to actually use Playwright
+ * before it is analyzed. `pages/`, `utils/` and `lib/` are left out of the defaults
+ * entirely: name a `includeHelpers` list if your page objects live there.
  */
 export const DEFAULT_HELPER_PATTERNS = [
-  '**/pages/**',
   '**/page-objects/**',
   '**/pageobjects/**',
   '**/pom/**',

@@ -304,6 +304,38 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.warnings.map((w: { code: string }) => w.code)).toContain('test-root-missing')
   })
 
+  it('does not let --with-helpers rescue a run that found no tests', async () => {
+    // A wrong testDir must stay a hard failure; scoring the helper layer alone would
+    // turn the red gate this tool exists for back into a green one.
+    rmSync(join(dir, 'tests'), { recursive: true, force: true })
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'fixtures'), { recursive: true })
+    writeFileSync(
+      join(dir, 'fixtures', 'f.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const { exitCode } = await runAnalyze(['--with-helpers'])
+    expect(exitCode).toBe(3)
+  })
+
+  it('marks helper findings in the human report', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(
+      join(dir, 'helpers', 'po.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const { stdout } = await runAnalyze(['--with-helpers'])
+    expect(stdout).toContain('[helper]')
+    expect(stdout).toContain('page object/helper file(s)')
+  })
+
+  it('says --with-helpers is ignored rather than silently ignoring it', async () => {
+    const { stderr } = await runAnalyze(['--with-helpers', 'tests/**/*.spec.ts'])
+    expect(stderr).toContain('--with-helpers is ignored')
+  })
+
   it('analyzes an explicitly named file inside an excluded directory', async () => {
     mkdirSync(join(dir, 'dist', 'e2e'), { recursive: true })
     writeFileSync(join(dir, 'dist', 'e2e', 'a.spec.js'), "page.locator('//button')\n")

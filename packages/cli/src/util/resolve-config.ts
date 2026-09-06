@@ -75,6 +75,11 @@ export async function resolveDiscoveryOrExit(
     disablePlaywrightFallback: patterns.length > 0 || globals.playwrightDiscovery === false,
     includeHelpers: options.includeHelpers,
   })
+  if (options.includeHelpers === true && patterns.length > 0 && !globals.quiet) {
+    console.error(
+      '[testpilot] --with-helpers is ignored when explicit patterns are given: the patterns already say what to analyze.',
+    )
+  }
   announceDiscovery(globals, resolved, patterns, rootDir)
   return { ...resolved, filepath: loaded.filepath, rootDir }
 }

@@ -21,6 +21,7 @@ import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
   write?: boolean
+  withHelpers?: boolean
 }
 
 interface FileFixSummary {
@@ -44,7 +45,9 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns, {
+    includeHelpers: options.withHelpers === true,
+  })
   const { config, filepath, discovery, rootDir } = resolved
   const write = options.write === true
 

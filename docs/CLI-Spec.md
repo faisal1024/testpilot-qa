@@ -413,11 +413,11 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.6`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.7`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.6",
+  "schemaVersion": "1.7",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -431,6 +431,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
   },
   "summary": {
     "filesAnalyzed": 3,
+    "helperFiles": 0,
     "filesWithParseErrors": 0,
     "findings": 9,
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
@@ -457,7 +458,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
       "column": 14,
       "snippet": "page.locator('.btn-primary')",
       "suggestion": "Prefer getByRole() or getByTestId() over class-based selectors.",
-      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md"
+      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md",
+      "inHelper": false
     }
   ],
   "warnings": [
@@ -545,9 +547,24 @@ opt-in). Defaults when the flag is used: `pages`, `page-objects`, `pageobjects`,
 `helpers`, `support`.
 
 These files are scanned from the **config's directory**, not from `testDir` — helpers sit beside the
-test root far more often than inside it. Findings from them carry `inHelper: true` and are counted in
-`summary.helperFiles`, because "your page object uses a CSS class" is a different conversation from
-"your test does", and folding them together would silently change what the score measures.
+test root far more often than inside it. Findings carry `inHelper: true`, are counted in
+`summary.helperFiles`, and are marked `[helper]` in the table, in the HTML report, and as a SARIF
+`properties.inHelper`. "Your page object uses a CSS class" is a different conversation from "your test
+does" — a page object centralizing a selector is doing its job — so the two are never merged silently.
+
+Safeguards, because this is the one path that reads files Playwright does not:
+
+- A directory name is only a hint. `pages/` is Next.js's and Nuxt's route directory and `helpers/` is
+  Ember's, so a candidate must **also use Playwright** (import `@playwright/test`, or reference
+  `page.locator`/`getBy*`/`Locator`) before it is analyzed. Without that gate, `fix --write` would
+  rewrite application source.
+- **Helpers never rescue a failed run.** If the test scan matched nothing, the run still fails —
+  scoring the helper layer alone would turn a wrong `testDir` from a red gate into a green one.
+- A file the suite already selected as a test stays a test, even when it sits under `helpers/`.
+- Explicit CLI patterns already say what to analyze, so `--with-helpers` is reported as ignored there
+  rather than silently doing nothing.
+- Baselines are not comparable across the flag: turning it on makes every helper finding new. Record
+  a baseline with the same setting you gate with.
 
 It is **off by default**: a score that quietly included files Playwright never runs would not be
 comparable to one that didn't.
