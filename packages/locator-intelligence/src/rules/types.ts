@@ -30,8 +30,8 @@ export interface RuleMeta {
    * test" and "not scored" are different questions, and a later test-level rule
    * (a stray `test.only`, say) may well belong in the score. The score's
    * denominator is locator call sites, so a rule whose findings do not scale
-   * with call sites cannot share it — `require-test-tag` on Ghost would turn 95
-   * call sites and 321 tests into a 98 → 64 drop that measures nothing.
+   * with call sites cannot share it — `require-test-tag` on Ghost (95 call sites,
+   * 321 tests) would turn a 98 into roughly 65 while measuring nothing.
    */
   scored?: boolean
 }

@@ -657,9 +657,10 @@ score's denominator is locator **call sites**, so scoring it would move the grad
 does not measure. The exclusion is named in `--json`, in the table (in every mode, including
 `--baseline`), and in the HTML report — never applied silently. `warnings[].code` also gains `test-tag-coverage`, a one-line rollup that
 reconciles the flagged count against `testpilot tags`.
-`playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
-a `testConfig.tag`, which Playwright applies to every test — **or might, in a part of the config
-that could not be read**. `tags` cannot claim a complete vocabulary while that is open, and
+`playwrightConfigDeclaresTags` (1.8) reports that the project's Playwright config declares a
+`testConfig.tag`, which Playwright applies to every test — **or might, in a part of the config that
+could not be read**. It is set whether or not that config was adopted for discovery (a tag applies
+either way), so it can be `true` alongside `playwrightConfigIgnored`. `tags` cannot claim a complete vocabulary while that is open, and
 `require-test-tag` abstains: until it is ruled out, no test in the suite can be called untagged.
 `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven

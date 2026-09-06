@@ -681,6 +681,8 @@ describe('require-test-tag (opt-in)', () => {
     expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
     const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
     expect(rollup?.message).toContain('body is a function reference')
+    // Must not also claim the titles were unreadable — they are perfectly plain.
+    expect(rollup?.message).not.toContain('not statically readable')
   })
 
   it('reports no coverage figure rather than 100% when it judged nothing', async () => {

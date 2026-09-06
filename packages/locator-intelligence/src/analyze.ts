@@ -181,6 +181,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   let testDeclarations = 0
   let unreadableTests = 0
   let filesWithUnreadDescribeBody = 0
+  let describeBodyTests = 0
   let configTaggedTests = 0
 
   for (const absolute of files) {
@@ -224,8 +225,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       }
       for (const declaration of extracted.tests) {
         testDeclarations += 1
+        // The two causes are counted apart so the rollup names the one that
+        // actually applies: a test in a describe-by-reference file may have a
+        // perfectly readable title, and saying otherwise would be false.
         const abstention = bodyNotInlined ? 'unreadable' : abstentionFor(declaration, testContext)
-        if (abstention === 'unreadable') {
+        if (bodyNotInlined) {
+          describeBodyTests += 1
+        } else if (abstention === 'unreadable') {
           unreadableTests += 1
         } else if (abstention === 'config-tags') {
           configTaggedTests += 1
@@ -296,6 +302,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
         unreadableTests,
         configTaggedTests,
         filesWithUnreadDescribeBody,
+        describeBodyTests,
       ),
     )
   }
@@ -388,6 +395,7 @@ function tagCoverageWarning(
   unreadable: number,
   configTagged: number,
   filesWithUnreadDescribeBody: number,
+  describeBodyTests: number,
 ): AnalysisWarning[] {
   if (configTagged > 0) {
     return [
@@ -402,21 +410,31 @@ function tagCoverageWarning(
     ]
   }
   const flagged = findings.filter((finding) => finding.ruleId === requireTestTag.id).length
-  if (flagged === 0 && unreadable === 0) {
+  const unjudged = unreadable + describeBodyTests
+  if (flagged === 0 && unjudged === 0) {
     return []
   }
-  const judged = declarations - unreadable
-  const because =
-    filesWithUnreadDescribeBody > 0
-      ? ` ${filesWithUnreadDescribeBody} file(s) have a \`test.describe\` whose body is a function reference, so every declaration in them is excluded — the tests inside are declared elsewhere and inherit the block's tag.`
-      : ''
+  const judged = declarations - unreadable - describeBodyTests
+  // Only the reasons that actually applied, so the message cannot lead with one
+  // that is false for the tests it is describing.
+  const reasons: string[] = []
+  if (unreadable > 0) {
+    reasons.push(
+      "a title or `tag` entry — theirs or an enclosing describe's — is not statically readable",
+    )
+  }
+  if (describeBodyTests > 0) {
+    reasons.push(
+      `they are in one of ${filesWithUnreadDescribeBody} file(s) with a \`test.describe\` whose body is a function reference, so the tests inside are declared elsewhere and inherit the block's tag`,
+    )
+  }
   // No percentage over a zero denominator: "(100% tagged)" beside "0 of 0" is
   // the same reassuring wrong number that made this switch from round to floor.
   if (judged === 0) {
     return [
       {
         code: 'test-tag-coverage',
-        message: `${requireTestTag.id} judged none of ${declarations} test declaration(s) — a title or \`tag\` entry is not statically readable in every one, so no coverage figure is available.${because}`,
+        message: `${requireTestTag.id} judged none of ${declarations} test declaration(s) — ${reasons.join('; or ')}. No coverage figure is available.`,
       },
     ]
   }
@@ -427,9 +445,9 @@ function tagCoverageWarning(
     {
       code: 'test-tag-coverage',
       message: `${requireTestTag.id}: ${flagged} of ${judged} readable test declaration(s) carry no tag \`--tag\` can select (${coverage}% tagged)${
-        unreadable > 0
-          ? `; a further ${unreadable} could not be judged — a title or \`tag\` entry, theirs or an enclosing describe's, is not statically readable, so they are neither flagged here nor counted as tagged.${because}`
-          : `.${because}`
+        unjudged > 0
+          ? `; a further ${unjudged} could not be judged — ${reasons.join('; or ')} — so they are neither flagged here nor counted as tagged.`
+          : '.'
       }`,
     },
   ]

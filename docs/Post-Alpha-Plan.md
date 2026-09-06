@@ -275,6 +275,11 @@ projects being filtered out that would otherwise have shipped as fact.
 
 - Docs: `run` and `tags` in CLI-Spec §3.1a/§3.2a, README "Run a subset", the `suites` key in
   CLI-Spec §4 (there is no `docs/Configuration.md`; config is documented in the CLI spec).
+- Done when: a scaffolded project runs `testpilot run --tag smoke` and `--suite nightly` with no
+  hand-written regex; `testpilot tags` on the corpus lists real vocabularies and the untagged count.
+  (Measured: only mattermost is tagged — 83 tags via `{ tag: [...] }`. Ghost, immich, cal.com and
+  documenso are untagged.)
+
 **What landed (10d–10e).** A fresh `testpilot init` reports 2 tags and 0 untagged, demonstrating both
 spellings Playwright accepts; the generated `test:e2e:smoke` script is plain Playwright, so the
 project stays ejectable. `GUIDANCE_VERSION` 3 → 4 so existing projects see the drift.
@@ -286,11 +291,6 @@ number about nothing; and its findings are **counted but not scored**, because t
 denominator is call sites (on Ghost, 95 call sites against 321 tests, scoring it would have dropped
 a 98 to ~64). `summary.unscoredFindings` reports that exclusion rather than applying it silently —
 a quiet score adjustment would be the same dishonesty this plan spent Phase 9 removing.
-
-- Done when: a scaffolded project runs `testpilot run --tag smoke` and `--suite nightly` with no
-  hand-written regex; `testpilot tags` on the corpus lists real vocabularies and the untagged count.
-  (Measured: only mattermost is tagged — 83 tags via `{ tag: [...] }`. Ghost, immich, cal.com and
-  documenso are untagged.)
 
 ### Phase 11 — Signal precision (`alpha.3`)
 
