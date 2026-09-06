@@ -73,5 +73,6 @@ scanning keys an alert on `ruleId` plus location, and the successor map is a Tes
 so findings that changed id will surface as closed-and-reopened alerts on the first run after
 upgrading. There is no way to avoid that from here — flagged because it is the one place the
 compatibility work does not reach.
- `GUIDANCE_VERSION` 4 → 5, since the AI guidance
-told agents to "never use `.nth()`" and the analyzer no longer agrees.
+
+`GUIDANCE_VERSION` 4 → 5, since the AI guidance told agents to "never use `.nth()`" and the analyzer
+no longer agrees.

@@ -324,8 +324,8 @@ syntax drifts, and that test is what makes maintaining one defensible.
 
 **`.first()`/`.last()` are deferred to Phase 12, against 11e's wording.** Extracting them is not a
 rule change: they become **call sites**, the score's denominator. Measured: callSites +4% to +50%
-depending on the repo, and scores −1 to −13 (Ghost worst, because half its locator calls are
-positional). A precision phase must not move the score by a second, unrelated mechanism while
+depending on the repo, and scores −1 to −13 (Ghost worst, because 35% of its locator calls are
+positional — 50 of 143). A precision phase must not move the score by a second, unrelated mechanism while
 claiming to be about false positives; the denominator is Phase 12's subject. The rule already
 handles them.
 
