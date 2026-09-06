@@ -31,6 +31,14 @@ export type SelectorEngine = 'css' | 'xpath' | 'text'
  * Milestone 3B is static-only: there is no DOM context. The shape leaves room
  * for an optional `dom` field in a later tier without changing rule signatures.
  */
+/** Which composition options a call passed; presence is what matters. */
+export interface LocatorComposition {
+  has?: boolean
+  hasNot?: boolean
+  hasText?: boolean
+  hasNotText?: boolean
+}
+
 export interface LocatorContext {
   /** The recognized method name, e.g. `locator`, `getByRole`, `nth`, `waitForTimeout`. */
   apiCall: AnalyzedApi
@@ -62,12 +70,19 @@ export interface LocatorContext {
    * `locator('.row', { hasText: 'Save' })`. Presence is what matters to a rule,
    * not the value.
    */
-  options?: {
-    has?: boolean
-    hasNot?: boolean
-    hasText?: boolean
-    hasNotText?: boolean
-  }
+  options?: LocatorComposition
+  /**
+   * The subset of `options` this call passed **itself**, as opposed to picking
+   * up from a chained `.filter({ … })`.
+   *
+   * The distinction decides whether a rule may name a replacement for the call.
+   * `locator('[data-testid=row]', { hasText: 'Alice' })` becomes
+   * `getByTestId('row')` only by dropping the filter — a different element —
+   * while `locator('[data-testid=row]').filter({ hasText: 'Alice' })` rewrites
+   * to `getByTestId('row').filter({ hasText: 'Alice' })`, because only the
+   * `locator()` call is being replaced and the `.filter()` survives.
+   */
+  ownOptions?: LocatorComposition
   /** Source text of the whole call expression, e.g. `page.locator('.btn-primary')`. */
   raw: string
   /** 1-based line of the method name. */

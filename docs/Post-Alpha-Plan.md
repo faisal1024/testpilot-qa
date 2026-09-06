@@ -309,9 +309,9 @@ false-positive rate < 5% per rule.
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
 
-  **Measured on the corpus.** 1973 findings became 1677: `prefer-get-by-test-id` 512 (427 direct,
+  **Measured on the corpus.** 1973 findings became 1676: `prefer-get-by-test-id` 511 (426 direct,
   29 scope, 46 same-element, 10 through the `data-testid=` engine), `prefer-semantic-locator` 1165.
-  Reasons the 296 no longer fire, counted **independently — a call site can appear in more than one
+  Reasons the 297 no longer fire, counted **independently — a call site can appear in more than one
   row, so these do not partition**: 252 composed with a `has`/`hasText` option (167 of them through
   `.filter()`), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
   `:has()`/`:has-text()`, 0 unreadable. An earlier draft published a first-match classification
@@ -447,7 +447,7 @@ Measured on the pinned corpus by `pnpm bench` after each phase:
 | Metric | alpha.0 (today) | Target after Phase 12 |
 |---|---|---|
 | Repos where default discovery finds the suite | 3 / 5 (alpha.0) — #71 should make it 5 / 5; bench confirms | 5 / 5 |
-| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% — **still unmeasured after 11b**: no labelled sample exists. What 11b measured is 1973 → 1677 findings, with the reasons the 296 no longer fire counted independently |
+| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% — **still unmeasured after 11b**: no labelled sample exists. What 11b measured is 1973 → 1676 findings, with the reasons the 297 no longer fire counted independently |
 | Hard false positives, `no-css-class-selector` | ~7% | < 2% |
 | Same selectors, `locator('[data-testid]')` vs `getByTestId()` score gap | 40 pts | ≤ 5 pts |
 | Single-line file minimum score | 0 F | ≥ 50 |

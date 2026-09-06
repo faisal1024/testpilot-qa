@@ -46,6 +46,22 @@ export const preferGetByTestId: Rule = {
     if (context.isDynamic || context.apiCall !== 'locator' || !context.parsed) {
       return null
     }
+    // `locator('[data-testid=row]', { hasText: 'Alice' })` is not
+    // `getByTestId('row')` — that selects every row. `getByTestId()` has no
+    // form for the options bag, so a rule whose severity is earned by naming
+    // the exact replacement has nothing to name.
+    //
+    // Only the call's OWN options: a chained `.filter({ hasText })` survives
+    // the rewrite, because only the `locator()` call is being replaced.
+    const own = context.ownOptions
+    if (
+      own?.has === true ||
+      own?.hasNot === true ||
+      own?.hasText === true ||
+      own?.hasNotText === true
+    ) {
+      return null
+    }
     const names = testIdAttributesFrom(options)
     // Playwright's own `data-testid=save` engine: already a test id, still not
     // `getByTestId()`, and invisible to the CSS attribute scan below.

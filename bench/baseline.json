@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11b + 11g, after three review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 512: 427 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1165). 1973 findings -> 1677. Reasons the 296 no longer fire, counted INDEPENDENTLY -- a call site can appear in more than one row, so these do not partition: 252 has/hasText composition (167 of them via .filter()), 35 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 0 unreadable. Two corrections to earlier records here, both found by independent recount and left visible rather than replaced silently: an earlier reason published a first-match classification (84/27/21/12) as though it were a partition, and a later one said 168 .filter() cases where every way of counting gives 167. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites so Phase 12 has a pinned 'before' when it removes them from the denominator: 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
+  "reason": "Phase 11b + 11g, after four review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 511: 426 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1165). 1973 findings -> 1676; reasons the 297 no longer fire are counted INDEPENDENTLY and do not partition -- a call site can appear in more than one row: 252 has/hasText composition (167 via .filter()), 35 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 0 unreadable. THREE corrections to earlier reasons here, each found by an independent recount and left visible rather than replaced: (1) a first-match classification (84/27/21/12) published as a partition; (2) '168 .filter() cases' where every counting rule gives 167; (3) '458 call sites carry both a class-selector error and this nudge' -- measured, 478 used to carry both (7 points each), 348 still do (5.5) and 130 now carry only the error (5). Round 4 also found the defect class outside the selector string for the first time: locator('[data-testid=row]', {hasText}) was answered 'Use getByTestId(\"row\")', which selects every row -- live on cal.com out-of-office.e2e.ts:177, and the reason this run is 1676 rather than 1677. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites so Phase 12 has a pinned 'before': 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -20,7 +20,7 @@
       },
       "filesAnalyzed": 61,
       "parseErrors": 0,
-      "findings": 803,
+      "findings": 802,
       "score": 82,
       "grade": "B",
       "callSites": 1326,
@@ -30,7 +30,7 @@
         "avoid-positional-access": 113,
         "no-css-class-selector": 13,
         "no-hard-wait": 16,
-        "prefer-get-by-test-id": 348,
+        "prefer-get-by-test-id": 347,
         "prefer-semantic-locator": 312
       },
       "warnings": {

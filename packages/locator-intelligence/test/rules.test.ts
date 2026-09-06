@@ -131,6 +131,28 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-testid="row"] + div button'))).toBeNull()
   })
 
+  it("says nothing when the call's own options carry a filter it cannot express", () => {
+    // `getByTestId('row')` selects EVERY row, not the one containing Alice.
+    // The fourth shape of this defect, and the first one outside the selector
+    // string: three rounds looked only at where the test id sat in the CSS.
+    // Live on the corpus (cal.com out-of-office.e2e.ts:177).
+    for (const key of ['has', 'hasNot', 'hasText', 'hasNotText'] as const) {
+      const context = ctx({ ...css('[data-testid="row"]'), ownOptions: { [key]: true } })
+      expect(
+        preferGetByTestId.evaluate({ ...context, options: context.ownOptions }),
+        key,
+      ).toBeNull()
+    }
+    // ...but a chained `.filter()` survives the rewrite, so it still fires:
+    // `getByTestId('row').filter({ hasText })` keeps the filter.
+    const source = "page.locator('[data-testid=\"row\"]').filter({ hasText: 'Alice' })"
+    const chained = extractLocators(source, parseSource(source, 'a.ts')).find(
+      (context) => context.selector === '[data-testid="row"]',
+    )
+    expect(chained?.ownOptions).toBeUndefined()
+    expect(preferGetByTestId.evaluate(chained as LocatorContext)).not.toBeNull()
+  })
+
   it('says nothing when a >> part precedes the test id', () => {
     // Every earlier part is an ancestor scope. `getByTestId('save')` searches
     // the whole document, so naming it drops `#login-modal` silently. This is

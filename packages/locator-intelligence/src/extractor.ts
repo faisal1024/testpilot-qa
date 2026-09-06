@@ -174,6 +174,7 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
       parsed,
       parentApi,
       options,
+      ownOptions: own,
       isDynamic,
       raw: code.slice(call.range[0], call.range[1]),
       line: property.loc.start.line,
