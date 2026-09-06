@@ -63,6 +63,13 @@ export function diffRepo(before, after) {
       rows.push({ metric, before: before[metric], after: after[metric] })
     }
   }
+  for (const key of ['filesAnalyzed', 'helperFiles']) {
+    const wasCount = before.withHelpers?.[key] ?? null
+    const nowCount = after.withHelpers?.[key] ?? null
+    if (wasCount !== nowCount) {
+      rows.push({ metric: `withHelpers.${key}`, before: wasCount, after: nowCount })
+    }
+  }
   for (const key of ['testDir', 'include']) {
     const wasSource = before.discovery?.[key] ?? null
     const nowSource = after.discovery?.[key] ?? null
@@ -111,6 +118,9 @@ export function isSignalLoss(rows) {
     }
     // Default discovery finding fewer files is the plan's headline metric regressing.
     if (row.metric === 'filesFromRepoRoot') return row.after < row.before
+    // The helper layer narrowing is the same class of loss, on the path a
+    // content-based admission gate makes easiest to break silently.
+    if (row.metric.startsWith('withHelpers.')) return row.after < row.before
     // A warning that starts appearing (or appears more often) is the tool telling us it
     // could not see something.
     if (row.metric.startsWith('warning:')) return row.after > row.before

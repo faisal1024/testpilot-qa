@@ -4,7 +4,7 @@ import {
   type FixEdit,
   computeFixes,
   discoveryBase,
-  resolveTestFiles,
+  resolveFiles,
 } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
@@ -21,12 +21,15 @@ import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
   write?: boolean
+  withHelpers?: boolean
 }
 
 interface FileFixSummary {
   file: string
   fixes: FixEdit[]
   written: boolean
+  /** Playwright does not run this file — see `--with-helpers`. */
+  inHelper?: boolean
 }
 
 /**
@@ -44,12 +47,14 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns, {
+    includeHelpers: options.withHelpers === true,
+  })
   const { config, filepath, discovery, rootDir } = resolved
   const write = options.write === true
 
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
-  const files = await resolveTestFiles({
+  const { files, helpers } = await resolveFiles({
     cwd: globals.cwd,
     patterns: explicitPatterns,
     config,
@@ -95,7 +100,12 @@ export async function fixCommand(
         throw error
       }
     }
-    results.push({ file: display, fixes: result.fixes, written: write })
+    results.push({
+      file: display,
+      fixes: result.fixes,
+      written: write,
+      ...(helpers.has(absolute) ? { inHelper: true } : {}),
+    })
     if (!write) {
       diffs.push(renderUnifiedDiff(display, code, result.output))
     }
@@ -121,7 +131,12 @@ function report(
       JSON.stringify({
         command: 'fix',
         dryRun: !write,
-        files: results.map((r) => ({ file: r.file, written: r.written, fixes: r.fixes })),
+        files: results.map((r) => ({
+          file: r.file,
+          written: r.written,
+          fixes: r.fixes,
+          ...(r.inHelper ? { inHelper: true } : {}),
+        })),
         summary: { files: results.length, fixes: totalFixes(results), skipped },
         // This is the write path: it must be at least as loud as `analyze` about a
         // file set chosen by a half-read or mis-adopted Playwright config.
@@ -148,7 +163,10 @@ function report(
     )
   } else {
     for (const result of results) {
-      console.log(`  ✓ ${result.file} (${result.fixes.length} fix(es))`)
+      // The write path must be at least as clear as `analyze` about which files
+      // Playwright never runs.
+      const scope = result.inHelper ? ' [helper]' : ''
+      console.log(`  ✓ ${result.file}${scope} (${result.fixes.length} fix(es))`)
     }
     console.log('')
     console.log(`Applied ${count} fix(es) across ${results.length} file(s).`)

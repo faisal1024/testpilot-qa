@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { findPlaywrightConfig, isDirectory } from '../project/discovery.js'
-import { type ConfigDiscovery, DEFAULT_DISCOVERY } from './discovery.js'
+import { type ConfigDiscovery, DEFAULT_DISCOVERY, DEFAULT_HELPER_PATTERNS } from './discovery.js'
 import type { LoadConfigResult } from './load-config.js'
 import {
   type PathPattern,
@@ -49,6 +49,18 @@ export interface DiscoveryScope {
   matchRegex: RegexPattern[]
   /** TestPilot's own `exclude`, applied as a root-relative glob ignore. */
   excludeGlobs: string[]
+  /**
+   * Page-object / fixture / helper globs, matched against the absolute path. These
+   * files are not tests — Playwright never runs them — so findings from them are
+   * tagged `inHelper` and can be read separately from the suite's own.
+   */
+  helperGlobs: string[]
+  /**
+   * Where to look for those files. Helpers sit *beside* the test root far more often
+   * than inside it (Ghost's live in `e2e/helpers` while its tests are in `e2e/tests`),
+   * so scanning from `root` would find nothing.
+   */
+  helperRoot: string
   /** Playwright `testIgnore` globs — absolute-path matchers, like `matchGlobs`. */
   ignoreGlobs: string[]
   /** Playwright RegExp `testIgnore`. */
@@ -66,6 +78,8 @@ export interface ResolvedDiscovery {
 export interface ResolveDiscoveryOptions {
   /** Directory the config file lives in (or the project root when there is none). */
   rootDir: string
+  /** `--with-helpers`: analyze page objects and fixtures alongside the tests. */
+  includeHelpers?: boolean
   /** Set to skip the Playwright fallback entirely (`--no-playwright-discovery`). */
   disablePlaywrightFallback?: boolean
 }
@@ -160,16 +174,27 @@ function holdsTestFiles(dir: string): boolean {
 }
 
 /** The scope implied by the TestPilot config alone. */
-function ownScope(config: TestPilotConfig, rootDir: string): DiscoveryScope {
+function ownScope(config: TestPilotConfig, rootDir: string, helperGlobs: string[]): DiscoveryScope {
   return {
+    helperRoot: resolve(rootDir),
     root: resolve(rootDir, config.testDir),
     includeGlobs: config.include,
     matchGlobs: [],
     matchRegex: [],
     excludeGlobs: config.exclude,
+    helperGlobs,
     ignoreGlobs: [],
     ignoreRegex: [],
   }
+}
+
+/**
+ * The helper patterns in force: what the project named, else the conventional set when
+ * `--with-helpers` asked for them, else none.
+ */
+function helperPatterns(config: TestPilotConfig, requested: boolean): string[] {
+  if (config.includeHelpers.length > 0) return config.includeHelpers
+  return requested ? DEFAULT_HELPER_PATTERNS : []
 }
 
 /**
@@ -196,7 +221,8 @@ export function resolveDiscovery(
     include: loaded.explicitKeys.has('include') ? 'testpilot-config' : 'default',
     exclude: loaded.explicitKeys.has('exclude') ? 'testpilot-config' : 'default',
   }
-  const own = ownScope(config, options.rootDir)
+  const helperGlobs = helperPatterns(config, options.includeHelpers === true)
+  const own = ownScope(config, options.rootDir, helperGlobs)
   const withoutFallback = (): ResolvedDiscovery => {
     discovery.roots = [own.root]
     return { config, discovery, scopes: [own] }
@@ -246,7 +272,7 @@ export function resolveDiscovery(
       return {
         config,
         discovery,
-        scopes: [{ ...ownScope(config, options.rootDir), root: configDir }],
+        scopes: [{ ...ownScope(config, options.rootDir, helperGlobs), root: configDir }],
       }
     }
     discovery.playwrightConfigIgnored = {
@@ -287,6 +313,9 @@ export function resolveDiscovery(
       matchGlobs: takeMatch ? match.globs : [],
       matchRegex: takeMatch ? match.regexes : [],
       excludeGlobs: config.exclude,
+      helperGlobs,
+      // The Playwright config's own directory: the suite's helper layer lives under it.
+      helperRoot: dirname(configPath),
       ignoreGlobs: ignore.globs,
       ignoreRegex: ignore.regexes,
     }

@@ -60,3 +60,25 @@ export function formatDiscoverySource(
       return 'built-in default'
   }
 }
+
+/**
+ * Where suites conventionally keep page objects, fixtures and helpers. Used by
+ * `--with-helpers` when the project has not named its own locations.
+ *
+ * Directory names are only a hint — `pages/` is Next.js's and Nuxt's route directory,
+ * `helpers/` is Ember's — so a candidate is also required to actually use Playwright
+ * before it is analyzed, which is what makes listing `pages/` safe here.
+ *
+ * `lib/` and `utils/` are still left out: they are broad enough that scanning them on
+ * every run costs more than it returns. Suites that keep page objects there (mattermost
+ * uses `lib/src/ui/`) should name their own `includeHelpers` list.
+ */
+export const DEFAULT_HELPER_PATTERNS = [
+  '**/pages/**',
+  '**/page-objects/**',
+  '**/pageobjects/**',
+  '**/pom/**',
+  '**/fixtures/**',
+  '**/helpers/**',
+  '**/support/**',
+]

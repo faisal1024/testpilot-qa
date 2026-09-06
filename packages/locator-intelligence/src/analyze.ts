@@ -14,7 +14,7 @@ import {
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
-import { type FileScope, discoveryBase, resolveTestFiles } from './resolve-files.js'
+import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 import { computeScore } from './score.js'
@@ -91,7 +91,7 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const files = await resolveTestFiles({
+  const { files, helpers, helperCandidatesRejected } = await resolveFiles({
     cwd: options.cwd,
     patterns: options.patterns,
     config: options.config,
@@ -106,6 +106,14 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
+  if (helperCandidatesRejected > 0) {
+    // Not only when *every* candidate was rejected: a layer where one file is admitted
+    // and twenty real ones are dropped is the same blindness, one level down.
+    warnings.push({
+      code: 'helpers-not-recognized',
+      message: `${helperCandidatesRejected} file(s) matched the helper patterns but show no sign of using Playwright, so they were not analyzed. Name your page-object locations in \`includeHelpers\` if this is wrong.`,
+    })
+  }
   if (options.discovery?.playwrightConfigPartial) {
     const { path, reason } = options.discovery.playwrightConfigPartial
     warnings.push({
@@ -147,6 +155,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
+    const inHelper = helpers.has(absolute)
     let code: string
     try {
       code = readFileSync(absolute, 'utf8')
@@ -178,6 +187,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
           severity,
           message: violation.message,
           file: relativePath,
+          ...(inHelper ? { inHelper: true } : {}),
           line: context.line,
           column: context.column,
           snippet: context.raw,
@@ -206,6 +216,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     discovery: options.discovery ?? DEFAULT_DISCOVERY,
     summary: {
       filesAnalyzed: files.length,
+      helperFiles: helpers.size,
       filesWithParseErrors: parseErrors.length,
       findings: findings.length,
       bySeverity,

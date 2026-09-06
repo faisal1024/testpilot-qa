@@ -38,6 +38,7 @@ export { defineConfig } from './config/define-config.js'
 export {
   type ConfigDiscovery,
   DEFAULT_DISCOVERY,
+  DEFAULT_HELPER_PATTERNS,
   type DiscoverySource,
   formatDiscoverySource,
 } from './config/discovery.js'

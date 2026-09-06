@@ -56,6 +56,8 @@ interface SarifReportingDescriptor {
 type SarifLevel = 'error' | 'warning' | 'note'
 
 interface SarifResult {
+  /** Free-form bag; carries `inHelper` so a page-object finding reads differently. */
+  properties?: Record<string, unknown>
   ruleId: string
   ruleIndex: number
   level: SarifLevel
@@ -138,6 +140,9 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
       rules.push(ruleDescriptor(finding))
     }
     results.push({
+      // A page-object finding annotated identically to a test finding invites the
+      // wrong fix; SARIF properties are the standard vehicle for this distinction.
+      ...(finding.inHelper ? { properties: { inHelper: true } } : {}),
       ruleId: finding.ruleId,
       ruleIndex: index,
       level: toLevel(finding.severity),

@@ -23,6 +23,7 @@ interface AnalyzeOptions {
   output?: string
   baseline?: string
   updateBaseline?: boolean
+  withHelpers?: boolean
 }
 
 /**
@@ -53,7 +54,9 @@ export async function analyzeCommand(
     fail(globals, '--update-baseline requires --baseline <path>.', ExitCode.USAGE)
   }
 
-  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns, {
+    includeHelpers: options.withHelpers === true,
+  })
   const { config, filepath, discovery } = resolved
   const report = await analyze({
     cwd: globals.cwd,

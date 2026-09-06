@@ -27,6 +27,7 @@ export function toHtml(report: AnalysisReport): string {
     `<p class="lede">Static <strong>Tier&nbsp;1</strong> locator analysis — deterministic and offline. Category-level guidance only; <strong>no DOM-aware suggestions, no automatic rewrites</strong>.</p>`,
     scoreCard(score),
     summarySection(summary, baseline),
+    helperSection(report),
     discoverySection(report),
     warningsSection(warnings),
     findingsSection(findings),
@@ -101,6 +102,13 @@ function statCard(value: string, label: string, cls = ''): string {
   return `<div class="stat ${cls}"><div class="stat-value">${esc(value)}</div><div class="stat-label">${esc(label)}</div></div>`
 }
 
+/** Says when the report covers files Playwright does not run. */
+function helperSection(report: AnalysisReport): string {
+  const count = report.summary?.helperFiles ?? 0
+  if (count === 0) return ''
+  return `<section class="helpers"><p>Includes ${count} page object/helper file(s), which Playwright does not run — their findings are marked <code>helper</code>.</p></section>`
+}
+
 /** Names the directories scanned and who chose them, when it was not the user. */
 function discoverySection(report: AnalysisReport): string {
   const discovery = report.discovery
@@ -141,6 +149,8 @@ function isHttpUrl(url: string): boolean {
 }
 
 function findingRow(finding: Finding): string {
+  // The helper section above claims these are marked; mark them.
+  const scope = finding.inHelper ? '<span class="badge-helper">helper</span> ' : ''
   const sev = finding.severity
   const rule = isHttpUrl(finding.docsUrl)
     ? `<a href="${esc(finding.docsUrl)}" rel="noreferrer noopener">${esc(finding.ruleId)}</a>`
@@ -150,7 +160,7 @@ function findingRow(finding: Finding): string {
     : ''
   return [
     '<div class="finding">',
-    `<div class="finding-head"><span class="badge sev-${esc(sev)}">${esc(sev)}</span>`,
+    `<div class="finding-head"><span class="badge sev-${esc(sev)}">${esc(sev)}</span>${scope}`,
     `<span class="rule">${rule}</span>`,
     `<span class="loc">${esc(finding.file)}:${finding.line}:${finding.column}</span></div>`,
     `<p class="message">${esc(finding.message)}</p>`,
@@ -211,6 +221,7 @@ border:1px solid var(--line);border-radius:12px;padding:20px}
 .message{margin:8px 0}.snippet{background:#0b0d11;border:1px solid var(--line);border-radius:8px;
 padding:10px 12px;overflow:auto;margin:8px 0 0}.snippet code{color:#e6edf3}
 .suggestion{color:var(--muted);margin:8px 0 0}.suggestion::before{content:"→ "}
+.badge-helper{background:#e5e7eb;color:#374151;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:6px}
 .clean{color:var(--a)}.warnings li,.parse-errors li{margin:4px 0}
 footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
 `.trim()

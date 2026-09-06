@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 9e: baseline recorded after review — the root-discovery probe is contained, so an unmeasurable probe records null rather than a 0 produced by anchoring on the TestPilot repo.",
+  "reason": "Phase 9c: records the --with-helpers file counts, so a change to the content-based helper admission gate cannot narrow the corpus silently.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -13,6 +13,10 @@
     {
       "name": "cal.com",
       "exitCode": 0,
+      "withHelpers": {
+        "filesAnalyzed": 72,
+        "helperFiles": 11
+      },
       "filesAnalyzed": 61,
       "parseErrors": 0,
       "findings": 833,
@@ -37,6 +41,10 @@
     {
       "name": "immich",
       "exitCode": 0,
+      "withHelpers": {
+        "filesAnalyzed": 21,
+        "helperFiles": 0
+      },
       "filesAnalyzed": 21,
       "parseErrors": 0,
       "findings": 76,
@@ -61,6 +69,10 @@
     {
       "name": "Ghost",
       "exitCode": 0,
+      "withHelpers": {
+        "filesAnalyzed": 167,
+        "helperFiles": 73
+      },
       "filesAnalyzed": 94,
       "parseErrors": 0,
       "findings": 2,
@@ -81,6 +93,10 @@
     {
       "name": "documenso",
       "exitCode": 0,
+      "withHelpers": {
+        "filesAnalyzed": 135,
+        "helperFiles": 8
+      },
       "filesAnalyzed": 127,
       "parseErrors": 0,
       "findings": 619,
@@ -105,6 +121,10 @@
     {
       "name": "mattermost",
       "exitCode": 0,
+      "withHelpers": {
+        "filesAnalyzed": 310,
+        "helperFiles": 12
+      },
       "filesAnalyzed": 298,
       "parseErrors": 0,
       "findings": 1544,

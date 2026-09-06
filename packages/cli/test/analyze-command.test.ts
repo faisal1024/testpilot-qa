@@ -304,6 +304,76 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.warnings.map((w: { code: string }) => w.code)).toContain('test-root-missing')
   })
 
+  it('does not let --with-helpers rescue a run that found no tests', async () => {
+    // A wrong testDir must stay a hard failure; scoring the helper layer alone would
+    // turn the red gate this tool exists for back into a green one.
+    rmSync(join(dir, 'tests'), { recursive: true, force: true })
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'fixtures'), { recursive: true })
+    writeFileSync(
+      join(dir, 'fixtures', 'f.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const { exitCode } = await runAnalyze(['--with-helpers'])
+    expect(exitCode).toBe(3)
+  })
+
+  it('marks helper findings in the human report', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(
+      join(dir, 'helpers', 'po.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const { stdout } = await runAnalyze(['--with-helpers'])
+    expect(stdout).toContain('[helper]')
+    expect(stdout).toContain('page object/helper file(s)')
+  })
+
+  it('cannot let a non-Playwright helper raise the score or flip the gate', async () => {
+    // Twice now the gate admitted files that produce no findings but add call sites —
+    // the score's denominator — turning a failing --min-score into a passing one.
+    // This is the assertion that catches it whatever the next false-positive shape is.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    writeFileSync(
+      join(dir, 'tests', 'a.spec.ts'),
+      "page.locator('//button')\npage.locator('.cls')\npage.waitForTimeout(9)\n",
+    )
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(
+      join(dir, 'helpers', 'render.tsx'),
+      "import { screen } from '@testing-library/react'\nexport const t = () => screen.getByRole('heading')\nexport const u = () => screen.getByText('x')\n",
+    )
+
+    const plain = JSON.parse((await runAnalyze(['--json'])).stdout)
+    const withHelpers = JSON.parse((await runAnalyze(['--json', '--with-helpers'])).stdout)
+    expect(withHelpers.score.callSites).toBe(plain.score.callSites)
+    expect(withHelpers.score.score).toBe(plain.score.score)
+
+    const gate = await runAnalyze(['--min-score', '50'])
+    const gateWithHelpers = await runAnalyze(['--min-score', '50', '--with-helpers'])
+    expect(gateWithHelpers.exitCode).toBe(gate.exitCode)
+  })
+
+  it('says so when helper directories matched but nothing in them uses Playwright', async () => {
+    // Silence here is indistinguishable from "you have no page objects", which is how
+    // a gate that rejected every real page-object shape went unnoticed.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(join(dir, 'helpers', 'date.js'), 'export const f = (d) => d.toISOString()\n')
+    const { stdout } = await runAnalyze(['--with-helpers', '--json'])
+    const report = JSON.parse(stdout)
+    expect(report.warnings.map((w: { code: string }) => w.code)).toContain('helpers-not-recognized')
+  })
+
+  it('says --with-helpers is ignored rather than silently ignoring it', async () => {
+    const { stderr } = await runAnalyze(['--with-helpers', 'tests/**/*.spec.ts'])
+    expect(stderr).toContain('--with-helpers is ignored')
+  })
+
   it('analyzes an explicitly named file inside an excluded directory', async () => {
     mkdirSync(join(dir, 'dist', 'e2e'), { recursive: true })
     writeFileSync(join(dir, 'dist', 'e2e', 'a.spec.js'), "page.locator('//button')\n")

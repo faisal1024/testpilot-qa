@@ -60,6 +60,13 @@ export const configSchema = z
         '**/test-results/**',
         '**/playwright-report/**',
       ]),
+    /**
+     * Page objects, fixtures and helpers — where real suites keep their locators, and
+     * where Playwright's own `testMatch` never looks. Empty by default: these files
+     * are not tests, so including them changes what the score is measuring. Setting
+     * this, or passing `--with-helpers`, turns it on.
+     */
+    includeHelpers: z.array(z.string()).default([]),
     rules: z.record(severitySchema).default({}),
     scoring: scoringSchema,
     ai: aiSchema,

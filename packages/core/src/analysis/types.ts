@@ -20,6 +20,11 @@ export interface Finding {
   category: RuleCategory
   severity: FindingSeverity
   message: string
+  /**
+   * True when the finding came from a page object, fixture or helper rather than a
+   * test Playwright runs. Real, but a different conversation from the suite's own.
+   */
+  inHelper?: boolean
   /** Path relative to `AnalysisReport.rootDir`, using POSIX separators (stable across machines). */
   file: string
   /** 1-based line. */
@@ -41,6 +46,7 @@ export interface AnalysisWarning {
     | 'playwright-config-partial'
     | 'playwright-config-ignored'
     | 'test-root-missing'
+    | 'helpers-not-recognized'
   message: string
   ruleId?: string
 }
@@ -52,6 +58,8 @@ export interface ParseError {
 }
 
 export interface AnalysisSummary {
+  /** How many of `filesAnalyzed` were page objects / fixtures / helpers. */
+  helperFiles?: number
   /** Files matched for analysis (including any that failed to parse). */
   filesAnalyzed: number
   /** Subset of matched files that could not be parsed. */
@@ -123,9 +131,10 @@ export interface AnalysisReport {
 /**
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
  * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings
- * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`).
+ * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`);
+ * 1.7 `inHelper` on findings + `summary.helperFiles`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.6'
+export const ANALYSIS_SCHEMA_VERSION = '1.7'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

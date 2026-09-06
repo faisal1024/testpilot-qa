@@ -147,7 +147,13 @@ the project root when you have no config), so running from a sub-directory of a 
 the suite. **No `testpilot.config.ts`?** TestPilot reads `testDir`/`testMatch`/`testIgnore` from your
 `playwright.config.*` (including `projects[]` and RegExp matchers) so it analyzes the suite Playwright
 runs. That config is **parsed, never executed** — `analyze` stays static and offline. It says on stderr
-when it does this; `--no-playwright-discovery` turns it off. **A run that matches no files fails** (exit
+when it does this; `--no-playwright-discovery` turns it off.
+
+Most suites keep their locators in page objects and fixtures, which Playwright's `testMatch` never
+runs — `npx testpilot-qa analyze --with-helpers` includes them, tagged separately so the two are never
+conflated. On the Ghost repository that is the difference between 2 findings and 116. A candidate has to
+actually use Playwright to count, so a `pages/` directory of Next.js routes is not mistaken for page
+objects. **A run that matches no files fails** (exit
 `3` for config discovery, `2` for patterns) instead of reporting an empty 100/A — so a wrong `testDir`
 can't turn into a green CI gate.
 

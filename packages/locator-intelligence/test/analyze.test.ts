@@ -44,8 +44,9 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.6')
+    expect(report.schemaVersion).toBe('1.7')
     expect(report.summary).toEqual({
+      helperFiles: 0,
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
       findings: 9,
@@ -151,6 +152,38 @@ describe('analyze — Tier 1 rule set', () => {
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
     expect(report.rootDir).toBe(join(dir, 'packages/web'))
+  })
+
+  it('leaves page objects alone unless asked, then tags what it finds there', async () => {
+    // Ghost's shape: the spec is clean, the page object holds the fragile locator.
+    // Playwright never runs the page object, so its findings are real but belong in a
+    // different bucket from the suite's own — and must not appear uninvited.
+    writeFixture('tests/login.spec.ts', "page.getByRole('button', { name: 'Save' }).click()\n")
+    writeFixture('pages/login-page.ts', "this.title = page.locator('.gh-article-title')\n")
+
+    const withoutHelpers = await analyze({ cwd: dir, config: config() })
+    expect(withoutHelpers.summary.filesAnalyzed).toBe(1)
+    expect(withoutHelpers.findings).toEqual([])
+
+    const scope = {
+      root: join(dir, 'tests'),
+      includeGlobs: defaultConfig.include,
+      matchGlobs: [],
+      matchRegex: [],
+      excludeGlobs: defaultConfig.exclude,
+      helperGlobs: ['**/pages/**'],
+      helperRoot: dir,
+      ignoreGlobs: [],
+      ignoreRegex: [],
+    }
+    const withHelpers = await analyze({ cwd: dir, config: config(), scopes: [scope] })
+    expect(withHelpers.summary.filesAnalyzed).toBe(2)
+    expect(withHelpers.summary.helperFiles).toBe(1)
+    expect(withHelpers.findings.length).toBeGreaterThan(0)
+    expect(withHelpers.findings.every((finding) => finding.inHelper === true)).toBe(true)
+    expect([...new Set(withHelpers.findings.map((finding) => finding.file))]).toEqual([
+      'pages/login-page.ts',
+    ])
   })
 
   it('produces identical output across runs (deterministic + sorted)', async () => {

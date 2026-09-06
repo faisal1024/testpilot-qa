@@ -20,7 +20,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
 
 function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
   return {
-    schemaVersion: '1.6',
+    schemaVersion: '1.7',
     command: 'analyze',
     rootDir: '/repo',
     discovery: {
@@ -197,6 +197,25 @@ describe('toHtml', () => {
     // b.spec.ts is seen first, so its group comes first.
     expect(html.indexOf('tests/b.spec.ts')).toBeLessThan(html.indexOf('tests/a.spec.ts'))
     expect(html).toContain('Findings (3)')
+  })
+
+  it('marks helper findings, as the report says it does', () => {
+    // The helper section claims "their findings are marked"; it went four rounds
+    // saying so without rendering anything.
+    const html = toHtml(
+      report({
+        summary: {
+          helperFiles: 1,
+          filesAnalyzed: 2,
+          filesWithParseErrors: 0,
+          findings: 1,
+          bySeverity: { info: 0, warn: 0, error: 1 },
+        },
+        findings: [{ ...finding(), inHelper: true }],
+      }),
+    )
+    expect(html).toContain('badge-helper')
+    expect(html).toContain('page object/helper file(s)')
   })
 
   it('names the scanned roots when a Playwright config chose them', () => {

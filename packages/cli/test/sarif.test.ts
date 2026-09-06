@@ -162,4 +162,10 @@ describe('toSarif', () => {
     expect(invocation?.executionSuccessful).toBe(false)
     expect(invocation?.toolExecutionNotifications[0]?.descriptor.id).toBe('no-files-matched')
   })
+
+  it('marks a helper finding so code scanning can tell it apart', () => {
+    const sarif = toSarif(reportWith([finding({ inHelper: true }), finding()]))
+    expect(sarif.runs[0]?.results[0]?.properties).toEqual({ inHelper: true })
+    expect(sarif.runs[0]?.results[1]?.properties).toBeUndefined()
+  })
 })

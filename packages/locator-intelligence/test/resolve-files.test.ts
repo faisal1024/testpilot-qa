@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { type DiscoveryScope, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveTestFiles } from '../src/resolve-files.js'
+import { resolveFiles, resolveTestFiles } from '../src/resolve-files.js'
 
 /**
  * The selection layer, exercised end to end against real files. Every discovery bug
@@ -35,6 +35,8 @@ function scope(overrides: Partial<DiscoveryScope> & { root: string }): Discovery
     matchGlobs: [],
     matchRegex: [],
     excludeGlobs: defaultConfig.exclude,
+    helperGlobs: [],
+    helperRoot: overrides.root,
     ignoreGlobs: [],
     ignoreRegex: [],
     ...overrides,
@@ -142,6 +144,189 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
         }),
       ]),
     ).toEqual(['e2e/keep.spec.ts'])
+  })
+
+  describe('helper discovery', () => {
+    const playwrightFile = (path: string) => {
+      const full = write(path)
+      writeFileSync(
+        full,
+        "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.x')\n",
+      )
+      return full
+    }
+
+    it('requires a Playwright signal, so a directory name alone is not evidence', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('helpers/po.ts')
+      const plain = write('helpers/date.js')
+      writeFileSync(plain, 'export const f = (d) => d.toISOString()\n')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f))).toEqual(['helpers/po.ts'])
+    })
+
+    it('admits page objects that never import @playwright/test', async () => {
+      // The gate must be "contains something the extractor extracts", on any receiver.
+      // Requiring the handle to be called `page` rejected every one of these — real
+      // page-object shapes — while admitting a Vitest fixture.
+      write('e2e/a.spec.ts')
+      const shapes = {
+        'helpers/underscore.js':
+          'export class P { constructor(p){ this._page = p } open(){ return this._page.locator(".nav > li.home") } }\n',
+        'helpers/component.js':
+          'export class C { constructor(r){ this.root = r } row(i){ return this.root.locator("tr").nth(i) } }\n',
+        'helpers/admin.js': 'export const admin = (adminPage) => adminPage.locator("div.admin")\n',
+        // The legacy POM shape: no `locator()` at all, just hard waits.
+        'helpers/legacy.js':
+          'export class L { constructor(p){ this.p = p } async go(){ await this.p.waitForTimeout(500) } }\n',
+        'helpers/vitest-fixture.ts':
+          "import { expect } from 'vitest'\nexport const seed = () => expect(1).toBe(1)\n",
+        // Testing Library shares `getBy*` with Playwright. Admitting this adds call
+        // sites — the score's denominator — from a file that can never produce a
+        // finding, which is enough to move a failing --min-score gate to passing.
+        'helpers/rtl.tsx':
+          "import { screen } from '@testing-library/react'\nexport const title = () => screen.getByRole('heading')\n",
+      }
+      for (const [path, body] of Object.entries(shapes)) {
+        const full = write(path)
+        writeFileSync(full, body)
+      }
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f)).sort()).toEqual([
+        join('helpers', 'admin.js'),
+        join('helpers', 'component.js'),
+        join('helpers', 'legacy.js'),
+        join('helpers', 'underscore.js'),
+      ])
+      // The Vitest fixture and the Testing Library helper.
+      expect(found.helperCandidatesRejected).toBe(2)
+    })
+
+    it('will not follow a symlinked helper directory out of the project', async () => {
+      // `--with-helpers` widened the scan root from testDir to the whole project, so
+      // this is the remaining route to analyzing — and with `fix --write`, rewriting —
+      // files outside it.
+      const outside = mkdtempSync(join(tmpdir(), 'testpilot-outside-'))
+      writeFileSync(
+        join(outside, 'evil.ts'),
+        "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.x')\n",
+      )
+      write('e2e/a.spec.ts')
+      mkdirSync(join(dir, 'helpers'), { recursive: true })
+      symlinkSync(outside, join(dir, 'helpers', 'linked'))
+      try {
+        const found = await resolveFiles({
+          cwd: dir,
+          config: defaultConfig,
+          rootDir: dir,
+          scopes: [
+            scope({
+              root: join(dir, 'e2e'),
+              includeGlobs: defaultConfig.include,
+              helperGlobs: ['**/helpers/**'],
+              helperRoot: dir,
+            }),
+          ],
+        })
+        expect(found.helpers.size).toBe(0)
+        // Skipped, but counted — a helper layer that vanishes silently is the failure
+        // this whole gate exists to avoid.
+        expect(found.helperCandidatesRejected).toBeGreaterThan(0)
+      } finally {
+        rmSync(outside, { recursive: true, force: true })
+      }
+    })
+
+    it('never scans helpers when the suite itself was not found', async () => {
+      // Otherwise a wrong testDir stops being a hard failure and starts scoring the
+      // helper layer alone — turning a red gate green.
+      playwrightFile('helpers/po.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'nope'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.files).toEqual([])
+      expect(found.helpers.size).toBe(0)
+    })
+
+    it('keeps a spec that lives under a helper directory a test', async () => {
+      const spec = write('e2e/helpers/shared.spec.ts')
+      writeFileSync(
+        spec,
+        "import { test } from '@playwright/test'\ntest('a', async ({ page }) => page.locator('.x'))\n",
+      )
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.files.map((f) => relative(dir, f))).toEqual([
+        join('e2e', 'helpers', 'shared.spec.ts'),
+      ])
+      expect(found.helpers.size).toBe(0)
+    })
+
+    it('counts only helpers that survived the ignore filters', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('helpers/po.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+            excludeGlobs: [...defaultConfig.exclude, '**/helpers/**'],
+          }),
+        ],
+      })
+      expect(found.helpers.size).toBe(0)
+      expect(found.files.every((file) => !file.includes('helpers'))).toBe(true)
+    })
   })
 
   it('deduplicates a file selected by several scopes', async () => {
