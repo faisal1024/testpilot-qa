@@ -637,3 +637,31 @@ describe('resolveDiscovery', () => {
     expect(resolved.discovery.exclude).toBe('playwright-config')
   })
 })
+
+describe('config-level tag detection across discovery paths', () => {
+  it('reports a config `tag` even when an explicit testDir ends adoption', async () => {
+    // `testpilot init` writes an explicit testDir, so this is the default shape
+    // of a TestPilot project. Missing the tag here made `tags` count the wrong
+    // set and `doctor` call a correct suite a typo.
+    writeFile('playwright.config.ts', "export default { testDir: './tests', tag: '@cfgtag' }\n")
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+    // Adoption is still off: the explicit testDir wins, exactly as before.
+    expect(resolved.discovery.testDir).toBe('testpilot-config')
+  })
+
+  it('reports no config tag when there is none', async () => {
+    writeFile('playwright.config.ts', "export default { testDir: './tests' }\n")
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(false)
+  })
+
+  it('reports a config tag even with --no-playwright-discovery', async () => {
+    // The flag turns off *adoption*; it cannot make a declared tag stop applying.
+    writeFile('playwright.config.ts', "export default { testDir: './tests', tag: '@cfgtag' }\n")
+    const resolved = await resolveIn(dir, { disable: true })
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+  })
+})

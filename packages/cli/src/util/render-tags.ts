@@ -78,9 +78,14 @@ export function renderTagsText(report: TagsReport): string {
           : `${suite.matchingTests} test declaration(s)`
       lines.push(`  ${suite.name}: ${what} — ${count}`)
       if (suite.unknownExcludedTags.length > 0) {
-        // An exclusion of a tag nobody carries cannot change the selection.
+        const named = suite.unknownExcludedTags.map((tag) => `@${tag}`).join(', ')
+        // "does nothing" is a claim about the whole suite, so it needs the same
+        // guard as the include side: with an incomplete vocabulary the excluded
+        // tag may well exist in a file we could not fully read.
         lines.push(
-          `    · nothing carries ${suite.unknownExcludedTags.map((tag) => `@${tag}`).join(', ')}, so that exclusion currently does nothing.`,
+          summary.vocabularyComplete
+            ? `    · nothing carries ${named}, so that exclusion currently does nothing.`
+            : `    · no test we could read carries ${named}, so that exclusion may or may not be a no-op.`,
         )
       }
       if (suite.unknownTags.length > 0) {

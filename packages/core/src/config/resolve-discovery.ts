@@ -210,6 +210,22 @@ function helperPatterns(config: TestPilotConfig, requested: boolean): string[] {
  * tool would make, and silently emptied the file set for projects scaffolded by
  * `testpilot init` (which sets `testDir` and not `include`).
  */
+/**
+ * Whether any located Playwright config declares a config-level `tag`.
+ *
+ * Deliberately independent of whether we adopt that config's `testDir`:
+ * `testConfig.tag` applies to every test in every file, so it is a fact about
+ * the suite's tag vocabulary even when the config contributes nothing else.
+ * Ambiguous candidates are all probed — any one of them could carry it.
+ */
+function declaresTagsIn(located: { path: string } | { ambiguous: string[] } | null): boolean {
+  if (!located) {
+    return false
+  }
+  const paths = 'ambiguous' in located ? located.ambiguous : [located.path]
+  return paths.some((path) => readPlaywrightTestSettings(path).declaresTags)
+}
+
 export function resolveDiscovery(
   loaded: LoadConfigResult,
   options: ResolveDiscoveryOptions,
@@ -228,17 +244,24 @@ export function resolveDiscovery(
     return { config, discovery, scopes: [own] }
   }
 
-  // Adoption is all-or-nothing on `testDir`, so an explicit one ends it here —
-  // reading a config we could never use would only produce misleading warnings.
-  if (options.disablePlaywrightFallback === true || discovery.testDir !== 'default') {
-    return withoutFallback()
-  }
-
   const located = findPlaywrightConfigNearby(
     options.rootDir,
     config.playwrightConfig,
     loaded.explicitKeys.has('playwrightConfig'),
   )
+
+  // Adoption is all-or-nothing on `testDir`, so an explicit one ends it here —
+  // reading a config we could never use would only produce misleading warnings.
+  // One thing is still read: a config-level `tag`, which Playwright applies to
+  // every test in every file whatever `testDir` we use. `testpilot init` writes
+  // an explicit `testDir`, so this is the default shape of a TestPilot project,
+  // and missing it made `tags` count the wrong set and `doctor` call a correct
+  // suite a typo.
+  if (options.disablePlaywrightFallback === true || discovery.testDir !== 'default') {
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located)
+    return withoutFallback()
+  }
+
   if (!located) {
     if (loaded.explicitKeys.has('playwrightConfig')) {
       discovery.playwrightConfigIgnored = {
@@ -253,6 +276,7 @@ export function resolveDiscovery(
       path: located.ambiguous.join(', '),
       reason: 'several sub-directories declare a Playwright config, so none was assumed',
     }
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located)
     return withoutFallback()
   }
 

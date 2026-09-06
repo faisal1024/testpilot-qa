@@ -405,6 +405,24 @@ describe('collectTags', () => {
     expect(report.suites[0]?.matchingTests).toBeNull()
   })
 
+  it('does not claim an exclusion is a no-op when the vocabulary is incomplete', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "const OPTS = { tag: ['@flaky'] }",
+        "test('unstable', OPTS, async () => {})",
+        "test('stable @smoke', async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { fast: { any: ['smoke'], all: [], none: ['flaky'] } } }),
+    })
+    expect(report.summary.vocabularyComplete).toBe(false)
+    // @flaky really is carried — by the test whose details we could not read.
+    expect(report.suites[0]?.unknownExcludedTags).toEqual(['flaky'])
+  })
+
   it('resolves an all-of suite', async () => {
     write(
       'tests/a.spec.ts',
