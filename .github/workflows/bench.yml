@@ -2,10 +2,19 @@ name: bench
 
 # The corpus benchmark is the tool's own no-regression gate: it runs the built CLI
 # against pinned commits of real Playwright suites and fails when the evidence of
-# analysis narrows (fewer files, fewer locator call sites, more parse errors). It
-# clones from the network and takes minutes, so it is not on the PR path — it runs
-# weekly and on demand.
+# analysis narrows (fewer files, fewer locator call sites, more parse errors, a
+# discovery fallback, a new warning, a rule going silent corpus-wide).
+#
+# It runs on pull requests that touch the analyzer — the change that would introduce
+# the regression is the one that should see it, and with the corpus cached a warm run
+# is a few seconds. The weekly schedule catches drift in everything else.
 on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'bench/**'
+      - 'scripts/bench-*.mjs'
+      - '.github/workflows/bench.yml'
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
@@ -28,18 +37,24 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      # Every repo is pinned to a fixed SHA, so the corpus is a perfect cache key —
+      # without this the job re-clones five repos and becomes a network-flakiness canary.
+      - uses: actions/cache@v4
+        with:
+          path: .bench-cache
+          key: bench-corpus-${{ hashFiles('bench/corpus.json') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
       - name: Run the corpus benchmark
-        # `shell: bash` to get pipefail: without it the step takes tee's exit status
-        # and the gate can never turn this job red. stderr carries the per-repo lines
-        # and the validation failures, so it goes into the summary too.
+        # `shell: bash` for pipefail: without it the step takes tee's exit status and
+        # the gate can never turn this job red. stderr carries the per-repo lines and
+        # every validation failure, so it is folded in.
         shell: bash
         run: pnpm bench 2>&1 | tee bench-output.md
       - name: Publish the comparison
         if: always()
         shell: bash
-        run: cat bench-output.md >> "${GITHUB_STEP_SUMMARY}"
+        run: '[ -f bench-output.md ] && cat bench-output.md >> "${GITHUB_STEP_SUMMARY}" || true'
       - name: Upload the measurements
         if: always()
         uses: actions/upload-artifact@v4

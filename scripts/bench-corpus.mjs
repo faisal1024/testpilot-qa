@@ -17,9 +17,10 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import picomatch from 'picomatch'
 import { formatDiff, refsChanged, validateResults } from './bench-compare.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -75,6 +76,9 @@ function ensureCheckout(repo) {
     run('git', ['remote', 'add', 'origin', repo.url], { cwd: dir })
     run('git', ['config', 'core.sparseCheckout', 'true'], { cwd: dir })
   }
+  // Drop the stamp before touching the tree: a stamp on disk must always mean a
+  // completed checkout, or a failed re-checkout leaves the next run a false cache hit.
+  rmSync(stampPath, { force: true })
   run('git', ['sparse-checkout', 'set', '--no-cone', ...repo.sparse], { cwd: dir })
   run('git', ['fetch', '--quiet', '--depth', '1', '--filter=blob:none', 'origin', repo.ref], {
     cwd: dir,
@@ -89,14 +93,28 @@ function ensureCheckout(repo) {
  * so every pattern must earn its place.
  */
 function deadPatterns(repo, dir) {
-  const tracked = run('git', ['ls-files'], { cwd: dir }).split('\n').filter(Boolean)
+  // `git ls-files -v` marks sparse-excluded entries with a lowercase tag (usually `S`),
+  // so this asks what the checkout actually materialized rather than what exists
+  // upstream — the property the guard is claiming.
+  const materialized = run('git', ['ls-files', '-v'], { cwd: dir })
+    .split('\n')
+    .filter((line) => line && line[0] === line[0]?.toUpperCase())
+    .map((line) => line.slice(2))
+
   return repo.sparse.filter((pattern) => {
     const needle = pattern.replace(/^\//, '').replace(/\/$/, '')
     if (pattern.includes('*')) {
-      const prefix = needle.split('*')[0]
-      return !tracked.some((file) => file.startsWith(prefix))
+      // Non-cone patterns are gitignore-style and match at any depth.
+      const isMatch = picomatch([needle, `**/${needle}`], { dot: true })
+      return !materialized.some((file) => isMatch(file))
     }
-    return !tracked.some((file) => file === needle || file.startsWith(`${needle}/`))
+    return !materialized.some(
+      (file) =>
+        file === needle ||
+        file.startsWith(`${needle}/`) ||
+        file.endsWith(`/${needle}`) ||
+        file.includes(`/${needle}/`),
+    )
   })
 }
 
@@ -116,6 +134,13 @@ function analyze(dir, extraArgs = []) {
   } catch {
     return { report: null, exitCode }
   }
+}
+
+/** True when a reported root lives inside the corpus checkout we intended to measure. */
+function contained(rootDir, dir) {
+  const anchor = resolve(rootDir ?? '')
+  const checkout = resolve(dir)
+  return anchor === checkout || anchor.startsWith(`${checkout}${sep}`)
 }
 
 /** What the CLI reports, reduced to the numbers a regression would move. */
@@ -140,12 +165,18 @@ function measure(repo, dir) {
   // Discovery escaping the checkout means we are measuring some other tree entirely —
   // it happened on the first run of this harness, silently.
   const rootDir = report.rootDir ?? ''
-  const inside =
-    resolve(rootDir).startsWith(`${resolve(dir)}${sep}`) || resolve(rootDir) === resolve(dir)
+  const inside = contained(rootDir, dir)
 
   // The plan's headline metric is "default discovery finds the suite", which a per-repo
-  // `cwd` would quietly answer for us — so ask from the repo root as well.
-  const fromRoot = repo.cwd ? (analyze(dir).report?.summary?.filesAnalyzed ?? 0) : null
+  // `cwd` would quietly answer for us — so ask from the repo root as well. This probe
+  // needs the same containment check: a repo with no root package.json anchors discovery
+  // on whatever ancestor has one, which here is the TestPilot repo itself. `null` then
+  // means "not measurable from the repo root" — the honest answer, where 0 was a lie.
+  let fromRoot = null
+  if (repo.cwd) {
+    const probe = analyze(dir).report
+    fromRoot = probe && contained(probe.rootDir, dir) ? (probe.summary?.filesAnalyzed ?? 0) : null
+  }
 
   return {
     name: repo.name,
@@ -219,18 +250,32 @@ const currentRefs = Object.fromEntries(repos.map((repo) => [repo.name, repo.ref]
 const payload = { corpusRefs: currentRefs, results }
 writeFileSync(resultsPath, `${JSON.stringify(payload, null, 2)}\n`)
 
-const problems = validateResults(results)
-if (problems.length > 0) {
-  console.error(`\n${problems.length} repo(s) produced no usable measurement:`)
-  for (const problem of problems) console.error(`  - ${problem}`)
-  process.exit(1)
-}
-
 if (updateBaseline) {
+  const problems = validateResults(results, { recording: true })
+  if (problems.length > 0) {
+    console.error(`\n${problems.length} measurement(s) are unfit to record as a reference:`)
+    for (const problem of problems) console.error(`  - ${problem}`)
+    process.exit(1)
+  }
+  // Show what is being accepted before accepting it, so `--reason` is written after
+  // the evidence rather than instead of it.
+  if (existsSync(baselinePath)) {
+    const previous = JSON.parse(readFileSync(baselinePath, 'utf8'))
+    const preview = formatDiff(previous.results, results)
+    console.log(preview ? `\n${preview.markdown}` : '\nNo change vs the existing baseline.')
+    if (preview?.signalLoss && !args.includes('--accept-signal-loss')) {
+      die(
+        '\nThis records a loss of signal. If that is intended, re-run with --accept-signal-loss and say so in --reason.',
+      )
+    }
+  }
   const recorded = {
     recordedAt: new Date().toISOString().slice(0, 10),
+    nodeMajor: Number.parseInt(process.versions.node.split('.')[0] ?? '', 10),
     reason,
-    ...payload,
+    corpusRefs: payload.corpusRefs,
+    // `elapsedMs` is machine noise in the one artifact reviewers actually read.
+    results: results.map(({ elapsedMs, ...rest }) => rest),
   }
   writeFileSync(baselinePath, `${JSON.stringify(recorded, null, 2)}\n`)
   console.log(`\nBaseline updated (${results.length} repo(s)): ${reason}`)
@@ -242,15 +287,34 @@ if (!existsSync(baselinePath)) {
 }
 
 const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'))
-const moved = refsChanged(baseline.corpusRefs, currentRefs)
-if (moved.length > 0 && !only) {
+if (!baseline.reason) {
+  die(
+    'bench/baseline.json carries no `reason` — re-record with `--update-baseline --reason "..."`.',
+  )
+}
+// Compare only against the repos that actually ran, or `--only` fabricates a
+// missing-repo "signal loss" for every repo it deliberately skipped.
+const ran = new Set(repos.map((repo) => repo.name))
+const baselineResults = (baseline.results ?? []).filter((result) => ran.has(result.name))
+const baselineRefs = Object.fromEntries(
+  Object.entries(baseline.corpusRefs ?? {}).filter(([name]) => ran.has(name)),
+)
+const moved = refsChanged(baselineRefs, currentRefs)
+if (moved.length > 0) {
   console.error('\nThe pinned corpus moved, so any diff is upstream churn, not a tool change:')
   for (const entry of moved) console.error(`  - ${entry.name}: ${entry.before} → ${entry.after}`)
   console.error('Re-record with `pnpm bench --update-baseline --reason "corpus repinned: …"`.')
   process.exit(1)
 }
 
-const diff = formatDiff(baseline.results, results)
+const unusable = validateResults(results, { recording: false })
+if (unusable.length > 0) {
+  console.error(`\n${unusable.length} repo(s) produced no usable measurement:`)
+  for (const problem of unusable) console.error(`  - ${problem}`)
+  process.exit(1)
+}
+
+const diff = formatDiff(baselineResults, results)
 if (!diff) {
   console.log('\nNo change vs baseline.')
   process.exit(0)

@@ -62,15 +62,30 @@ to rule precision:
 | a warning appeared, or appeared more often | the tool is saying it could not see something |
 | a repo vanished from the run | the corpus itself narrowed |
 
-Findings and per-rule counts are **reporting, not gating** — removing false positives moves them and
-leaves the gate untouched, which is exactly what a precision change should look like.
+One more gate sits above the table: a rule that fired in every repo and now fires **nowhere**, with no
+new rule id to account for it. That is not calibration.
+
+Findings and per-rule counts are otherwise **reporting, not gating** — removing false positives moves
+them and leaves the gate untouched, which is what a rule-level precision change should look like.
+**Work on the extractor is different**: narrowing what counts as a locator call site (ignoring a
+non-Playwright `.locator()`, or dropping hard waits from the denominator) legitimately reduces
+`callSites` and *will* trip the gate. That is deliberate — it is a real change in what the tool sees —
+so explain it in the PR and record the baseline with a reason that says so.
+
+Known gap: `filesAnalyzed` is a count, not a set, so a change that drops five spec files and picks up
+five helper files is invisible. Watch the per-rule rows when discovery changes.
 
 - First run clones into `.bench-cache/` (gitignored) and needs the network; later runs reuse it. The
   cache is keyed on the pin *and* the sparse patterns, so editing either re-checks-out.
 - Requires a prior `pnpm -r build`. Needs git ≥ 2.25 (`sparse-checkout`).
-- Accept an intended change with `pnpm bench --update-baseline --reason "..."`. The reason is stored
-  in the file, so an unexplained bump is visibly empty. `--update-baseline` always runs the whole
-  corpus — a partial baseline silently drops repos.
+- Accept an intended change with `pnpm bench --update-baseline --reason "..."`. The diff is printed
+  **before** the write, so the reason is written after the evidence; a baseline that would record a
+  loss of signal additionally needs `--accept-signal-loss`. The reason is stored in the file, so an
+  unexplained bump is visibly empty. `--update-baseline` always runs the whole corpus — a partial
+  baseline silently drops repos.
+- It runs in CI on pull requests that touch `packages/`, `bench/`, or the bench scripts, so the change
+  that would introduce a regression is the one that sees it. The corpus is cached on
+  `bench/corpus.json`, so a warm run is seconds.
 - A baseline may not carry warnings, a zero-file repo, or discovery anchored outside the checkout.
   Those are harness bugs, and recording them normalizes the exact false green this catches.
 - `bench/corpus.json` pins each repo's commit; the runner refuses to diff when a pin moves, because

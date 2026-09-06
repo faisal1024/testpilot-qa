@@ -49,6 +49,13 @@ export function diffRepo(before, after) {
   if (!after) return [{ metric: '(missing from run)', before: before.name, after: '—' }]
 
   const rows = []
+  if (before.filesFromRepoRoot !== after.filesFromRepoRoot) {
+    rows.push({
+      metric: 'filesFromRepoRoot',
+      before: before.filesFromRepoRoot,
+      after: after.filesFromRepoRoot,
+    })
+  }
   for (const metric of COMPARED_METRICS) {
     if (before[metric] !== after[metric]) {
       rows.push({ metric, before: before[metric], after: after[metric] })
@@ -94,10 +101,14 @@ export function isSignalLoss(rows) {
     const direction = EVIDENCE_METRICS[row.metric]
     if (direction === 'decrease') return row.after < row.before
     if (direction === 'increase') return row.after > row.before
-    if (row.metric === 'exitCode') return row.after !== row.before
+    // A repo that starts failing is loss; one that stops failing is a fix.
+    if (row.metric === 'exitCode') return row.after !== 0 && row.after !== row.before
     if (row.metric.startsWith('discovery.')) {
+      // Informed → guessing, or informed → nothing recorded at all.
       return INFORMED_SOURCES.has(row.before) && !INFORMED_SOURCES.has(row.after)
     }
+    // Default discovery finding fewer files is the plan's headline metric regressing.
+    if (row.metric === 'filesFromRepoRoot') return row.after < row.before
     // A warning that starts appearing (or appears more often) is the tool telling us it
     // could not see something.
     if (row.metric.startsWith('warning:')) return row.after > row.before
@@ -110,7 +121,7 @@ export function isSignalLoss(rows) {
  * caused them. A baseline that accepts these enshrines the false green the benchmark
  * exists to catch.
  */
-export function validateResults(results) {
+export function validateResults(results, { recording = true } = {}) {
   const problems = []
   for (const result of results) {
     if (result.error) {
@@ -125,14 +136,46 @@ export function validateResults(results) {
         `${result.name}: discovery anchored at ${result.rootDir}, outside the checkout — the corpus is not measuring this repo`,
       )
     }
-    const codes = Object.keys(warningCounts(result))
-    if (codes.length > 0) {
-      problems.push(
-        `${result.name}: the run reported ${codes.join(', ')} — fix the checkout rather than recording the warning as expected`,
-      )
+    // Only fatal when recording. On a comparison run a new warning is very likely the
+    // *tool* regressing, and it must reach the diff table and the gate rather than
+    // aborting with a message that blames the checkout.
+    if (recording) {
+      const codes = Object.keys(warningCounts(result))
+      if (codes.length > 0) {
+        problems.push(
+          `${result.name}: the run reported ${codes.join(', ')} — fix the checkout rather than recording the warning as expected`,
+        )
+      }
     }
   }
   return problems
+}
+
+/**
+ * A rule that fired in every repo that recorded it and now fires nowhere, with no new
+ * rule id to account for it. Findings are deliberately not gated — but a rule going
+ * completely silent corpus-wide is not calibration, and it has no false-positive
+ * surface beyond a rule split, which the id check excludes.
+ */
+export function silencedRules(baselineResults, results) {
+  const nowByName = new Map(results.map((result) => [result.name, result]))
+  const beforeIds = new Set()
+  const afterIds = new Set()
+  const candidates = new Map()
+  for (const before of baselineResults ?? []) {
+    const after = nowByName.get(before.name)
+    if (!after) return []
+    for (const [rule, count] of Object.entries(before.byRule ?? {})) {
+      if (count > 0) beforeIds.add(rule)
+      candidates.set(rule, (candidates.get(rule) ?? 0) + count)
+    }
+    for (const [rule, count] of Object.entries(after.byRule ?? {})) {
+      if (count > 0) afterIds.add(rule)
+    }
+  }
+  // A split introduces new ids; that is progress, not silence.
+  if ([...afterIds].some((rule) => !beforeIds.has(rule))) return []
+  return [...beforeIds].filter((rule) => !afterIds.has(rule)).sort()
 }
 
 /** Renders the whole comparison as Markdown, or `null` when nothing moved. */
@@ -155,6 +198,15 @@ export function formatDiff(baselineResults, results) {
         '|---|---:|---:|',
         ...rows.map((row) => `| ${row.metric} | ${row.before} | ${row.after} |`),
       ].join('\n'),
+    )
+  }
+  const silenced = silencedRules(baselineResults, results)
+  if (silenced.length > 0) {
+    signalLoss = true
+    sections.push(
+      `\n#### ⚠ signal loss — rule(s) silent across the whole corpus\n\n${silenced
+        .map((rule) => `- \`${rule}\` fired in the baseline and fires nowhere now`)
+        .join('\n')}`,
     )
   }
   if (sections.length === 0) return null

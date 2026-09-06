@@ -76,8 +76,30 @@ describe('bench comparison', () => {
       expect(formatDiff([before], [after]).signalLoss).toBe(true)
     })
 
-    it('flags the exit code changing', () => {
+    it('flags a repo starting to fail, but not one that stops failing', () => {
       expect(loses({ exitCode: 1 })).toBe(true)
+      const failing = measurement({ exitCode: 1 })
+      expect(formatDiff([failing], [measurement()]).signalLoss).toBe(false)
+    })
+
+    it('flags default discovery finding fewer files', () => {
+      const before = measurement({ filesFromRepoRoot: 61 })
+      const after = measurement({ filesFromRepoRoot: 0 })
+      expect(formatDiff([before], [after]).signalLoss).toBe(true)
+    })
+
+    it('flags a rule going silent across the whole corpus', () => {
+      // Not calibration: a rule that fired everywhere now fires nowhere, and no new
+      // rule id appeared to account for it.
+      const wiped = baseline.results.map((result) => ({
+        ...result,
+        byRule: Object.fromEntries(
+          Object.entries(result.byRule).filter(([rule]) => rule !== 'no-xpath'),
+        ),
+      }))
+      const diff = formatDiff(baseline.results, wiped)
+      expect(diff.signalLoss).toBe(true)
+      expect(diff.markdown).toContain('silent across the whole corpus')
     })
   })
 
@@ -126,6 +148,14 @@ describe('bench comparison', () => {
       expect(validateResults([measurement({ filesAnalyzed: 0 })])[0]).toContain('analyzed 0 files')
     })
 
+    it('lets a new warning through on a comparison run, so the gate can see it', () => {
+      // Recording one is a harness bug; a warning appearing on a comparison run is
+      // very likely the tool regressing, and must reach the table rather than abort.
+      const result = measurement({ warnings: { 'test-root-missing': 1 } })
+      expect(validateResults([result], { recording: false })).toEqual([])
+      expect(formatDiff([measurement()], [result]).signalLoss).toBe(true)
+    })
+
     it('rejects a run whose warnings the harness caused', () => {
       // A baseline carrying `test-root-missing` normalizes the very signal the tool
       // emits to say "I did not analyze this directory".
@@ -150,7 +180,21 @@ describe('bench comparison', () => {
     expect(refsChanged({ 'cal.com': 'aaa' }, { 'cal.com': 'bbb' })).toEqual([
       { name: 'cal.com', before: 'aaa', after: 'bbb' },
     ])
-    expect(refsChanged(baseline.corpusRefs, baseline.corpusRefs)).toEqual([])
+  })
+
+  it('has a baseline recorded from the pins currently in corpus.json', () => {
+    // The real invariant: bumping a pin without re-recording must not pass PR CI and
+    // then surface a week later in the scheduled run.
+    const corpus = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../bench/corpus.json', import.meta.url)), 'utf8'),
+    )
+    const pins = Object.fromEntries(corpus.repos.map((repo) => [repo.name, repo.ref]))
+    expect(refsChanged(baseline.corpusRefs, pins)).toEqual([])
+  })
+
+  it('has a baseline that records why it was accepted', () => {
+    expect(baseline.reason).toBeTruthy()
+    expect(baseline.results.every((result) => result.elapsedMs === undefined)).toBe(true)
   })
 
   it('pins the compared metric set, so dropping one is a deliberate act', () => {

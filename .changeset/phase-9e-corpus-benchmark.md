@@ -17,3 +17,6 @@ This is developer tooling; nothing in the published package changes. It exists b
 discovery defect found while building Phase 9 was caught by hand, one fixture at a time, invented
 after the fact. The rule changes coming in Phase 11 will move these numbers a great deal, and the
 point is that each move has to be looked at and explained rather than absorbed.
+
+The gate runs on pull requests that touch the analyzer — the change that would introduce a regression
+is the one that should see it — with the pinned corpus cached, so a warm run is seconds.
