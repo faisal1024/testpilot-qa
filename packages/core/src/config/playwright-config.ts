@@ -143,12 +143,25 @@ function propertyValue(object: Node, name: string): Node | null {
   return null
 }
 
-/** True when any key is computed, so we cannot know which key it is. */
+/**
+ * True when a key is computed **and not statically readable**, so we cannot
+ * know which key it is.
+ *
+ * `propertyValue` five lines up already resolves `{ ['use']: … }` through
+ * `staticString`, so treating every computed key as unknown made
+ * `{ reporter: 'list' }` and `{ ['reporter']: 'list' }` — the same object to
+ * Node — give different answers. That is the split this whole series is about,
+ * and it was worse than a wrong sentence: an unreadable config lands in
+ * `status: 'unreadable'` rather than `'no-settings'`, so the adoption branch
+ * never ran and a different directory got analyzed.
+ */
 function hasComputedKey(object: Node): boolean {
   for (const raw of (object.properties as unknown[]) ?? []) {
     const property = asNode(raw)
     if (property?.type === 'Property' && property.computed === true) {
-      return true
+      if (staticString(asNode(property.key)) === null) {
+        return true
+      }
     }
   }
   return false
