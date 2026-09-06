@@ -15,6 +15,9 @@
     "ai-agents"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "author": "Faisal Islam",
   "homepage": "https://github.com/faisal1024/testpilot-qa#readme",
   "repository": {

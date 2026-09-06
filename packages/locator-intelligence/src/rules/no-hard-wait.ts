@@ -5,7 +5,7 @@ export const noHardWait: Rule = {
   id: 'no-hard-wait',
   category: 'flakiness',
   defaultSeverity: 'error',
-  docsUrl: 'https://testpilot.dev/rules/no-hard-wait',
+  docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-hard-wait.md',
   evaluate(context) {
     if (context.apiCall === 'waitForTimeout') {
       return {

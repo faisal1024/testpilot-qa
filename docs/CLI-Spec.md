@@ -143,7 +143,8 @@ testpilot analyze [globs...] [options]
 > `no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`,
 > `prefer-user-facing-locator` (locator), and `no-hard-wait` (flakiness). Files come from the
 > positional globs (a positional that is a **directory** is expanded into its test files, so
-> `analyze examples/fragile-suite` works), else `config.include` resolved under `config.testDir`.
+> `analyze examples/fragile-suite` works), else `config.include` resolved under `config.testDir`,
+> which is relative to the **config file's directory** (see §7 — a run that matches nothing fails).
 > Output is the human
 > table (default) or stable `--json`. Per-rule **severity is config-driven** (`rules: { 'no-xpath':
 > 'warn' }`; `'off'` disables). Unknown rule ids in config surface as **warnings** (not failures).
@@ -382,7 +383,10 @@ import { defineConfig } from 'testpilot-qa'
 
 export default defineConfig({
   testDir: 'tests',
-  include: ['**/*.spec.ts'],
+  include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']
+  // default: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/test-results/**', '**/playwright-report/**']
+  // Setting this REPLACES the defaults — repeat the ones you still want.
+  exclude: ['**/node_modules/**', '**/dist/**'],
   scoring: { minScore: 80, weights: { error: 5, warn: 2, info: 0.5 } },
   rules: {
     // MVP rule set (see Locator-Intelligence-Design §5)
@@ -403,12 +407,13 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.3`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.4`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "command": "analyze",
+  "rootDir": "/abs/path/to/project",
   "summary": {
     "filesAnalyzed": 3,
     "filesWithParseErrors": 0,
@@ -437,7 +442,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
       "column": 14,
       "snippet": "page.locator('.btn-primary')",
       "suggestion": "Prefer getByRole() or getByTestId() over class-based selectors.",
-      "docsUrl": "https://testpilot.dev/rules/no-css-class-selector"
+      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md"
     }
   ],
   "warnings": [
@@ -448,6 +453,16 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 }
 ```
 
+`rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
+to: the config file's directory (or the project root when there is no config file) for config-driven
+discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
+findings, score, and baseline identities are not — so snapshot comparisons across machines should
+ignore it.
+`warnings[].code` is `unknown-rule` or `no-files-matched` (1.4). On a **zero-file run** the `--json`
+and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
+no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
+still have something to read; the table and HTML reporters print only the error.
+
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
 against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.
@@ -455,7 +470,9 @@ deterministic and diffable.
 **SARIF (`--reporter sarif`)** is a derived view of the same findings, not a second contract: each
 distinct `ruleId` becomes a SARIF reporting descriptor (with its `helpUri`), and each finding becomes a
 result whose `level` maps from severity (`error`→`error`, `warn`→`warning`, `info`→`note`) at its
-`physicalLocation` (file URI + 1-based line/column + snippet). Each result carries
+`physicalLocation` (file URI + 1-based line/column + snippet). SARIF file URIs are always relative to
+**`--cwd`** (re-resolved from `rootDir`), so the GitHub Action's "run from the repo root" contract
+holds even when `testpilot.config.ts` lives in a sub-package. Each result carries
 `partialFingerprints['testpilotIdentity/v1']` (the baseline identity) so code scanning tracks a finding
 across line moves.
 
@@ -482,6 +499,19 @@ across line moves.
 | `5` | Internal error (bug — should be reported). |
 
 Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures) lets CI treat them differently.
+
+**A run that matches zero test files is never a pass.** `analyze` and `fix` exit `2` when explicit
+patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
+printing what was searched (a **directory** argument that matches nothing is a `3` too — it is
+expanded with the config's `include`). The default `include` is
+`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']`, and the default `exclude` skips
+`node_modules`, `dist`, `build`, `coverage`, `test-results`, and `playwright-report`. `exclude` applies
+wherever `include` chose the files (config-driven discovery and directory arguments); a glob or path
+you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still works.
+
+`testDir` is resolved relative to the directory of the loaded `testpilot.config.ts` — or, when there is
+no config file, the **project root** (nearest `package.json`), which is the same base `doctor` checks —
+so running from a sub-directory of a monorepo still finds the suite.
 
 ---
 

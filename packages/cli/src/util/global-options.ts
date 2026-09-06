@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import type { Command } from 'commander'
 
 /** Normalized view of the global CLI flags (see docs/CLI-Spec.md §2). */
@@ -20,7 +21,8 @@ export function readGlobalOptions(command: Command): GlobalOptions {
     verbose: Boolean(opts.verbose),
     color: opts.color !== false,
     yes: Boolean(opts.yes),
-    cwd: typeof opts.cwd === 'string' ? opts.cwd : process.cwd(),
+    // Absolute: `--cwd` reaches the report as `rootDir`, which is documented absolute.
+    cwd: resolve(typeof opts.cwd === 'string' ? opts.cwd : process.cwd()),
     configPath: typeof opts.config === 'string' ? opts.config : undefined,
   }
 }

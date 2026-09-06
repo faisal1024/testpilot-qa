@@ -13,13 +13,13 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     column: 7,
     snippet: "page.locator('//button')",
     suggestion: 'Prefer getByRole().',
-    docsUrl: 'https://testpilot.dev/rules/no-xpath',
+    docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
     ...overrides,
   }
 }
 
-function reportWith(findings: Finding[]): AnalysisReport {
-  return { findings } as AnalysisReport
+function reportWith(findings: Finding[], rootDir = '/repo'): AnalysisReport {
+  return { findings, rootDir } as AnalysisReport
 }
 
 const LEVELS = ['error', 'warning', 'note']
@@ -100,7 +100,9 @@ describe('toSarif', () => {
     )
     const rules = sarif.runs[0]?.tool.driver.rules ?? []
     expect(rules.map((r) => r.id)).toEqual(['no-xpath', 'no-hard-wait'])
-    expect(rules[0]?.helpUri).toBe('https://testpilot.dev/rules/no-xpath')
+    expect(rules[0]?.helpUri).toBe(
+      'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
+    )
     // Two no-xpath results both point at rule index 0; the no-hard-wait result at index 1.
     expect(sarif.runs[0]?.results.map((r) => r.ruleIndex)).toEqual([0, 0, 1])
   })
@@ -136,5 +138,14 @@ describe('toSarif', () => {
         ]),
       ),
     )
+  })
+
+  it('re-relativizes artifact URIs to the given cwd, keeping paths as-is without one', () => {
+    const report = reportWith([finding({ file: 'tests/login.spec.ts' })], '/repo/packages/web')
+    const uriOf = (sarif: ReturnType<typeof toSarif>) =>
+      sarif.runs[0]?.results[0]?.locations[0]?.physicalLocation.artifactLocation.uri
+    expect(uriOf(toSarif(report))).toBe('tests/login.spec.ts')
+    expect(uriOf(toSarif(report, { cwd: '/repo' }))).toBe('packages/web/tests/login.spec.ts')
+    expect(uriOf(toSarif(report, { cwd: '/repo/packages/web/src' }))).toBe('../tests/login.spec.ts')
   })
 })

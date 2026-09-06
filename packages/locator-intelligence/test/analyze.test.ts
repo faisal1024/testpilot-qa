@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { type TestPilotConfig, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { analyze } from '../src/analyze.js'
@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.3')
+    expect(report.schemaVersion).toBe('1.4')
     expect(report.summary).toEqual({
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
@@ -63,6 +63,91 @@ describe('analyze — Tier 1 rule set', () => {
     ])
 
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
+  })
+
+  it('analyzes JavaScript/JSX/TSX suites with the default include', async () => {
+    writeFixture('tests/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/b.test.jsx', "const el = <div/>\npage.locator('.btn')\n")
+    writeFixture('tests/c.spec.tsx', 'const el = <div/>\npage.waitForTimeout(500)\n')
+    writeFixture('tests/d.spec.mjs', "page.locator('//a')\n")
+    writeFixture('tests/e.spec.cjs', "page.locator('//a')\n")
+    writeFixture('tests/f.e2e.ts', "page.locator('//a')\n") // cal.com naming
+    writeFixture('tests/g.e2e-spec.ts', "page.locator('//a')\n") // immich naming
+    writeFixture('tests/helpers/pom.ts', "page.locator('//a')\n") // not matched by default
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(7)
+    expect(report.summary.filesWithParseErrors).toBe(0)
+    expect(report.warnings).toEqual([])
+    expect(report.rootDir).toBe(dir)
+  })
+
+  it('ignores build output by default so compiled tests are not analyzed twice', async () => {
+    writeFixture('tests/a.spec.ts', "page.locator('//button')\n")
+    writeFixture('tests/dist/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/build/a.spec.js', "page.locator('//button')\n")
+    writeFixture('tests/node_modules/dep/a.spec.js', "page.locator('//button')\n")
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(1)
+
+    const custom = await analyze({ cwd: dir, config: config({ exclude: ['**/dist/**'] }) })
+    expect(custom.summary.filesAnalyzed).toBe(3)
+  })
+
+  it('honors an explicitly named path or glob even inside an excluded directory', async () => {
+    writeFixture('dist/e2e/a.spec.js', "page.locator('//button')\n")
+    // `exclude` keeps discovery out of build output; it must not overrule an explicit ask.
+    const byPath = await analyze({ cwd: dir, config: config(), patterns: ['dist/e2e/a.spec.js'] })
+    expect(byPath.summary.filesAnalyzed).toBe(1)
+    const byGlob = await analyze({ cwd: dir, config: config(), patterns: ['dist/**/*.spec.js'] })
+    expect(byGlob.summary.filesAnalyzed).toBe(1)
+  })
+
+  it('applies exclude to a directory argument (which is expanded with include)', async () => {
+    writeFixture('e2e/a.spec.ts', "page.locator('//button')\n")
+    writeFixture('e2e/dist/a.spec.js', "page.locator('//button')\n")
+    const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e'] })
+    expect(report.summary.filesAnalyzed).toBe(1)
+  })
+
+  it('reports an absolute rootDir even when cwd is relative', async () => {
+    writeFixture('tests/a.spec.ts', "page.locator('//button')\n")
+    const previous = process.cwd()
+    process.chdir(dir)
+    try {
+      const report = await analyze({ cwd: '.', config: config() })
+      expect(isAbsolute(report.rootDir)).toBe(true)
+      expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
+    } finally {
+      process.chdir(previous)
+    }
+  })
+
+  it('warns (no-files-matched) instead of scoring 100/A when nothing matches', async () => {
+    writeFixture('tests/only.spec.rb', 'not a playwright test')
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.summary.filesAnalyzed).toBe(0)
+    expect(report.warnings).toEqual([
+      { code: 'no-files-matched', message: expect.stringContaining('under testDir "tests"') },
+    ])
+
+    const byPattern = await analyze({ cwd: dir, config: config(), patterns: ['nope/**'] })
+    expect(byPattern.warnings).toEqual([
+      { code: 'no-files-matched', message: 'No test files matched nope/**.' },
+    ])
+  })
+
+  it('resolves testDir against rootDir and reports paths relative to it', async () => {
+    // Monorepo layout: config lives in packages/web, the command runs from packages/web/src.
+    writeFixture('packages/web/tests/a.spec.ts', "page.locator('//button')\n")
+    mkdirSync(join(dir, 'packages/web/src'), { recursive: true })
+    const report = await analyze({
+      cwd: join(dir, 'packages/web/src'),
+      config: config(),
+      rootDir: join(dir, 'packages/web'),
+    })
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
+    expect(report.rootDir).toBe(join(dir, 'packages/web'))
   })
 
   it('produces identical output across runs (deterministic + sorted)', async () => {

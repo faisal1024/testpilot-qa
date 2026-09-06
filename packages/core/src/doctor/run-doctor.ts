@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import {
   AGENT_FILE_PATHS,
   type AgentGuidanceStatus,
@@ -266,7 +266,7 @@ function checkAiGuidance(projectRoot: string, agents: AgentId[]): DoctorCheck {
     // Intentionally not `init --force` — that reruns the whole scaffold and could
     // overwrite unrelated files. A guidance-only regeneration command lands in V1.
     check.remediation =
-      'Review the affected guidance files; guidance-only regeneration (`testpilot add ai`) lands in a later milestone.'
+      'Run `testpilot add ai` to preview, then `testpilot add ai --write` to create missing / refresh stale guidance files (hand-edited files need `--force`).'
   }
   return check
 }
@@ -302,11 +302,13 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
 
   let config: TestPilotConfig = defaultConfig
   let configFilePresent = false
+  let configDir: string | null = null
   let configCheck: DoctorCheck
   try {
     const result = await loadConfig({ cwd, configPath: options.configPath })
     config = result.config
     configFilePresent = result.filepath !== null
+    configDir = result.filepath === null ? null : dirname(result.filepath)
     configCheck = {
       id: 'config',
       title: 'TestPilot config',
@@ -328,9 +330,10 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   }
 
   const playwrightConfigPath = findPlaywrightConfig(projectRoot, config.playwrightConfig)
-  // Resolve testDir against the discovered project root (not the invocation cwd)
-  // so running `doctor` from a subdirectory doesn't falsely report it missing.
-  const testDirExists = isDirectory(join(projectRoot, config.testDir))
+  // Resolve testDir exactly as `analyze`/`fix` do (see resolveRootDir in the CLI):
+  // the config file's directory, else the project root. `doctor` must predict what
+  // `analyze` will do, so these two fallbacks have to stay in step.
+  const testDirExists = isDirectory(join(configDir ?? projectRoot, config.testDir))
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),

@@ -1,11 +1,18 @@
 import { readFileSync } from 'node:fs'
-import { relative } from 'node:path'
-import { type FixEdit, computeFixes, resolveTestFiles } from '@testpilot/locator-intelligence'
+import { relative, sep } from 'node:path'
+import {
+  type FixEdit,
+  computeFixes,
+  discoveryBase,
+  resolveTestFiles,
+} from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { ExitCode } from '../util/exit-codes.js'
+import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
+import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
-import { resolveConfigOrExit } from '../util/resolve-config.js'
+import { resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
@@ -16,13 +23,6 @@ interface FileFixSummary {
   file: string
   fixes: FixEdit[]
   written: boolean
-}
-
-function fail(globals: GlobalOptions, message: string, code: number): never {
-  if (!globals.quiet) {
-    console.error(message)
-  }
-  process.exit(code)
 }
 
 /**
@@ -40,20 +40,23 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const { config } = await resolveConfigOrExit(globals)
+  const { config, filepath } = await resolveConfigOrExit(globals)
   const write = options.write === true
 
-  const files = await resolveTestFiles(
-    globals.cwd,
-    patterns.length > 0 ? patterns : undefined,
-    config,
-  )
+  const rootDir = resolveRootDir(globals.cwd, filepath)
+  const explicitPatterns = patterns.length > 0 ? patterns : undefined
+  const files = await resolveTestFiles(globals.cwd, explicitPatterns, config, rootDir)
+  if (files.length === 0) {
+    failNoFilesMatched(globals, patterns, config, filepath)
+  }
+  // Display paths use the same base as `analyze` reports, so the two agree.
+  const displayBase = discoveryBase(globals.cwd, explicitPatterns, rootDir)
 
   const results: FileFixSummary[] = []
   const diffs: string[] = []
   let skipped = 0
   for (const absolute of files) {
-    const display = relative(globals.cwd, absolute) || absolute
+    const display = (relative(displayBase, absolute) || absolute).split(sep).join('/')
     let code: string
     try {
       code = readFileSync(absolute, 'utf8')

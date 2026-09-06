@@ -39,7 +39,9 @@ describe('explain command', () => {
     expect(exitCode).toBeUndefined()
     expect(stdout).toContain('no-xpath  [error] locator')
     expect(stdout).toContain('Why it matters')
-    expect(stdout).toContain('Docs: https://testpilot.dev/rules/no-xpath')
+    expect(stdout).toContain(
+      'Docs: https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
+    )
   })
 
   it('emits JSON with --json', async () => {

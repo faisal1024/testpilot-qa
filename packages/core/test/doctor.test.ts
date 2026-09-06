@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { generateAgentFiles } from '@testpilot/ai'
+import { GUIDANCE_VERSION, generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type DoctorReport, runDoctor } from '../src/index.js'
 
@@ -44,6 +44,25 @@ function checkById(report: DoctorReport, id: string) {
 const NODE_OK = '22.0.0'
 
 describe('runDoctor', () => {
+  it('resolves testDir against the config file directory, like analyze (monorepo layout)', async () => {
+    // Root owns the config + suite; the command runs from a sub-package with its own package.json.
+    writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
+    mkdirSync(join(dir, 'tests'))
+    mkdirSync(join(dir, 'packages', 'web'), { recursive: true })
+    writeFileSync(join(dir, 'packages', 'web', 'package.json'), '{"name":"web"}\n')
+    const report = await runDoctor({ cwd: join(dir, 'packages', 'web'), nodeVersion: NODE_OK })
+    expect(checkById(report, 'test-directory')?.status).toBe('pass')
+  })
+
+  it('anchors testDir at the project root when there is no config file', async () => {
+    // Same fallback the CLI uses for `analyze`, so doctor predicts what analyze will do.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'tests'))
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const report = await runDoctor({ cwd: join(dir, 'src', 'deep'), nodeVersion: NODE_OK })
+    expect(checkById(report, 'test-directory')?.status).toBe('pass')
+  })
+
   it('passes a complete, healthy project', async () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
@@ -157,7 +176,10 @@ describe('runDoctor', () => {
 
     it('warns when a marker version is stale', async () => {
       writeHealthyProject()
-      writeFileSync(claudePath(), readFileSync(claudePath(), 'utf8').replace(' v1 ', ' v0 '))
+      writeFileSync(
+        claudePath(),
+        readFileSync(claudePath(), 'utf8').replace(` v${GUIDANCE_VERSION} `, ' v0 '),
+      )
       const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
       expect(aiCheck(report)?.status).toBe('warn')
       expect(aiCheck(report)?.message).toContain('stale')

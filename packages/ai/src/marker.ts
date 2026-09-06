@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto'
 
-/** Bumped when the canonical guidance content changes meaningfully. */
-export const GUIDANCE_VERSION = 1
+/**
+ * Bumped when the generated guidance content changes meaningfully — drift is decided
+ * by this version, so an unbumped change can never reach existing projects.
+ * v2: agent globs follow the widened default `include` (JS/`*.e2e.ts` suites).
+ */
+export const GUIDANCE_VERSION = 2
 
 const TOKEN = '@testpilot/guidance'
 const MARKER_RE = /@testpilot\/guidance v(\d+) sha256:([0-9a-f]+)/

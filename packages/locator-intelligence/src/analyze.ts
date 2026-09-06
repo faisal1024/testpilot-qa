@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { relative } from 'node:path'
+import { relative, resolve } from 'node:path'
 import {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
@@ -11,7 +11,7 @@ import {
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
-import { resolveTestFiles } from './resolve-files.js'
+import { discoveryBase, resolveTestFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 import { computeScore } from './score.js'
@@ -23,6 +23,12 @@ export interface AnalyzeOptions {
   config: TestPilotConfig
   /** Explicit globs (CLI positional args). Falls back to `config.include`. */
   patterns?: string[]
+  /**
+   * Directory that config-driven discovery (`testDir` + `include`) and reported
+   * file paths are anchored at — the loaded config file's directory, or the
+   * project root when there is no config file. Defaults to `cwd`.
+   */
+  rootDir?: string
 }
 
 interface EnabledRule {
@@ -77,15 +83,35 @@ function compareFindings(a: Finding, b: Finding): number {
  * Parse failures are reported (not thrown) and never fail the command.
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
-  const files = await resolveTestFiles(options.cwd, options.patterns, options.config)
+  const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
+  const files = await resolveTestFiles(
+    options.cwd,
+    options.patterns,
+    options.config,
+    options.rootDir,
+  )
+  // Paths are reported relative to the same base discovery used (see discoveryBase).
+  // Always absolute: `rootDir` is part of the report contract and consumers
+  // re-resolve reported paths from it in a process with a different cwd.
+  const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
   const { rules, warnings } = resolveRules(options.config)
+  if (files.length === 0) {
+    // A run that matched nothing must never look like a clean pass — a
+    // TypeScript-only glob on a JavaScript suite would otherwise score 100/A.
+    warnings.push({
+      code: 'no-files-matched',
+      message: usingPatterns
+        ? `No test files matched ${options.patterns?.join(', ')}.`
+        : `No test files matched include ${JSON.stringify(options.config.include)} (exclude ${JSON.stringify(options.config.exclude)}) under testDir "${options.config.testDir}".`,
+    })
+  }
 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
   let callSites = 0
 
   for (const absolute of files) {
-    const relativePath = toPosix(relative(options.cwd, absolute))
+    const relativePath = toPosix(relative(reportBase, absolute))
     let code: string
     try {
       code = readFileSync(absolute, 'utf8')
@@ -141,6 +167,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     command: 'analyze',
+    rootDir: reportBase,
     summary: {
       filesAnalyzed: files.length,
       filesWithParseErrors: parseErrors.length,

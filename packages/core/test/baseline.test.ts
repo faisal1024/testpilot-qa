@@ -12,7 +12,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     line: 3,
     column: 5,
     snippet: "page.locator('//button')",
-    docsUrl: 'https://testpilot.dev/rules/no-xpath',
+    docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-xpath.md',
     ...overrides,
   }
 }

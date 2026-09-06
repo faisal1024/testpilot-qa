@@ -22,7 +22,7 @@ export const noDeepCssChain: Rule = {
   id: 'no-deep-css-chain',
   category: 'locator',
   defaultSeverity: 'warn',
-  docsUrl: 'https://testpilot.dev/rules/no-deep-css-chain',
+  docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-deep-css-chain.md',
   evaluate(context) {
     if (context.isDynamic || context.apiCall !== 'locator') {
       return null

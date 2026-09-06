@@ -33,6 +33,14 @@ pnpm format      # biome format --write
 pnpm exec biome check --write .
 ```
 
+## Rule docs are generated
+
+`docs/rules/*.md` (one page per rule plus the index) is generated from
+`packages/locator-intelligence/src/explanations.ts` — the same source `testpilot explain` prints. Do
+not edit those pages by hand: change the explanation (or a rule's `docsUrl`), run `pnpm docs:rules`
+(it rebuilds the engine first), and commit the regenerated pages. `rule-docs.test.ts` fails when the
+committed pages drift from the generator.
+
 ## Conventions
 
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, …).
