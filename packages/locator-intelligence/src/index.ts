@@ -42,7 +42,7 @@ export {
   type SelectorPart,
   tokenizeSelector,
 } from './selector/index.js'
-export { classTokens, cssSelectors, usesEngine } from './selector/query.js'
+export { classTokens, cssSelectors } from './selector/query.js'
 export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'
 export { computeScore, gradeFor, type ScoringWeights } from './score.js'
 export {

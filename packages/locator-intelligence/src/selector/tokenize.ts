@@ -42,6 +42,8 @@ const ENGINE_ALIASES: Record<string, SelectorPart['engine']> = {
 
 /** An engine prefix is `name=` at the very start, with a bare identifier name. */
 const ENGINE_PREFIX = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*=/
+/** The same shape anchored at both ends: everything before a quote is just a prefix. */
+const ENGINE_PREFIX_ONLY = /^\s*[a-zA-Z_][a-zA-Z0-9_:-]*\s*=\s*$/
 
 const IDENTIFIER_START = /[a-zA-Z_ -￿\\-]/
 const IDENTIFIER_CHAR = /[a-zA-Z0-9_ -￿\\-]/
@@ -98,7 +100,15 @@ function readEscape(cursor: Cursor): string {
     cursor.take()
   }
   const code = Number.parseInt(hex, 16)
-  if (!Number.isFinite(code) || code === 0 || code > 0x10ffff) {
+  // Surrogates included: CSS maps them to U+FFFD, while `fromCodePoint` yields a
+  // lone surrogate that then pairs with the next escape — two escapes became a
+  // single emoji class name that no browser would ever match.
+  if (
+    !Number.isFinite(code) ||
+    code === 0 ||
+    code > 0x10ffff ||
+    (code >= 0xd800 && code <= 0xdfff)
+  ) {
     throw new SelectorSyntaxError('invalid escape')
   }
   return String.fromCodePoint(code)
@@ -188,11 +198,9 @@ function readUnquotedAttributeValue(cursor: Cursor): string {
   let out = ''
   while (!cursor.done && !/[\]\s]/.test(cursor.peek())) {
     if (cursor.peek() === '\\') {
-      cursor.take()
-      if (cursor.done) {
-        throw new SelectorSyntaxError('trailing backslash')
-      }
-      out += cursor.take()
+      // The same decoder identifiers use — copying the next character made
+      // `[a=\\41]` a value literally named "41".
+      out += readEscape(cursor)
       continue
     }
     out += cursor.take()
@@ -250,10 +258,23 @@ const SELECTOR_PSEUDOS = new Set([
   'below',
   'right-of',
   'left-of',
+  // Shadow-DOM pseudos take a selector as well.
+  'host',
+  'host-context',
+  'slotted',
 ])
 
 /** Selector list followed by a trailing numeric argument. */
 const SELECTOR_THEN_NUMBER_PSEUDOS = new Set(['nth-match', 'near'])
+
+/**
+ * `:nth-child(An+B of S)` — an index expression, then a selector after `of`.
+ *
+ * Classified as text-taking, these silently dropped `S`: `a:nth-child(2 of .foo)`
+ * reported no classes with a clean parse. Same defect as `:right-of` — and a
+ * reminder that "we recognize it" is not the same as "we read all of it".
+ */
+const NTH_OF_PSEUDOS = new Set(['nth-child', 'nth-last-child'])
 
 /** Pseudo-classes whose argument is text, a number or a keyword — never a selector. */
 const NON_SELECTOR_PSEUDOS = new Set([
@@ -261,16 +282,11 @@ const NON_SELECTOR_PSEUDOS = new Set([
   'text',
   'text-is',
   'text-matches',
-  'nth-child',
-  'nth-last-child',
   'nth-of-type',
   'nth-last-of-type',
   'lang',
   'dir',
   'part',
-  'slotted',
-  'host',
-  'host-context',
 ])
 
 function readPseudo(cursor: Cursor): PseudoSelector {
@@ -297,6 +313,19 @@ function readPseudo(cursor: Cursor): PseudoSelector {
     const head =
       cut > 0 && /^\s*[\d.]+\s*$/.test(argument.slice(cut + 1)) ? argument.slice(0, cut) : argument
     return { name, argument, selectors: readSelectorList(head), element }
+  }
+  if (NTH_OF_PSEUDOS.has(name)) {
+    // `An+B` alone, or `An+B of <selector list>`.
+    const of = /\sof\s/i.exec(argument)
+    if (!of) {
+      return { name, argument, element }
+    }
+    return {
+      name,
+      argument,
+      selectors: readSelectorList(argument.slice(of.index + of[0].length)),
+      element,
+    }
   }
   if (NON_SELECTOR_PSEUDOS.has(name)) {
     return { name, argument, element }
@@ -384,6 +413,11 @@ function readComplex(cursor: Cursor): ComplexSelector {
         current.pseudos.push({ name: 'scope', element: false })
         flush()
       }
+      if (pendingCombinator !== null) {
+        // `a > > b`, `.a > + .b` — Playwright rejects these outright, so a
+        // finding on one would be a finding on a selector that cannot run.
+        throw new SelectorSyntaxError('two consecutive combinators')
+      }
       pendingCombinator = char === '>' ? 'child' : char === '+' ? 'adjacent' : 'sibling'
       continue
     }
@@ -457,13 +491,18 @@ function readSelectorList(text: string): ComplexSelector[] {
 }
 
 /** Splits on top-level `>>`, respecting strings, brackets and parentheses. */
-function splitChain(selector: string): { parts: string[]; failed: boolean } {
+function splitChain(selector: string): {
+  parts: string[]
+  failed: boolean
+  reason?: string
+} {
   const parts: string[] = []
   const cursor = new Cursor(selector)
   let start = 0
   let brackets = 0
   let parens = 0
   let failed = false
+  let reason: string | undefined
   while (!cursor.done) {
     const char = cursor.peek()
     // A quote delimits a string only where one can start: at the head of the
@@ -471,12 +510,16 @@ function splitChain(selector: string): { parts: string[]; failed: boolean } {
     // the apostrophe in `text=It's here >> .btn` open a string that never
     // closed, swallowing the rest of the selector into one part — and reporting
     // nothing, which is precisely the silent-wrong-answer this module forbids.
-    const atPartHead = cursor.index === start || selector.slice(start, cursor.index).trim() === ''
+    // A quote opens a string at the head of a part, or immediately after that
+    // part's engine prefix — `text="a >> b"` is documented Playwright syntax.
+    const before = selector.slice(start, cursor.index)
+    const atPartHead = before.trim() === '' || ENGINE_PREFIX_ONLY.test(before)
     if ((char === '"' || char === "'") && (atPartHead || brackets > 0 || parens > 0)) {
       try {
         readString(cursor)
       } catch {
         failed = true
+        reason = 'unterminated string'
         break
       }
       continue
@@ -499,9 +542,11 @@ function splitChain(selector: string): { parts: string[]; failed: boolean } {
   // An empty part means a stray or doubled `>>` (`>> .a`, `a >> >> b`), which
   // Playwright rejects outright. Dropping it silently would report a finding on
   // a selector that cannot run.
+  const empty = trimmed.some((part) => part === '')
   return {
     parts: trimmed.filter((part) => part !== ''),
-    failed: failed || trimmed.some((part) => part === ''),
+    failed: failed || empty,
+    reason: reason ?? (empty ? 'empty part in a ">>" chain' : undefined),
   }
 }
 
@@ -525,10 +570,11 @@ export function tokenizeSelector(selector: string): ParsedSelector {
   const unparsed: string[] = []
   const parts: SelectorPart[] = []
 
-  const { parts: chain, failed: chainFailed } = splitChain(selector)
+  const { parts: chain, failed: chainFailed, reason: chainFailure } = splitChain(selector)
   if (chainFailed) {
-    // A remainder we could not split is a remainder we did not read.
-    unparsed.push('unterminated string')
+    // The real cause. Reporting "unterminated string" for a stray `>>` was
+    // itself a false statement, in the module whose point is not making them.
+    unparsed.push(chainFailure ?? 'could not split the selector')
   }
   if (chain.length === 0) {
     // An empty (or whitespace-only) selector parses to nothing, which a rule

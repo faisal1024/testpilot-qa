@@ -70,45 +70,55 @@ function corpusSelectors(): string[] {
 
 const parser = await loadPlaywrightParser()
 const selectors = corpusSelectors()
+/** The corpus is a cached checkout; a contributor may not have it locally. */
+const available = parser !== null && selectors.length > 0
 
-describe.skipIf(parser === null || selectors.length === 0)(
-  'differential against real Playwright',
-  () => {
-    it('has a corpus to check, so this suite cannot pass vacuously', () => {
-      // Without this, a missing .bench-cache would turn the whole file green.
-      expect(selectors.length).toBeGreaterThan(500)
-      expect(parser).not.toBeNull()
-    })
+describe('differential against real Playwright', () => {
+  // OUTSIDE the skip, deliberately. With the guard inside it, a missing corpus
+  // skipped the whole file *green* — and this file is the argument for
+  // maintaining a hand-written parser at all, so a silent skip in CI made that
+  // argument vacuous.
+  it('runs for real wherever the corpus is available', () => {
+    // Gated on an explicit env var, not on `CI`: the `verify` job has no corpus
+    // (it is a cached five-repo checkout) and must not go red for its absence,
+    // while the `bench` job — which does have it — sets this and so cannot
+    // skip silently. Keying on "is the corpus there?" alone let the file pass
+    // green while skipped, which made it no evidence at all.
+    if (process.env.TESTPILOT_DIFFERENTIAL === '1') {
+      expect(parser, 'playwright-core must resolve').not.toBeNull()
+      expect(selectors.length, 'the .bench-cache corpus must be present').toBeGreaterThan(500)
+    }
+    expect(true).toBe(true)
+  })
 
-    it('never accepts a selector Playwright rejects', () => {
-      const wrong: string[] = []
-      for (const selector of selectors) {
-        let playwrightAccepts = true
-        try {
-          parser?.(selector)
-        } catch {
-          playwrightAccepts = false
-        }
-        const weAccept = tokenizeSelector(selector).unparsed.length === 0
-        if (weAccept && !playwrightAccepts) {
-          wrong.push(selector)
-        }
+  it.skipIf(!available)('never accepts a selector Playwright rejects', () => {
+    const wrong: string[] = []
+    for (const selector of selectors) {
+      let playwrightAccepts = true
+      try {
+        parser?.(selector)
+      } catch {
+        playwrightAccepts = false
       }
-      expect(wrong, `accepted but Playwright rejects:\n${wrong.join('\n')}`).toEqual([])
-    })
+      const weAccept = tokenizeSelector(selector).unparsed.length === 0
+      if (weAccept && !playwrightAccepts) {
+        wrong.push(selector)
+      }
+    }
+    expect(wrong, `accepted but Playwright rejects:\n${wrong.join('\n')}`).toEqual([])
+  })
 
-    it('reports how often it abstains where Playwright parses', () => {
-      // Allowed — a lost finding, not a false one — but tracked so a refactor
-      // that quietly doubles it is visible in review.
-      const abstained = selectors.filter((selector) => {
-        try {
-          parser?.(selector)
-        } catch {
-          return false
-        }
-        return tokenizeSelector(selector).unparsed.length > 0
-      })
-      expect(abstained.length / selectors.length).toBeLessThan(0.02)
+  it.skipIf(!available)('reports how often it abstains where Playwright parses', () => {
+    // Allowed — a lost finding, not a false one — but tracked so a refactor
+    // that quietly doubles it is visible in review.
+    const abstained = selectors.filter((selector) => {
+      try {
+        parser?.(selector)
+      } catch {
+        return false
+      }
+      return tokenizeSelector(selector).unparsed.length > 0
     })
-  },
-)
+    expect(abstained.length / selectors.length).toBeLessThan(0.02)
+  })
+})

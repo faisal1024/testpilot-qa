@@ -50,8 +50,3 @@ export function classTokens(parsed: ParsedSelector): string[] | null {
   visit(selectors)
   return [...classes]
 }
-
-/** Whether any part uses one of the given engines. */
-export function usesEngine(parsed: ParsedSelector, engines: ReadonlySet<string>): boolean {
-  return parsed.parts.some((part) => engines.has(part.engine))
-}

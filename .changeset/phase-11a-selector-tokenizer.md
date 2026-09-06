@@ -20,7 +20,8 @@ inputs — which are not exotic, they are what real suites contain:
   escaped, with the `i` flag), identifier escapes, pseudo-classes with balanced nested arguments,
   and the `>>` engine-chaining operator with each part tagged by engine (`css`, `text`, `xpath`,
   `id`, `role`, `test-id`, …). Selectors are tokenized **once per call site** in the extractor and
-  shared, so six rules cannot form six different opinions of one string.
+  shared. Only `no-css-class-selector` reads the parse so far — the other five rules still use
+  their own regexes, and 11b/11d/11e/11f move them across.
 - **It never guesses.** Anything it cannot parse — an unbalanced bracket, an unterminated string, a
   nested `:has()` argument that will not read — is reported in `unparsed`, and a rule that needs the
   parse abstains. "This selector has no classes" is not a safe conclusion when part of it is
@@ -40,7 +41,9 @@ inputs — which are not exotic, they are what real suites contain:
   test executes every example against its own rule, so the list is a fact rather than a promise.
 - **A differential test pins the tokenizer to Playwright's own parser.** `playwright-core` is a
   **devDependency** (never bundled — the CLI's tsup config bundles only `@testpilot/*`), used purely
-  as an oracle: over all 655 statically-known selectors in the corpus it asserts we never accept
-  what Playwright rejects, and tracks how often we abstain where it parses. Currently **zero in both
-  directions**. A hand-written parser for someone else's syntax drifts; this is what makes
+  as an oracle: over every statically-known selector in the corpus it asserts we never accept what
+  Playwright rejects, and tracks how often we abstain where it parses. Currently **zero in both
+  directions**. It runs in the `bench` job, which is the one with the corpus, gated on an explicit
+  env var so it cannot skip silently — keyed only on "is the corpus present?", the whole file passed
+  green while skipped, which made it no evidence at all. A hand-written parser for someone else's syntax drifts; this is what makes
   maintaining one defensible.

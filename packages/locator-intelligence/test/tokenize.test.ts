@@ -321,3 +321,72 @@ function classesOf(selector: string): string[] {
     ]),
   )
 }
+
+describe('pseudo-classes that hide a selector in a non-selector argument', () => {
+  it.each([
+    ['a:nth-child(2 of .foo)', 'foo'],
+    ['a:nth-last-child(1 of .bar)', 'bar'],
+    [':host(.h)', 'h'],
+    [':host-context(.x)', 'x'],
+    ['::slotted(.s)', 's'],
+  ])('reads the nested selector in %s', (selector, expected) => {
+    expect(classesOf(selector)).toContain(expected)
+  })
+
+  it('still accepts a plain nth-child index', () => {
+    expect(tokenizeSelector('a:nth-child(2n+1)').unparsed).toEqual([])
+    expect(classesOf('a:nth-child(2n+1)')).toEqual([])
+  })
+})
+
+describe('rejects what Playwright rejects', () => {
+  it.each(['a > > b', '.a > + .b', '> > button', ':has(> > .b)', '>> .a', 'a >> >> b', 'a >> '])(
+    'abstains on %j, which Playwright will not run',
+    (selector) => {
+      // A finding on a selector that cannot run is worse than no finding.
+      expect(tokenizeSelector(selector).unparsed.length).toBeGreaterThan(0)
+    },
+  )
+
+  it('names the real reason for an empty chain part', () => {
+    expect(tokenizeSelector('>> .a').unparsed[0]).toMatch(/chain/)
+  })
+})
+
+describe('quoted text engines', () => {
+  it('does not split a >> inside a quoted text= body', () => {
+    const parsed = tokenizeSelector('text="a >> b" >> .c')
+    expect(parsed.parts.map((part) => part.engine)).toEqual(['text', 'css'])
+    expect(classesOf2(parsed)).toEqual(['c'])
+  })
+
+  it('still splits an unquoted text= body', () => {
+    expect(tokenizeSelector('text=Save >> .c').parts).toHaveLength(2)
+  })
+
+  it('does not let an apostrophe swallow the rest', () => {
+    const parsed = tokenizeSelector("text=It's here >> .btn")
+    expect(parsed.unparsed).toEqual([])
+    expect(classesOf2(parsed)).toEqual(['btn'])
+  })
+})
+
+describe('escape edge cases', () => {
+  it('abstains on a surrogate escape rather than inventing a character', () => {
+    // `fromCodePoint` would pair two lone surrogates into one emoji class.
+    expect(tokenizeSelector('.\\D83D\\DE00').unparsed.length).toBeGreaterThan(0)
+  })
+
+  it('decodes an escape in an unquoted attribute value, like an identifier', () => {
+    const attribute = tokenizeSelector('[a=\\41]').parts[0]?.css?.[0]?.compounds[0]?.attributes[0]
+    expect(attribute?.value).toBe('A')
+  })
+})
+
+function classesOf2(parsed: ReturnType<typeof tokenizeSelector>): string[] {
+  return parsed.parts.flatMap((part) =>
+    (part.css ?? []).flatMap((complex) =>
+      complex.compounds.flatMap((compound) => compound.classes),
+    ),
+  )
+}
