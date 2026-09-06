@@ -75,6 +75,10 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
         `${error} error, ${warn} warn, ${info} info.`,
     )
   }
+  // Outside the branches: the score card is printed in every mode, so the note
+  // that some findings are missing from it has to be too. Putting it in the
+  // default branch only left `--baseline` runs — the CI mode — silent.
+  lines.push(...unscoredNote(summary))
 
   if (parseErrors.length > 0) {
     lines.push('')
@@ -85,4 +89,24 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
   }
 
   return lines.join('\n')
+}
+
+/**
+ * Names findings that were counted but kept out of the score.
+ *
+ * The JSON carries `unscoredFindings`, but the table is what a human reads and
+ * the HTML report is what gets shared — a silent adjustment in either is the
+ * failure this project spent Phase 9 removing.
+ */
+function unscoredNote(summary: AnalysisReport['summary']): string[] {
+  const unscored = summary.unscoredFindings ?? 0
+  if (unscored === 0) {
+    return []
+  }
+  const rules = summary.unscoredRuleIds ?? []
+  return [
+    // Not "of those": the note now prints in baseline mode too, where the
+    // preceding line counts *new* findings and "those" would name the wrong set.
+    `  ${unscored} finding(s)${rules.length > 0 ? ` from ${rules.join(', ')}` : ''} are not scored — measured per test, while the score is per locator call-site.`,
+  ]
 }

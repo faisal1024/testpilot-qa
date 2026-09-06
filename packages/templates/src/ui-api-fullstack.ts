@@ -1,3 +1,4 @@
+import { buildTagSelection, tagSelectionArgs } from '@testpilot/core'
 import type { Template, TemplateContext, TemplateFile } from './types.js'
 
 const PLAYWRIGHT_CONFIG = `import { defineConfig, devices } from '@playwright/test'
@@ -27,6 +28,12 @@ export default defineConfig({
 const TESTPILOT_CONFIG = `export default {
   testDir: 'tests',
   playwrightConfig: 'playwright.config.ts',
+  // Named tag sets for \`testpilot run --suite <name>\`. A leading '!' excludes.
+  // \`testpilot tags\` lists what the suite actually carries.
+  suites: {
+    smoke: ['smoke'],
+    regression: ['regression'],
+  },
 }
 `
 
@@ -41,7 +48,9 @@ const SIGN_IN_PAGE =
   '<button type="submit">Sign in</button>' +
   '</main>'
 
-test('renders the sign-in form with accessible locators', async ({ page }) => {
+// Tags are how you run a subset: \`npx testpilot-qa run --tag smoke\`. Playwright
+// reads a tag from the title or from the details argument; both are shown here.
+test('renders the sign-in form with accessible locators @smoke', async ({ page }) => {
   await page.setContent(SIGN_IN_PAGE)
 
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
@@ -77,7 +86,7 @@ const TODO_APP =
   '</script>' +
   '</main>'
 
-test('adds a task to the list', async ({ page }) => {
+test('adds a task to the list', { tag: ['@regression'] }, async ({ page }) => {
   await page.setContent(TODO_APP)
 
   await page.getByLabel('New task').fill('Write a Playwright test')
@@ -111,7 +120,7 @@ test.afterAll(() => {
   server.close()
 })
 
-test('GET / returns a healthy status', async ({ request }) => {
+test('GET / returns a healthy status @smoke', async ({ request }) => {
   const response = await request.get(baseURL + '/')
   expect(response.ok()).toBeTruthy()
   expect(await response.json()).toEqual({ status: 'ok' })
@@ -152,12 +161,22 @@ function packageJson(ctx: TemplateContext): string {
       'test:e2e:api': 'playwright test tests/api',
       'test:e2e:parallel': 'playwright test --workers=2',
       'test:e2e:headed': 'playwright test --headed',
+      // Plain Playwright, so the project stays ejectable — but *derived* from the
+      // same compiler `testpilot run --tag smoke` uses, so the scaffold cannot
+      // silently drift into selecting a different subset than the CLI does.
+      'test:e2e:smoke': `playwright test ${smokeGrepArgs()}`,
     },
     devDependencies: {
       '@playwright/test': '^1.49.0',
     },
   }
   return `${JSON.stringify(pkg, null, 2)}\n`
+}
+
+/** The exact flags `testpilot run --tag smoke` compiles to, shell-quoted. */
+function smokeGrepArgs(): string {
+  const args = tagSelectionArgs(buildTagSelection({ tag: ['smoke'] }))
+  return args.map((arg) => (arg.startsWith('--') ? arg : `"${arg}"`)).join(' ')
 }
 
 function readme(ctx: TemplateContext): string {
@@ -182,6 +201,30 @@ function readme(ctx: TemplateContext): string {
     'npm run test:e2e:api        # API tests only (tests/api)',
     'npm run test:e2e:parallel   # run with 2 workers',
     'npm run test:e2e:headed     # run in a headed browser',
+    'npm run test:e2e:smoke      # only tests tagged @smoke',
+    '```',
+    '',
+    '## Running a subset by tag',
+    '',
+    'The sample tests are tagged. Playwright reads a tag from the title or from the',
+    'details argument — both spellings are shown in `tests/`:',
+    '',
+    '```ts',
+    "test('renders the sign-in form @smoke', async ({ page }) => { … })",
+    "test('adds a task', { tag: ['@regression'] }, async ({ page }) => { … })",
+    '```',
+    '',
+    'Selecting them with plain Playwright means writing the regex yourself, and the',
+    'obvious version is wrong: `--grep @smoke` also runs `@smoketest`, and excluding',
+    'a tag needs a second flag. TestPilot writes it for you and prints what it',
+    'compiled to, so you can paste that into CI and drop TestPilot whenever you like:',
+    '',
+    '```bash',
+    'npx testpilot-qa tags                    # what tags exist, and how many tests each',
+    'npx testpilot-qa run --tag smoke',
+    'npx testpilot-qa run --tag smoke,regression',
+    "npx testpilot-qa run --tag '!regression'  # everything except @regression",
+    'npx testpilot-qa run --suite smoke        # a named set from testpilot.config.ts',
     '```',
     '',
     'Tests run in parallel by default (`fullyParallel: true`). Control concurrency',

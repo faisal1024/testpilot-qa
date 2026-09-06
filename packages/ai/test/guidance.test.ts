@@ -33,3 +33,18 @@ describe('canonical guidance', () => {
     expect(CANONICAL_GUIDANCE).toContain('no AI-generated tests')
   })
 })
+
+describe('tags guidance', () => {
+  it('tells an agent to reuse the existing vocabulary rather than invent one', () => {
+    // Untested content can be deleted with every test still green: `doctor`
+    // compares only GUIDANCE_VERSION, not the prose.
+    expect(CANONICAL_GUIDANCE).toContain('testpilot tags')
+    expect(CANONICAL_GUIDANCE).toContain('do not**')
+    expect(CANONICAL_GUIDANCE).toContain("{ tag: ['@smoke'] }")
+    expect(CANONICAL_GUIDANCE).toContain('test.describe')
+  })
+
+  it('does not claim tags replace path selection, which the scaffold itself uses', () => {
+    expect(CANONICAL_GUIDANCE).not.toContain('not by file path')
+  })
+})

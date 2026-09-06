@@ -204,7 +204,7 @@ glob benchmark run per repo, so the path §1.1's evidence table measures is gate
   live in page objects under `e2e/helpers` that Playwright's `testMatch` never runs. Its 98 A measures
   what Playwright executes, not the suite's locator quality.
 
-### Phase 10 — Run tests by tag (`alpha.2`) — **10a/10b/10c complete**
+### Phase 10 — Run tests by tag (`alpha.2`) — ✅ **Complete**
 
 Goal: **selecting tests is a first-class, discoverable verb — not a regex.** Everything here compiles
 down to Playwright's own flags, so generated projects stay ejectable and `run` stays a pass-through,
@@ -221,11 +221,11 @@ not a runner.
 - **10c — `testpilot tags`. ✅ Complete.** Statically lists the tag vocabulary with counts per tag and untagged
   test count, from the parser we already have (`test('…', { tag: [...] })` and `@tag` in titles). No
   browser, instant. This is the discoverability piece `--grep` can never offer.
-- **10d — Scaffold and guidance follow.** Generated sample tests carry `@smoke` / `@regression`;
+- **10d — Scaffold and guidance follow. ✅ Complete.** Generated sample tests carry `@smoke` / `@regression`;
   generated scripts gain `test:e2e:smoke`; the generated README explains the vocabulary; the AI
   guidance files tell agents to tag new tests from the project's existing vocabulary (agents
   otherwise invent their own).
-- **10e — Optional rule `require-test-tag`** (`off` by default; `info` when enabled): flags untagged
+- **10e — Optional rule `require-test-tag`. ✅ Complete.** (`off` by default; `info` when enabled): flags untagged
   `test()`s so a team adopting tags can gate on coverage of the vocabulary. Static, cheap, and it
   gives `analyze` its first rule about test *organization* rather than locators.
 
@@ -279,6 +279,18 @@ projects being filtered out that would otherwise have shipped as fact.
   hand-written regex; `testpilot tags` on the corpus lists real vocabularies and the untagged count.
   (Measured: only mattermost is tagged — 83 tags via `{ tag: [...] }`. Ghost, immich, cal.com and
   documenso are untagged.)
+
+**What landed (10d–10e).** A fresh `testpilot init` reports 2 tags and 0 untagged, demonstrating both
+spellings Playwright accepts; the generated `test:e2e:smoke` script is plain Playwright, so the
+project stays ejectable. `GUIDANCE_VERSION` 3 → 4 so existing projects see the drift.
+
+`require-test-tag` is the engine's first rule over a **test declaration** rather than a locator call
+site, which needed a second rule kind (`TestRule`). Two decisions worth keeping: it is `off` by
+default, because a suite that never adopted tags would otherwise show one finding per test — a
+number about nothing; and its findings are **counted but not scored**, because the score's
+denominator is call sites (on Ghost, 95 call sites against 321 tests, scoring it would have dropped
+a 98 to ~64). `summary.unscoredFindings` reports that exclusion rather than applying it silently —
+a quiet score adjustment would be the same dishonesty this plan spent Phase 9 removing.
 
 ### Phase 11 — Signal precision (`alpha.3`)
 

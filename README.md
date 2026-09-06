@@ -120,6 +120,18 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 `no-hard-wait` — and prints a human table or stable JSON. Severity is configurable per rule
 (`off` disables a rule).
 
+One further rule, **`require-test-tag`**, is **off by default** and flags tests carrying no tag. It
+is opt-in because a suite that never adopted tags would otherwise light up with one finding per
+test, which says nothing about quality. Enable it once you have a vocabulary to be consistent with:
+
+```ts
+rules: { 'require-test-tag': 'info' }
+```
+
+Its findings are counted but **not scored** — the Locator Quality Score measures locators over a
+denominator of call sites, and a per-test rule has no relation to it. `summary.unscoredFindings`
+reports how many were left out.
+
 ```bash
 # Analyze locator quality in your existing tests (read-only)
 npx testpilot-qa analyze
@@ -456,7 +468,7 @@ Written down because a tool that hides these is worse than one that doesn't have
   combinators across comma-separated selector lists; `no-nth-child` fires on `.nth(1)` but not
   `.first()`. Setting `prefer-user-facing-locator` to `info` leaves all of these at `error` — set
   them down too if they are noisy for you.
-- **Accessibility and Maintainability sub-scores are always 100 A.** No rule feeds them yet.
+- **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
   `analyze` reports the count when they sit in a conventional directory (`pages/`, `page-objects/`,
   `pageobjects/`, `pom/`, `fixtures/`, `helpers/`, `support/`) — if yours live elsewhere, name them in

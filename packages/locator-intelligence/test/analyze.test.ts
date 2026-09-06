@@ -44,13 +44,15 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.8')
+    expect(report.schemaVersion).toBe('1.9')
     expect(report.summary).toEqual({
       helperFiles: 0,
       helpersNotAnalyzed: 0,
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
       findings: 9,
+      unscoredFindings: 0,
+      unscoredRuleIds: [],
       bySeverity: { error: 5, warn: 4, info: 0 },
     })
 
@@ -406,5 +408,327 @@ describe('discovery warnings', () => {
       discovery: { ...DEFAULT_DISCOVERY, roots: [join(dir, 'tests'), join(dir, 'gone')] },
     })
     expect(report.warnings.map((warning) => warning.code)).toContain('test-root-missing')
+  })
+})
+
+describe('require-test-tag (opt-in)', () => {
+  const TAGGED = [
+    "import { test } from '@playwright/test'",
+    "test('one @smoke', async ({ page }) => { await page.getByRole('button').click() })",
+    "test('two', async ({ page }) => { await page.getByRole('link').click() })",
+  ].join('\n')
+
+  it('is off by default, even though it is not listed in `rules`', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('stays off when other rules are configured', async () => {
+    // "not turned off" must not mean "on" for a rule that needs opting into.
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({ cwd: dir, config: config({ rules: { 'no-xpath': 'warn' } }) })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('flags only the untagged test when enabled', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const found = report.findings.filter((f) => f.ruleId === 'require-test-tag')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ line: 3, severity: 'info', category: 'maintainability' })
+  })
+
+  it('counts a describe tag as covering the tests inside it', async () => {
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "test.describe('group @regression', () => {",
+        "  test('one', async ({ page }) => { await page.getByRole('button').click() })",
+        '})',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('does not flag a test whose title it could not read', async () => {
+    // The title may well carry a tag; flagging would accuse the test of our own
+    // blind spot.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'for (const n of NAMES) {',
+        '  test(n, async ({ page }) => { await page.click() })',
+        '}',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('counts its findings but does not let them move the score', async () => {
+    // The score's denominator is call sites; a per-test rule has no relation to
+    // it. On Ghost (95 call sites, 321 tests) scoring this would drop 98 to ~64.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "import { test } from '@playwright/test'",
+        ...Array.from(
+          { length: 20 },
+          (_unused, index) =>
+            `test('case ${index}', async ({ page }) => { await page.getByRole('button').click() })`,
+        ),
+      ].join('\n'),
+    )
+    const off = await analyze({ cwd: dir, config: config() })
+    const on = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(on.summary.findings).toBe(off.summary.findings + 20)
+    expect(on.summary.unscoredFindings).toBe(20)
+    expect(on.score).toEqual(off.score)
+  })
+
+  it('does not flag a test whose tag entry it could not read', async () => {
+    // The extractor already reports these as vocabulary gaps; accusing the test
+    // would be an accusation based on our own blind spot.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "const COMMON = ['@smoke']",
+        'const OPTS = { tag: COMMON }',
+        "test('spread', { tag: [...COMMON] }, async ({ page }) => { await page.click() })",
+        "test('variable details', OPTS, async ({ page }) => { await page.click() })",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+  })
+
+  it('does not flag a test inside a describe whose tags it could not read', async () => {
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "const COMMON = ['@regression']",
+        "test.describe('group', { tag: [...COMMON] }, () => {",
+        "  test('inside', async ({ page }) => { await page.click() })",
+        '})',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+  })
+
+  it('does not flag anything when the Playwright config tags every test', async () => {
+    // `testConfig.tag` applies suite-wide, so no test is untagged. Claiming
+    // otherwise would contradict `discovery.playwrightConfigDeclaresTags` in
+    // the same report.
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+      discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+  })
+
+  it('flags a test whose only tag is fused to a word, since --tag cannot reach it', async () => {
+    // `tags` reports @example.com as unselectable; this rule must agree.
+    writeFixture(
+      'tests/a.spec.ts',
+      "test('signs in as user@example.com', async ({ page }) => { await page.click() })",
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(1)
+  })
+
+  it('uses a title-free snippet, so renaming an untagged test is not a new finding', async () => {
+    // `findingKey` is (ruleId, file, snippet); a title-bearing snippet would
+    // fail a --baseline gate on a rename that changed nothing about tagging.
+    writeFixture('tests/a.spec.ts', "test('before', async ({ page }) => { await page.click() })")
+    const first = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    writeFixture('tests/a.spec.ts', "test('after', async ({ page }) => { await page.click() })")
+    const second = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const key = (report: typeof first) =>
+      report.findings.filter((f) => f.ruleId === 'require-test-tag').map((f) => f.snippet)
+    expect(key(second)).toEqual(key(first))
+  })
+
+  it('names the excluded rules so a consumer can reconcile the count', async () => {
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.summary.unscoredRuleIds).toEqual(['require-test-tag'])
+  })
+
+  it('rolls up coverage in one line and reconciles against `tags`', async () => {
+    // N interleaved info lines are untriageable; the count a team gates on is
+    // the coverage figure. It must also explain why `tags` reports more.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "test('tagged @smoke', async ({ page }) => { await page.click() })",
+        "test('untagged', async ({ page }) => { await page.click() })",
+        'test(NAME, async ({ page }) => { await page.click() })',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain(
+      '1 of 2 readable test declaration(s) carry no tag `--tag` can select (50% tagged)',
+    )
+    expect(rollup?.message).toContain('a further 1 could not be judged')
+  })
+
+  it('does not blame unreadability when the config tags every test', async () => {
+    // A correct abstention explained by a false reason is still a false claim.
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+      discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('the Playwright config may declare a `tag`')
+    expect(rollup?.message).not.toContain('not statically readable')
+  })
+
+  it('never rounds up to 100% while findings remain', async () => {
+    // "100% tagged" beside a non-zero count is the reassuring wrong number a
+    // team would gate on.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        ...Array.from(
+          { length: 399 },
+          (_u, i) => `test('t${i} @smoke', async ({ page }) => { await page.click() })`,
+        ),
+        "test('untagged', async ({ page }) => { await page.click() })",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('(99% tagged)')
+  })
+
+  it('abstains on a test inside a describe whose title it could not read', async () => {
+    // The describe title is a tag source; `test.describe(GROUP, …)` hides it.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'const GROUP = "billing @regression"',
+        "test.describe(GROUP, () => { test('inside', async ({ page }) => { await page.click() }) })",
+        'test.describe(`checkout ${SUFFIX}`, () => {',
+        "  test('inside dynamic', async ({ page }) => { await page.click() })",
+        '})',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+  })
+
+  it('does not judge a file whose describe body is a function reference', async () => {
+    // The tests inside are declared elsewhere and inherit the block's tag at
+    // runtime; we cannot tell which declarations in this file those are.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "function sharedTests() { test('inner', async ({ page }) => { await page.click() }) }",
+        "test.describe('group @shared', sharedTests)",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('body is a function reference')
+    // Must not also claim the titles were unreadable — they are perfectly plain.
+    expect(rollup?.message).not.toContain('not statically readable')
+  })
+
+  it('reports no coverage figure rather than 100% when it judged nothing', async () => {
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'const GROUP = "g"',
+        "test.describe(GROUP, () => { test('one', async ({ page }) => { await page.click() }) })",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('judged none of 1 test declaration(s)')
+    expect(rollup?.message).not.toContain('100% tagged')
+  })
+
+  it('says the config *may* declare a tag, never asserts it from a hedge', async () => {
+    // `playwrightConfigDeclaresTags` is deliberately true when the config could
+    // not be fully read. Restating that hedge as fact contradicts the
+    // playwright-config-partial warning printed beside it.
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+      discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('may declare')
+    expect(rollup?.message).not.toContain('the Playwright config declares')
+  })
+
+  it('emits no rollup when the rule is off', async () => {
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.warnings.some((warning) => warning.code === 'test-tag-coverage')).toBe(false)
+  })
+
+  it('is not an unknown rule', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.warnings.some((w) => w.code === 'unknown-rule')).toBe(false)
   })
 })

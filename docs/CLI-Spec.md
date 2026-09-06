@@ -536,6 +536,8 @@ export default defineConfig({
     'no-deep-css-chain': 'warn',
     'prefer-user-facing-locator': 'warn',
     'no-hard-wait': 'error',
+    // Off by default — opt in once the suite has a tag vocabulary.
+    'require-test-tag': 'info',
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
   // `doctor` warns when a referenced tag exists in no test, so a typo surfaces
@@ -581,11 +583,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.8`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.9`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.8",
+  "schemaVersion": "1.9",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -603,6 +605,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "helperFiles": 0,
     "filesWithParseErrors": 0,
     "findings": 9,
+    "unscoredFindings": 0,
+    "unscoredRuleIds": [],
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
   },
   "score": {
@@ -645,9 +649,19 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
 can represent, so every message that names a test directory renders these. `inHelper` (1.7) is present only on findings from the helper layer — absent, not `false`, otherwise.
-`playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
-`testConfig.tag`, which Playwright applies to every test — `analyze` does not use it, but `tags`
-cannot claim a complete vocabulary while one is declared.
+`unscoredFindings` / `unscoredRuleIds` (1.9) count and name findings included in `summary.findings`
+but excluded from the score. A rule declares this itself (`RuleMeta.scored: false`) — it is not a
+property of the rule's kind, so a later test-level rule that *does* belong in the score is not
+blocked by the abstraction. Today only `require-test-tag` is unscored: it is per **test**, while the
+score's denominator is locator **call sites**, so scoring it would move the grade for a reason it
+does not measure. The exclusion is named in `--json`, in the table (in every mode, including
+`--baseline`), and in the HTML report — never applied silently. `warnings[].code` also gains `test-tag-coverage`, a one-line rollup that
+reconciles the flagged count against `testpilot tags`.
+`playwrightConfigDeclaresTags` (1.8) reports that the project's Playwright config declares a
+`testConfig.tag`, which Playwright applies to every test — **or might, in a part of the config that
+could not be read**. It is set whether or not that config was adopted for discovery (a tag applies
+either way), so it can be `true` alongside `playwrightConfigIgnored`. `tags` cannot claim a complete vocabulary while that is open, and
+`require-test-tag` abstains: until it is ruled out, no test in the suite can be called untagged.
 `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the

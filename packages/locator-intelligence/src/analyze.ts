@@ -15,9 +15,11 @@ import {
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
-import { builtinRuleIds, builtinRules } from './rules/index.js'
-import type { Rule } from './rules/types.js'
+import { allBuiltinRules, builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
+import { abstentionFor, requireTestTag } from './rules/require-test-tag.js'
+import type { Rule, TestRule } from './rules/types.js'
 import { computeScore } from './score.js'
+import { extractTests } from './tags/extract-tests.js'
 
 export interface AnalyzeOptions {
   /** Directory analysis is relative to (file discovery and reported paths). */
@@ -43,9 +45,15 @@ interface EnabledRule {
   severity: FindingSeverity
 }
 
+interface EnabledTestRule {
+  rule: TestRule
+  severity: FindingSeverity
+}
+
 /** Resolves which rules run and at what severity, plus warnings for unknown ids. */
 function resolveRules(config: TestPilotConfig): {
   rules: EnabledRule[]
+  testRules: EnabledTestRule[]
   warnings: AnalysisWarning[]
 } {
   const warnings: AnalysisWarning[] = []
@@ -63,12 +71,21 @@ function resolveRules(config: TestPilotConfig): {
   const rules: EnabledRule[] = []
   for (const rule of builtinRules) {
     const override = config.rules[rule.id]
-    if (override === 'off') {
+    if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
       continue
     }
     rules.push({ rule, severity: override ?? rule.defaultSeverity })
   }
-  return { rules, warnings }
+  const testRules: EnabledTestRule[] = []
+  for (const rule of builtinTestRules) {
+    const override = config.rules[rule.id]
+    // `defaultOff` rules need an explicit opt-in, not merely "not turned off".
+    if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
+      continue
+    }
+    testRules.push({ rule, severity: override ?? rule.defaultSeverity })
+  }
+  return { rules, testRules, warnings }
 }
 
 function toPosix(path: string): string {
@@ -103,7 +120,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
-  const { rules, warnings } = resolveRules(options.config)
+  const { rules, testRules, warnings } = resolveRules(options.config)
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
@@ -161,6 +178,11 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
   let callSites = 0
+  let testDeclarations = 0
+  let unreadableTests = 0
+  let filesWithUnreadDescribeBody = 0
+  let describeBodyTests = 0
+  let configTaggedTests = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
@@ -183,6 +205,68 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 
     const contexts = extractLocators(code, program)
     callSites += contexts.length
+
+    // A second AST pass, so only when a test-level rule is actually enabled.
+    // All of them are `off` by default, so an ordinary run pays nothing.
+    if (testRules.length > 0) {
+      const testContext = {
+        playwrightConfigDeclaresTags: options.discovery?.playwrightConfigDeclaresTags === true,
+      }
+      const extracted = extractTests(program)
+      // A `test.describe('g @tag', sharedTests)` declares its tests elsewhere,
+      // so they are recorded at their own location with no way to know they are
+      // nested — and they do inherit the block's tag at runtime. We cannot tell
+      // which of this file's declarations those are, so none of them can be
+      // judged. Coarse, but the alternative is a confident per-test claim over
+      // a body we never read. `tags` already discloses this; `analyze` did not.
+      const bodyNotInlined = extracted.describesNotInlined > 0
+      if (bodyNotInlined) {
+        filesWithUnreadDescribeBody += 1
+      }
+      for (const declaration of extracted.tests) {
+        testDeclarations += 1
+        // The two causes are counted apart so the rollup names the one that
+        // actually applies: a test in a describe-by-reference file may have a
+        // perfectly readable title, and saying otherwise would be false.
+        const abstention = bodyNotInlined ? 'unreadable' : abstentionFor(declaration, testContext)
+        if (bodyNotInlined) {
+          describeBodyTests += 1
+        } else if (abstention === 'unreadable') {
+          unreadableTests += 1
+        } else if (abstention === 'config-tags') {
+          configTaggedTests += 1
+        }
+        if (abstention !== null) {
+          // Counted above as unjudged; evaluating anyway would emit exactly the
+          // confident claim the abstention exists to prevent.
+          continue
+        }
+        for (const { rule, severity } of testRules) {
+          const violation = rule.evaluate(declaration, testContext)
+          if (!violation) {
+            continue
+          }
+          findings.push({
+            ruleId: rule.id,
+            category: rule.category,
+            severity,
+            message: violation.message,
+            file: relativePath,
+            ...(inHelper ? { inHelper: true } : {}),
+            line: declaration.line,
+            column: declaration.column,
+            // NOT the title: `findingKey` is (ruleId, file, snippet), so a
+            // title-bearing snippet would make renaming an untagged test read
+            // as a new finding and fail a `--baseline` gate for a reason
+            // unrelated to tagging. Locator rules are immune because their
+            // snippet is the locator; this one has to say so explicitly.
+            snippet: 'test(…)',
+            suggestion: violation.suggestion,
+            docsUrl: rule.docsUrl,
+          })
+        }
+      }
+    }
 
     for (const context of contexts) {
       for (const { rule, severity } of rules) {
@@ -207,6 +291,22 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     }
   }
 
+  // One line a reader can act on, instead of N interleaved `info` lines they
+  // cannot triage — and it reconciles against `testpilot tags`, which counts
+  // every untagged test including the ones this rule abstains on.
+  if (testRules.length > 0 && testDeclarations > 0) {
+    warnings.push(
+      ...tagCoverageWarning(
+        findings,
+        testDeclarations,
+        unreadableTests,
+        configTaggedTests,
+        filesWithUnreadDescribeBody,
+        describeBodyTests,
+      ),
+    )
+  }
+
   findings.sort(compareFindings)
   parseErrors.sort((a, b) => a.file.localeCompare(b.file))
 
@@ -215,8 +315,16 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     bySeverity[finding.severity] += 1
   }
 
-  // Parse errors are reported but do not penalize the score in this milestone.
-  const score = computeScore(findings, callSites, options.config.scoring.weights)
+  // Some findings are counted but NOT scored — see `RuleMeta.scored`. Keyed on
+  // the rule's own declaration rather than on its kind, so a later test-level
+  // rule that *does* belong in the score is not blocked by the abstraction.
+  // Excluding them silently would be its own dishonesty, so the exclusion is
+  // named in the report and in every human-facing output.
+  const unscoredRuleIds = new Set(
+    allBuiltinRules.filter((rule) => rule.scored === false).map((rule) => rule.id),
+  )
+  const scoredFindings = findings.filter((finding) => !unscoredRuleIds.has(finding.ruleId))
+  const score = computeScore(scoredFindings, callSites, options.config.scoring.weights)
 
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
@@ -229,6 +337,10 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       helpersNotAnalyzed,
       filesWithParseErrors: parseErrors.length,
       findings: findings.length,
+      unscoredFindings: findings.length - scoredFindings.length,
+      unscoredRuleIds: [...unscoredRuleIds].filter((id) =>
+        findings.some((finding) => finding.ruleId === id),
+      ),
       bySeverity,
     },
     score,
@@ -268,4 +380,75 @@ function describeScanned(options: AnalyzeOptions, base: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * One-line `require-test-tag` rollup.
+ *
+ * The abstention *reason* is carried through, because "we could not read it"
+ * and "the config tags everything" are different facts and reporting the first
+ * for the second would be a false explanation of a correct answer.
+ */
+function tagCoverageWarning(
+  findings: Finding[],
+  declarations: number,
+  unreadable: number,
+  configTagged: number,
+  filesWithUnreadDescribeBody: number,
+  describeBodyTests: number,
+): AnalysisWarning[] {
+  if (configTagged > 0) {
+    return [
+      {
+        code: 'test-tag-coverage',
+        // "may declare", not "declares": the flag is deliberately true when the
+        // config could not be fully read (a spread, a factory call), because a
+        // vocabulary has to widen on unknown. Restating that hedge as a fact
+        // would contradict the `playwright-config-partial` warning above it.
+        message: `${requireTestTag.id} judged nothing: the Playwright config may declare a \`tag\`, which would apply to every test in every file. Until that is ruled out, no test here can be called untagged.`,
+      },
+    ]
+  }
+  const flagged = findings.filter((finding) => finding.ruleId === requireTestTag.id).length
+  const unjudged = unreadable + describeBodyTests
+  if (flagged === 0 && unjudged === 0) {
+    return []
+  }
+  const judged = declarations - unreadable - describeBodyTests
+  // Only the reasons that actually applied, so the message cannot lead with one
+  // that is false for the tests it is describing.
+  const reasons: string[] = []
+  if (unreadable > 0) {
+    reasons.push(
+      "a title or `tag` entry — theirs or an enclosing describe's — is not statically readable",
+    )
+  }
+  if (describeBodyTests > 0) {
+    reasons.push(
+      `they are in one of ${filesWithUnreadDescribeBody} file(s) with a \`test.describe\` whose body is a function reference, so the tests inside are declared elsewhere and inherit the block's tag`,
+    )
+  }
+  // No percentage over a zero denominator: "(100% tagged)" beside "0 of 0" is
+  // the same reassuring wrong number that made this switch from round to floor.
+  if (judged === 0) {
+    return [
+      {
+        code: 'test-tag-coverage',
+        message: `${requireTestTag.id} judged none of ${declarations} test declaration(s) — ${reasons.join('; or ')}. No coverage figure is available.`,
+      },
+    ]
+  }
+  // Floor, not round: "100% tagged" printed beside a non-zero flagged count is
+  // exactly the kind of reassuring wrong number a team would gate on.
+  const coverage = Math.floor(((judged - flagged) / judged) * 100)
+  return [
+    {
+      code: 'test-tag-coverage',
+      message: `${requireTestTag.id}: ${flagged} of ${judged} readable test declaration(s) carry no tag \`--tag\` can select (${coverage}% tagged)${
+        unjudged > 0
+          ? `; a further ${unjudged} could not be judged — ${reasons.join('; or ')} — so they are neither flagged here nor counted as tagged.`
+          : '.'
+      }`,
+    },
+  ]
 }

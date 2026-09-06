@@ -5,7 +5,8 @@ import { noHardWait } from './rules/no-hard-wait.js'
 import { noNthChild } from './rules/no-nth-child.js'
 import { noXpath } from './rules/no-xpath.js'
 import { preferUserFacingLocator } from './rules/prefer-user-facing-locator.js'
-import type { Rule } from './rules/types.js'
+import { requireTestTag } from './rules/require-test-tag.js'
+import type { AnyRule } from './rules/types.js'
 
 /** The educational fields — id/category/severity/docsUrl come from the rule itself. */
 type Education = Pick<
@@ -13,11 +14,12 @@ type Education = Pick<
   'title' | 'summary' | 'whyItMatters' | 'badExample' | 'betterExample' | 'guidance'
 >
 
-function fromRule(rule: Rule, education: Education): RuleExplanation {
+function fromRule(rule: AnyRule, education: Education): RuleExplanation {
   return {
     id: rule.id,
     category: rule.category,
     defaultSeverity: rule.defaultSeverity,
+    ...(rule.defaultOff === true ? { defaultOff: true } : {}),
     docsUrl: rule.docsUrl,
     ...education,
   }
@@ -104,6 +106,23 @@ await expect(page.getByRole('alert')).toHaveText('Saved')`,
       'Rely on Playwright auto-waiting for actionability.',
       'Use web-first assertions like expect(locator).toBeVisible() / toHaveText().',
       'Wait for a specific condition (e.g. waitForResponse) instead of a fixed delay.',
+    ],
+  }),
+  fromRule(requireTestTag, {
+    title: 'Tag every test',
+    summary:
+      'A test with no tag cannot be selected by any tag-based run, so it silently misses every suite.',
+    whyItMatters:
+      'Once a team runs subsets by tag — a smoke suite on every PR, a nightly regression run — an untagged test belongs to none of them. It still runs in the full suite, so nothing fails; it just quietly stops being covered by the runs people actually watch. This rule is off by default and only worth enabling once you have a vocabulary to be consistent with.',
+    badExample: `test('checkout works', async ({ page }) => { … })`,
+    betterExample: `test('checkout works @smoke', async ({ page }) => { … })
+// or
+test('checkout works', { tag: ['@smoke'] }, async ({ page }) => { … })`,
+    guidance: [
+      'Run `testpilot tags` first — tag from the vocabulary the suite already uses, not a new one.',
+      'A tag on a `test.describe` counts for every test inside it, which is usually the cheapest way to cover a group.',
+      "Enable with `rules: { 'require-test-tag': 'info' }`; it is `off` by default.",
+      'Findings from this rule are counted but not scored — the Locator Quality Score measures locators, over a denominator of call sites.',
     ],
   }),
 ]
