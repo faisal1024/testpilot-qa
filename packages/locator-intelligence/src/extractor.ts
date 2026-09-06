@@ -1,5 +1,6 @@
 import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './locator-context.js'
 import { type AstNode, walk } from './parser.js'
+import { tokenizeSelector } from './selector/tokenize.js'
 
 const LOCATOR_METHODS = new Set<LocatorApi>([
   'locator',
@@ -117,12 +118,19 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
     const selectorEngine = SELECTOR_ARG_APIS.has(name as LocatorApi)
       ? inferEngine(value)
       : undefined
+    // Tokenized once here rather than per rule: six rules asking the same
+    // question of the same string is six chances for them to disagree.
+    const parsed =
+      SELECTOR_ARG_APIS.has(name as LocatorApi) && value !== undefined
+        ? tokenizeSelector(value)
+        : undefined
 
     const call = node as unknown as WithLoc
     contexts.push({
       apiCall,
       selector: value,
       selectorEngine,
+      parsed,
       isDynamic,
       raw: code.slice(call.range[0], call.range[1]),
       line: property.loc.start.line,

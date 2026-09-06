@@ -32,6 +32,18 @@ export {
 } from './resolve-files.js'
 export { type CollectTagsOptions, collectTags } from './tags/collect-tags.js'
 export { type ExtractedTests, type TestDeclaration, extractTests } from './tags/extract-tests.js'
+export {
+  type AttributeSelector,
+  type Combinator,
+  type ComplexSelector,
+  type CompoundSelector,
+  type ParsedSelector,
+  type PseudoSelector,
+  type SelectorPart,
+  tokenizeSelector,
+  type TokenizeOptions,
+} from './selector/index.js'
+export { classTokens, cssSelectors, usesEngine } from './selector/query.js'
 export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'
 export { computeScore, gradeFor, type ScoringWeights } from './score.js'
 export {

@@ -6,6 +6,7 @@ import { noHardWait } from '../src/rules/no-hard-wait.js'
 import { noNthChild } from '../src/rules/no-nth-child.js'
 import { noXpath } from '../src/rules/no-xpath.js'
 import { preferUserFacingLocator } from '../src/rules/prefer-user-facing-locator.js'
+import { tokenizeSelector } from '../src/selector/tokenize.js'
 
 function ctx(overrides: Partial<LocatorContext>): LocatorContext {
   return {
@@ -19,7 +20,9 @@ function ctx(overrides: Partial<LocatorContext>): LocatorContext {
 }
 
 function css(selector: string): LocatorContext {
-  return ctx({ selector, selectorEngine: 'css' })
+  // Tokenized here exactly as the extractor does, so a rule test cannot pass
+  // against a context shape the engine never produces.
+  return ctx({ selector, selectorEngine: 'css', parsed: tokenizeSelector(selector) })
 }
 
 describe('no-xpath', () => {
@@ -107,5 +110,62 @@ describe('no-hard-wait', () => {
   it('is a flakiness rule with error severity', () => {
     expect(noHardWait.category).toBe('flakiness')
     expect(noHardWait.defaultSeverity).toBe('error')
+  })
+})
+
+describe('no-css-class-selector — what the regex got wrong', () => {
+  it('does not fire on a dot inside a quoted attribute value', () => {
+    // `/\.[a-zA-Z_-]/` matched `.pdf` here and called it a class.
+    expect(noCssClassSelector.evaluate(css('[href=".pdf"]'))).toBeNull()
+    expect(noCssClassSelector.evaluate(css('a[download="report.v2.pdf"]'))).toBeNull()
+  })
+
+  it('does not fire on an id or a bare tag', () => {
+    expect(noCssClassSelector.evaluate(css('#main'))).toBeNull()
+    expect(noCssClassSelector.evaluate(css('button[type="submit"]'))).toBeNull()
+  })
+
+  it('treats an escaped dot as part of one class name', () => {
+    const finding = noCssClassSelector.evaluate(css('.mt-1\\.5'))
+    expect(finding?.message).toContain('.mt-1.5')
+    expect(finding?.message).not.toContain('.5,')
+  })
+
+  it('names the classes it found', () => {
+    expect(noCssClassSelector.evaluate(css('.a.b'))?.message).toContain('(.a, .b)')
+  })
+
+  it('finds a class in any selector of a list', () => {
+    expect(noCssClassSelector.evaluate(css('#a, .b'))).not.toBeNull()
+  })
+
+  it('finds a class in any part of a >> chain', () => {
+    expect(noCssClassSelector.evaluate(css('div >> .card'))).not.toBeNull()
+  })
+
+  it('does not fire on a non-css engine', () => {
+    expect(noCssClassSelector.evaluate(css('text=Save file.txt'))).toBeNull()
+    expect(noCssClassSelector.evaluate(css('//div[@class="a"]'))).toBeNull()
+  })
+
+  it('abstains rather than guessing when the selector will not parse', () => {
+    expect(noCssClassSelector.evaluate(css('[unterminated'))).toBeNull()
+    expect(noCssClassSelector.evaluate(css('.a >> [oops'))).toBeNull()
+  })
+})
+
+describe('no-css-class-selector — nested selectors', () => {
+  it('finds a class inside :has()', () => {
+    // Real cal.com selector: `button:has(i.icon-dots-vertical)`.
+    expect(noCssClassSelector.evaluate(css('button:has(i.icon-dots-vertical)'))).not.toBeNull()
+  })
+
+  it('finds a class inside :not() and :is()', () => {
+    expect(noCssClassSelector.evaluate(css('div:not(.hidden)'))).not.toBeNull()
+    expect(noCssClassSelector.evaluate(css('div:is(.a, .b)'))).not.toBeNull()
+  })
+
+  it('does not invent a class from :has-text()', () => {
+    expect(noCssClassSelector.evaluate(css('button:has-text("save.all")'))).toBeNull()
   })
 })

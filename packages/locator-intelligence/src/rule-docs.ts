@@ -38,6 +38,7 @@ export function renderRuleDoc(explanation: RuleExplanation): string {
     '',
     guidance,
     '',
+    ...notFlaggedSection(explanation),
     '## In the CLI',
     '',
     `- \`testpilot explain ${explanation.id}\` prints this page in the terminal.`,
@@ -84,4 +85,17 @@ function severityLabel(explanation: RuleExplanation): string {
   return explanation.defaultOff === true
     ? `off (\`${explanation.defaultSeverity}\` when enabled)`
     : explanation.defaultSeverity
+}
+
+/**
+ * "Does not fire on" — the cases the rule deliberately allows.
+ *
+ * Worth a section of its own: a linter is judged as much by what it stays quiet
+ * about, and every one of these was a false positive at some point.
+ */
+function notFlaggedSection(explanation: RuleExplanation): string[] {
+  if (!explanation.notFlagged || explanation.notFlagged.length === 0) {
+    return []
+  }
+  return ['## Does not fire on', '', '```ts', explanation.notFlagged.join('\n'), '```', '']
 }

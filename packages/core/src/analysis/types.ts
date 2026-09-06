@@ -174,5 +174,12 @@ export interface RuleExplanation {
   badExample: string
   betterExample: string
   guidance: string[]
+  /**
+   * Selectors this rule deliberately does **not** flag, with the reason.
+   *
+   * Shared by the generated docs and the rule's tests, so "does not fire on"
+   * cannot drift from what the code does.
+   */
+  notFlagged?: string[]
   docsUrl: string
 }

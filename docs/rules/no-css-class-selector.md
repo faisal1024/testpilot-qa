@@ -28,6 +28,16 @@ await page.getByRole('button', { name: 'Save' }).click()
 
 - Prefer role/label/text locators that reflect what the user sees.
 - If there is no semantic handle, add a stable data-testid and use getByTestId().
+- A class nested in `:has()`, `:not()` or `:is()` counts — the test depends on it either way.
+
+## Does not fire on
+
+```ts
+page.locator('[href=".pdf"]')      // a dot inside a quoted attribute value is not a class
+page.locator('#main')              // an id is a different trade-off, not this rule's business
+page.locator('text=Save file.txt') // not a CSS selector at all
+page.locator('button:has-text("a.b")') // :has-text() takes text, not a selector
+```
 
 ## In the CLI
 
