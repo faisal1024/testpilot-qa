@@ -11,6 +11,7 @@
     "@testpilot/templates": "0.0.0"
   },
   "changesets": [
+    "alpha-1-no-silent-green",
     "milestone-2-5-init-run",
     "milestone-2-cli-basics",
     "milestone-3-5-parallel-foundation",
@@ -27,6 +28,15 @@
     "milestone-6b-sarif-ci",
     "milestone-6c-add-ai",
     "milestone-7a-html-report",
-    "milestone-8a-fix-preview"
+    "milestone-8a-fix-preview",
+    "phase-10-run-by-tag",
+    "phase-10de-tagged-scaffold",
+    "phase-11a-selector-tokenizer",
+    "phase-11b-11g-precision",
+    "phase-11def-precision",
+    "phase-9b-playwright-discovery",
+    "phase-9c-helper-discovery",
+    "phase-9e-corpus-benchmark",
+    "phase-9f-honesty-stopgaps"
   ]
 }

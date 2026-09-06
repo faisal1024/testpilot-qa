@@ -1,5 +1,20 @@
 # @testpilot/templates
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [161ec18]
+- Updated dependencies [719536c]
+- Updated dependencies [f059688]
+- Updated dependencies [e862495]
+- Updated dependencies [25fe129]
+- Updated dependencies [cc10177]
+- Updated dependencies [acc76ad]
+- Updated dependencies [2fbee55]
+- Updated dependencies [9c3233a]
+  - @testpilot/core@0.1.0-alpha.1
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes

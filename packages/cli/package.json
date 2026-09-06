@@ -1,6 +1,6 @@
 {
   "name": "testpilot-qa",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Local-first Playwright quality toolkit: static locator analysis, quality scoring, brownfield baselines, SARIF/HTML reports, safe mechanical fixes, diagnostics, and AI-agent guidance.",
   "keywords": [
     "playwright",
