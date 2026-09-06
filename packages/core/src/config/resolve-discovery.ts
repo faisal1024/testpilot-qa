@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { findPlaywrightConfig, isDirectory } from '../project/discovery.js'
 import { type ConfigDiscovery, DEFAULT_DISCOVERY } from './discovery.js'
@@ -9,6 +9,9 @@ import {
   readPlaywrightTestSettings,
 } from './playwright-config.js'
 import type { TestPilotConfig } from './schema.js'
+
+/** The schema default; a user-set value is an explicit choice worth reporting on. */
+const DEFAULT_PLAYWRIGHT_CONFIG = 'playwright.config.ts'
 
 /** Directories never worth scanning for a nested Playwright config. */
 const SKIP_DIRS = new Set([
@@ -44,7 +47,11 @@ export interface DiscoveryScope {
   matchGlobs: string[]
   /** Playwright RegExp `testMatch`, also matched against the absolute path. */
   matchRegex: RegexPattern[]
+  /** TestPilot's own `exclude`, applied as a root-relative glob ignore. */
   excludeGlobs: string[]
+  /** Playwright `testIgnore` globs — absolute-path matchers, like `matchGlobs`. */
+  ignoreGlobs: string[]
+  /** Playwright RegExp `testIgnore`. */
   ignoreRegex: RegexPattern[]
 }
 
@@ -74,6 +81,12 @@ export function findPlaywrightConfigNearby(
   root: string,
   hint?: string,
 ): { path: string } | { ambiguous: string[] } | null {
+  // An explicit hint is a user choice: if it does not resolve, silently reading a
+  // *different* config would score the wrong tree with no way to notice.
+  if (hint && hint !== DEFAULT_PLAYWRIGHT_CONFIG) {
+    const hinted = resolve(root, hint)
+    return existsSync(hinted) ? { path: hinted } : null
+  }
   const direct = findPlaywrightConfig(root, hint)
   if (direct) return { path: direct }
 
@@ -103,10 +116,8 @@ export function findPlaywrightConfigNearby(
  */
 function normalizeAdoptedGlob(pattern: string): string {
   const cleaned = pattern.replace(/^\.\//, '')
-  if (cleaned.startsWith('**') || cleaned.startsWith('..') || cleaned.startsWith('/')) {
-    return cleaned
-  }
-  return `**/${cleaned}`
+  // Playwright's rule verbatim: anything not already anchored with `**/` gets it.
+  return cleaned.startsWith('**/') ? cleaned : `**/${cleaned}`
 }
 
 function splitPatterns(patterns: PathPattern[]): { globs: string[]; regexes: RegexPattern[] } {
@@ -119,6 +130,31 @@ function splitPatterns(patterns: PathPattern[]): { globs: string[]; regexes: Reg
   return { globs, regexes }
 }
 
+/** Cheap evidence that a directory is a test suite: any file with a test-ish suffix. */
+function holdsTestFiles(dir: string): boolean {
+  const TEST_FILE = /\.(spec|test|e2e|e2e-spec|setup)\.[cm]?[jt]sx?$/
+  const walk = (current: string, depth: number): boolean => {
+    if (depth > 3) return false
+    let entries: string[]
+    try {
+      entries = readdirSync(current)
+    } catch {
+      return false
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.') || SKIP_DIRS.has(entry)) continue
+      const child = join(current, entry)
+      if (isDirectory(child)) {
+        if (walk(child, depth + 1)) return true
+      } else if (TEST_FILE.test(entry)) {
+        return true
+      }
+    }
+    return false
+  }
+  return walk(dir, 0)
+}
+
 /** The scope implied by the TestPilot config alone. */
 function ownScope(config: TestPilotConfig, rootDir: string): DiscoveryScope {
   return {
@@ -127,6 +163,7 @@ function ownScope(config: TestPilotConfig, rootDir: string): DiscoveryScope {
     matchGlobs: [],
     matchRegex: [],
     excludeGlobs: config.exclude,
+    ignoreGlobs: [],
     ignoreRegex: [],
   }
 }
@@ -168,7 +205,15 @@ export function resolveDiscovery(
   }
 
   const located = findPlaywrightConfigNearby(options.rootDir, config.playwrightConfig)
-  if (!located) return withoutFallback()
+  if (!located) {
+    if (config.playwrightConfig !== DEFAULT_PLAYWRIGHT_CONFIG) {
+      discovery.playwrightConfigIgnored = {
+        path: resolve(options.rootDir, config.playwrightConfig),
+        reason: 'playwrightConfig points at a file that does not exist',
+      }
+    }
+    return withoutFallback()
+  }
   if ('ambiguous' in located) {
     discovery.playwrightConfigIgnored = {
       path: located.ambiguous.join(', '),
@@ -180,11 +225,13 @@ export function resolveDiscovery(
   const configPath = located.path
   const read = readPlaywrightTestSettings(configPath)
   if (read.status === 'no-settings') {
-    // Playwright's `testDir` defaults to the config file's own directory. For a config
-    // kept in a sub-directory that IS the suite location, and ignoring it silently sent
-    // us back to `tests/` — scoring whatever happened to be there.
+    // Playwright's `testDir` defaults to the config file's own directory, so a config
+    // kept in a sub-directory usually IS the suite location — ignoring that sent us
+    // back to `tests/`, scoring whatever happened to be there. But an `examples/` or
+    // `docs/` config would then hijack discovery, so adopt only a directory that
+    // demonstrably holds tests, and never stay silent either way.
     const configDir = dirname(configPath)
-    if (configDir !== resolve(options.rootDir)) {
+    if (configDir !== resolve(options.rootDir) && holdsTestFiles(configDir)) {
       discovery.testDir = 'playwright-config'
       discovery.roots = [configDir]
       discovery.playwrightConfigPath = configPath
@@ -193,6 +240,13 @@ export function resolveDiscovery(
         discovery,
         scopes: [{ ...ownScope(config, options.rootDir), root: configDir }],
       }
+    }
+    discovery.playwrightConfigIgnored = {
+      path: configPath,
+      reason:
+        configDir === resolve(options.rootDir)
+          ? 'it declares no testDir, so Playwright would scan the whole project root'
+          : 'it declares no testDir and its directory holds no test files',
     }
     return withoutFallback()
   }
@@ -222,7 +276,8 @@ export function resolveDiscovery(
       includeGlobs: takeMatch ? [] : config.include,
       matchGlobs: takeMatch ? match.globs : [],
       matchRegex: takeMatch ? match.regexes : [],
-      excludeGlobs: [...config.exclude, ...ignore.globs],
+      excludeGlobs: config.exclude,
+      ignoreGlobs: ignore.globs,
       ignoreRegex: ignore.regexes,
     }
     // Identical scopes would each trigger their own glob pass over the same tree.

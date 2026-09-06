@@ -105,9 +105,9 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
 
   // `ALWAYS_IGNORED` is unconditional: `exclude` replaces its default when the user
   // sets it, and nothing — least of all `fix --write` — may touch dependency code.
-  const run = async (base: string, globs: string[], ignore: string[]) => {
+  const run = async (base: string, globs: string[], ignore: string[], dot = false) => {
     if (globs.length === 0) return []
-    return glob(globs, { cwd: base, absolute: true, ignore: [...ALWAYS_IGNORED, ...ignore] })
+    return glob(globs, { cwd: base, absolute: true, dot, ignore: [...ALWAYS_IGNORED, ...ignore] })
   }
 
   if (usingPatterns) {
@@ -126,6 +126,7 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
           matchGlobs: [],
           matchRegex: [],
           excludeGlobs: config.exclude,
+          ignoreGlobs: [],
           ignoreRegex: [],
         },
       ]
@@ -136,10 +137,11 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
     const found = [...(await run(scope.root, scope.includeGlobs, scope.excludeGlobs))]
     if (matchRegex.length > 0 || scope.matchGlobs.length > 0) {
       // Playwright matches `testMatch` against the absolute path, so these are applied
-      // to the enumerated candidates rather than rooted at `scope.root`.
+      // to the enumerated candidates rather than rooted at `scope.root`. The candidate
+      // scan must see dot-directories too, or the matcher's `dot` support is a lie.
       const matchGlob =
         scope.matchGlobs.length > 0 ? picomatch(scope.matchGlobs, { dot: true }) : null
-      const candidates = await run(scope.root, ANY_SOURCE_FILE, scope.excludeGlobs)
+      const candidates = await run(scope.root, ANY_SOURCE_FILE, scope.excludeGlobs, true)
       found.push(
         ...candidates.filter(
           (file) =>
@@ -148,11 +150,15 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
         ),
       )
     }
-    // A scope's ignores apply only to that scope's files, as Playwright scopes them.
+    // A scope's ignores apply only to that scope's files, as Playwright scopes them —
+    // and `testIgnore` globs match the absolute path, exactly like `testMatch`.
+    const ignoreGlob =
+      scope.ignoreGlobs.length > 0 ? picomatch(scope.ignoreGlobs, { dot: true }) : null
     matches.push(
-      ...(ignoreRegex.length === 0
-        ? found
-        : found.filter((file) => !ignoreRegex.some((re) => re.test(file)))),
+      ...found.filter(
+        (file) =>
+          !ignoreRegex.some((re) => re.test(file)) && !(ignoreGlob?.(toPosix(file)) ?? false),
+      ),
     )
   }
 

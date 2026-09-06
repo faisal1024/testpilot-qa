@@ -22,6 +22,17 @@ export interface SarifLog {
 interface SarifRun {
   tool: { driver: SarifDriver }
   results: SarifResult[]
+  /** Non-result diagnostics (e.g. an incompletely-read Playwright config). */
+  invocations?: SarifInvocation[]
+}
+
+interface SarifInvocation {
+  executionSuccessful: true
+  toolExecutionNotifications: {
+    level: 'warning'
+    message: { text: string }
+    descriptor: { id: string }
+  }[]
 }
 
 interface SarifDriver {
@@ -107,6 +118,14 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   const rules: SarifReportingDescriptor[] = []
   const results: SarifResult[] = []
 
+  const notifications = (report.warnings ?? [])
+    .filter((warning) => warning.code.startsWith('playwright-config'))
+    .map((warning) => ({
+      level: 'warning' as const,
+      message: { text: warning.message },
+      descriptor: { id: warning.code },
+    }))
+
   for (const finding of report.findings) {
     let index = ruleIndex.get(finding.ruleId)
     if (index === undefined) {
@@ -138,7 +157,21 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   return {
     $schema: SARIF_SCHEMA,
     version: '2.1.0',
-    runs: [{ tool: { driver: driver(rules) }, results }],
+    runs: [
+      {
+        tool: { driver: driver(rules) },
+        results,
+        // Warnings that are not findings — a partially-read Playwright config means the
+        // analyzed file set may be incomplete, which the gate's consumer must see.
+        ...(notifications.length > 0
+          ? {
+              invocations: [
+                { executionSuccessful: true as const, toolExecutionNotifications: notifications },
+              ],
+            }
+          : {}),
+      },
+    ],
   }
 }
 

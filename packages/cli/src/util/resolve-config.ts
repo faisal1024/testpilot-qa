@@ -102,7 +102,7 @@ export function effectiveSelectors(resolved: ResolvedDiscovery): {
 export function describeDiscovery(resolved: ResolvedDiscovery, rootDir: string): string {
   const { discovery } = resolved
   const { globs, regexes } = effectiveSelectors(resolved)
-  const selectors = [...globs, ...regexes.map((r) => `/${r.replace(/\/([a-z]*)$/, '/$1')}`)]
+  const selectors = [...globs, ...regexes.map((pattern) => `/${pattern}`)]
   const parts = [
     `testDir "${describeRoots(discovery.roots, rootDir)}" (${formatDiscoverySource(discovery, 'testDir')})`,
     `include ${JSON.stringify(selectors)} (${formatDiscoverySource(discovery, 'include')})`,

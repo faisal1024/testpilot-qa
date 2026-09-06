@@ -108,19 +108,38 @@ function hasSpread(object: Node): boolean {
 }
 
 /** Unwraps `defineConfig({...})`, `export default config`, and `satisfies`/`as` casts. */
-function resolveConfigObject(root: Node, node: Node | null, depth = 0): Node | null {
+function resolveConfigObject(
+  root: Node,
+  node: Node | null,
+  unresolved: string[],
+  depth = 0,
+): Node | null {
   if (!node || depth > 4) return null
   switch (node.type) {
     case 'ObjectExpression':
       return node
-    case 'CallExpression':
-      return resolveConfigObject(root, asNode((node.arguments as unknown[])?.[0]), depth + 1)
+    case 'CallExpression': {
+      // `defineConfig` is variadic and **later arguments win**, so read from the last
+      // backwards — and disclose, since the layers we skipped may set keys too.
+      const args = (node.arguments as unknown[]) ?? []
+      if (args.length > 1) unresolved.push('additional defineConfig() arguments')
+      for (let i = args.length - 1; i >= 0; i -= 1) {
+        const resolved = resolveConfigObject(root, asNode(args[i]), unresolved, depth + 1)
+        if (resolved) return resolved
+      }
+      return null
+    }
     case 'TSAsExpression':
     case 'TSSatisfiesExpression':
     case 'TSNonNullExpression':
-      return resolveConfigObject(root, asNode(node.expression), depth + 1)
+      return resolveConfigObject(root, asNode(node.expression), unresolved, depth + 1)
     case 'Identifier':
-      return resolveConfigObject(root, findVariableInit(root, node.name as string), depth + 1)
+      return resolveConfigObject(
+        root,
+        findVariableInit(root, node.name as string),
+        unresolved,
+        depth + 1,
+      )
     default:
       return null
   }
@@ -128,6 +147,22 @@ function resolveConfigObject(root: Node, node: Node | null, depth = 0): Node | n
 
 /** Finds `const <name> = <init>` at any depth, so `export default config` resolves. */
 function findVariableInit(root: Node, name: string): Node | null {
+  // Prefer a module-level declaration: a function-local `const config` must not
+  // shadow the one actually exported.
+  for (const statement of (root.body as unknown[]) ?? []) {
+    const node = asNode(statement)
+    const declaration =
+      node?.type === 'VariableDeclaration'
+        ? node
+        : node?.type === 'ExportNamedDeclaration'
+          ? asNode(node.declaration)
+          : null
+    for (const raw of (declaration?.declarations as unknown[]) ?? []) {
+      const declarator = asNode(raw)
+      const id = asNode(declarator?.id)
+      if (id?.type === 'Identifier' && id.name === name) return asNode(declarator?.init)
+    }
+  }
   let found: Node | null = null
   walk(root, (node) => {
     if (found || node.type !== 'VariableDeclarator') return
@@ -156,12 +191,12 @@ function walk(node: Node, visit: (node: Node) => void): void {
 }
 
 /** `export default …` or CommonJS `module.exports = …` (Playwright allows `.cjs`/`.js`). */
-function exportedConfigObject(root: Node): Node | null {
+function exportedConfigObject(root: Node, unresolved: string[]): Node | null {
   let result: Node | null = null
   walk(root, (node) => {
     if (result) return
     if (node.type === 'ExportDefaultDeclaration') {
-      result = resolveConfigObject(root, asNode(node.declaration))
+      result = resolveConfigObject(root, asNode(node.declaration), unresolved)
       return
     }
     if (node.type !== 'AssignmentExpression') return
@@ -175,7 +210,7 @@ function exportedConfigObject(root: Node): Node | null {
       property?.type === 'Identifier' &&
       property.name === 'exports'
     if (isModuleExports) {
-      result = resolveConfigObject(root, asNode(node.right))
+      result = resolveConfigObject(root, asNode(node.right), unresolved)
     }
   })
   return result
@@ -203,11 +238,26 @@ interface RawSelectors {
  * object) is reported in `unresolved` rather than guessed at, so callers can
  * tell the user why their suite wasn't found.
  */
-/** "testDir is not a literal value" / "testDir and projects are not literal values". */
+/** Markers that read as prose already and must not gain "is not a literal value". */
+const PROSE_MARKERS = new Set([
+  'a spread from another object',
+  'additional defineConfig() arguments',
+])
+
+/** "testDir is not a literal value" / "testDir and a spread from another object". */
 export function describeUnresolved(keys: string[]): string {
-  return keys.length === 1
-    ? `${keys[0]} is not a literal value`
-    : `${keys.join(' and ')} are not literal values`
+  const values = keys.filter((key) => !PROSE_MARKERS.has(key))
+  const prose = keys.filter((key) => PROSE_MARKERS.has(key))
+  const parts: string[] = []
+  if (values.length > 0) {
+    parts.push(
+      values.length === 1
+        ? `${values[0]} is not a literal value`
+        : `${values.join(' and ')} are not literal values`,
+    )
+  }
+  parts.push(...prose.map((marker) => `it uses ${marker}`))
+  return parts.join('; ')
 }
 
 export function readPlaywrightTestSettings(configPath: string): PlaywrightConfigRead {
@@ -230,13 +280,19 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     return { status: 'unreadable', reason: 'file could not be parsed' }
   }
 
-  const config = exportedConfigObject(root)
+  const unresolved: string[] = []
+  const config = exportedConfigObject(root, unresolved)
   if (!config) {
-    return { status: 'unreadable', reason: 'its exported config is not a literal object' }
+    return {
+      status: 'unreadable',
+      reason:
+        unresolved.length > 0
+          ? describeUnresolved([...new Set(unresolved)])
+          : 'its exported config is not a literal object',
+    }
   }
 
   const configDir = dirname(configPath)
-  const unresolved: string[] = []
 
   const readSelectors = (object: Node): RawSelectors => {
     if (hasSpread(object)) unresolved.push('a spread from another object')
@@ -314,8 +370,11 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   // in play — dropping it analyzed only the projects that happened to be literal.
   const useProjects =
     projectSelectors.length > 0 && (declares(base) || projectSelectors.some(declares))
+  // When entries are hidden, the base scope stays in play even if the base declares
+  // nothing: `testDir` then defaults to the config's own directory, which is exactly
+  // what those entries inherit and what Playwright would walk.
   const candidates: RawSelectors[] = useProjects
-    ? projectsPartial && declares(base)
+    ? projectsPartial
       ? [base, ...projectSelectors]
       : projectSelectors
     : declares(base) || projectsPartial

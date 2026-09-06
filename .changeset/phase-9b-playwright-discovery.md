@@ -27,9 +27,13 @@ projects that never adopted TestPilot.
   flags) match against the **absolute** path. TestPilot's own `include` keeps its root-relative
   meaning. A config that declares no `testDir` still contributes its own directory, which is
   Playwright's default test root.
-- **Nothing is dropped in silence.** A `projects` array built by a function, or one containing a
-  spread, is still used for the entries that *are* readable — with the base test root kept, since the
-  hidden entries inherit it — and the report distinguishes "partially read" from "not used".
+- **Nothing is dropped in silence.** A `projects` array built by a function or containing a spread, a
+  `defineConfig(base, override)` layered on an imported base, a computed `testDir` — each is still
+  used for what *was* readable, with the base test root kept because the entries we cannot see inherit
+  it, and the rest reported. Those reports now reach `warnings[]` (schema **1.6**:
+  `playwright-config-partial` / `playwright-config-ignored`), so the table, the HTML report, and SARIF
+  (`invocations[].toolExecutionNotifications`) all show them — not just stderr, which `--quiet`
+  suppresses and shared artifacts never carried.
 - **The Playwright config is parsed, never executed.** `analyze` is advertised as static and offline
   and is routinely pointed at a repository you're only evaluating; running that repo's config could
   write to stdout (corrupting `--json`), call `process.exit` (colliding with the gate-failure exit
@@ -44,7 +48,9 @@ projects that never adopted TestPilot.
   scanned on stderr; when a Playwright config is found but can't be used, the reason appears in the
   zero-file error, in a new `doctor` check, and in the report. `--no-playwright-discovery` turns the
   fallback off for `analyze`, `fix`, and `doctor` alike.
-- **Report schema `1.5`:** new top-level `discovery` — per-setting provenance
+- **A `playwrightConfig` you set explicitly is honored**: if it points at a file that does not exist,
+  discovery stops and says so rather than silently reading a different config.
+- **Report schema `1.6`:** new top-level `discovery` — per-setting provenance
   (`testpilot-config` | `playwright-config` | `default`), the `roots` actually scanned,
   `playwrightConfigPath`, and `playwrightConfigIgnored`. `rootDir` stays a pure function of repo
   layout — it anchors baseline identities, so it must not shift when a config gains a project — and a

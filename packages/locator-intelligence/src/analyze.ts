@@ -102,6 +102,23 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // re-resolve reported paths from it in a process with a different cwd.
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
   const { rules, warnings } = resolveRules(options.config)
+  // Discovery problems belong in the report, not only on stderr: the HTML report is
+  // what gets shared and SARIF is what the gate publishes, and neither should show a
+  // confident grade over a config we admit we only half-read.
+  if (options.discovery?.playwrightConfigPartial) {
+    const { path, reason } = options.discovery.playwrightConfigPartial
+    warnings.push({
+      code: 'playwright-config-partial',
+      message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may be incomplete.`,
+    })
+  }
+  if (options.discovery?.playwrightConfigIgnored) {
+    const { path, reason } = options.discovery.playwrightConfigIgnored
+    warnings.push({
+      code: 'playwright-config-ignored',
+      message: `${path} was not used for test discovery: ${reason}.`,
+    })
+  }
   if (files.length === 0) {
     // A run that matched nothing must never look like a clean pass — a
     // TypeScript-only glob on a JavaScript suite would otherwise score 100/A.

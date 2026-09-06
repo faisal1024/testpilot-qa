@@ -273,7 +273,7 @@ it('reports a spread as unresolved instead of reading the config as empty', () =
   )
   expect(readSettings(path)).toEqual({
     status: 'unreadable',
-    reason: 'a spread from another object is not a literal value',
+    reason: 'it uses a spread from another object',
   })
 })
 
@@ -358,13 +358,16 @@ describe('resolveDiscovery', () => {
     expect(resolved.discovery.testDir).toBe('default')
   })
 
-  it('appends testIgnore globs to exclude and keeps RegExp ignores separate', async () => {
+  it('keeps testIgnore globs as absolute-path matchers, separate from exclude', async () => {
     writeFile(
       'playwright.config.ts',
       "export default { testDir: 'e2e', testIgnore: ['legacy/**', /fixtures/] }\n",
     )
     const resolved = await resolveIn(dir)
-    expect(resolved.scopes[0]?.excludeGlobs).toContain('**/legacy/**')
+    // `exclude` is root-relative by TestPilot's documented semantics; Playwright's
+    // testIgnore is matched against the absolute path, so the two cannot be merged.
+    expect(resolved.scopes[0]?.excludeGlobs).not.toContain('**/legacy/**')
+    expect(resolved.scopes[0]?.ignoreGlobs).toEqual(['**/legacy/**'])
     expect(resolved.scopes[0]?.ignoreRegex).toEqual([{ source: 'fixtures', flags: '' }])
     expect(resolved.discovery.exclude).toBe('playwright-config')
   })
@@ -409,9 +412,63 @@ describe('resolveDiscovery', () => {
     // Playwright's testDir defaults to the config file's directory. Ignoring that sent
     // us back to `tests/` and scored whatever happened to be there.
     writeFile('e2e/playwright.config.ts', "export default { reporter: 'list' }\n")
+    writeFile('e2e/login.spec.ts', "page.locator('//button')\n")
     const resolved = await resolveIn(dir)
     expect(resolved.discovery.roots).toEqual([join(dir, 'e2e')])
     expect(resolved.discovery.testDir).toBe('playwright-config')
+  })
+
+  it('does not let a settings-free examples/ config hijack discovery', async () => {
+    // Adopting any nearby config's directory would score the demo tree and miss the suite.
+    writeFile('examples/playwright.config.ts', "export default { use: { baseURL: 'x' } }\n")
+    writeFile('examples/README.md', 'not a test\n')
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.testDir).toBe('default')
+    expect(resolved.discovery.playwrightConfigIgnored?.reason).toContain('no test files')
+  })
+
+  it('does not silently read a different config when playwrightConfig misses', async () => {
+    writeFile('playwright.config.ts', "export default { testDir: 'wrong' }\n")
+    writeFile('testpilot.config.ts', "export default { playwrightConfig: './e2e/pw.config.ts' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigPath).toBeNull()
+    expect(resolved.discovery.playwrightConfigIgnored?.reason).toContain('does not exist')
+  })
+
+  it('discloses an unreadable defineConfig() override instead of scoring the base', async () => {
+    // `defineConfig(base, override)` merges with later arguments winning; we read the
+    // first, so the override must be disclosed rather than silently dropped.
+    writeFile(
+      'playwright.config.ts',
+      "import base from './base'\nimport { defineConfig } from '@playwright/test'\nexport default defineConfig(base, { testDir: './e2e' })\n",
+    )
+    const read = readSettings(join(dir, 'playwright.config.ts'))
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok') return
+    // The override wins, as it does in Playwright — and the base we could not read
+    // is disclosed rather than passed off as the whole config.
+    expect(read.settings.scopes[0]?.root).toBe(join(dir, 'e2e'))
+    expect(read.unresolved).toContain('additional defineConfig() arguments')
+  })
+
+  it('keeps the base root when a bare base sits beside hidden project entries', async () => {
+    // The hidden entries inherit the config's own directory; dropping it scored only
+    // the literal project and reported a clean grade on the rest.
+    writeFile(
+      'playwright.config.ts',
+      "const common = [{ name: 'firefox' }]\nexport default { projects: [{ name: 'chromium', testDir: './a' }, ...common] }\n",
+    )
+    const read = readSettings(join(dir, 'playwright.config.ts'))
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok') return
+    expect(read.settings.scopes.map((scope) => scope.root)).toEqual([dir, join(dir, 'a')])
+  })
+
+  it('discloses a bare root config rather than silently using the built-in testDir', async () => {
+    writeFile('playwright.config.ts', "export default { use: { baseURL: 'x' } }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.testDir).toBe('default')
+    expect(resolved.discovery.playwrightConfigIgnored?.reason).toContain('whole project root')
   })
 
   it('reports a partially-read config separately from an unusable one', async () => {
@@ -451,6 +508,7 @@ describe('resolveDiscovery', () => {
     // Silently unioning meant a Playwright glob dropped files while every message
     // credited testpilot.config for the exclusion.
     expect(resolved.scopes[0]?.excludeGlobs).toEqual(['**/mine/**'])
+    expect(resolved.scopes[0]?.ignoreGlobs).toEqual([])
   })
 
   it('marks exclude as Playwright-sourced when only a RegExp testIgnore filtered', async () => {

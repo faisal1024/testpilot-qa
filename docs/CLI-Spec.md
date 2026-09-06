@@ -413,11 +413,11 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.5`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.6`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.5",
+  "schemaVersion": "1.6",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -461,7 +461,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     }
   ],
   "warnings": [
-    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." }
+    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." },
+    { "code": "playwright-config-partial", "message": "…/playwright.config.ts was used for test discovery, but part of it could not be read: …" }
   ],
   "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
   "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
@@ -478,7 +479,9 @@ to: the config file's directory (or the project root when there is no config fil
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
 ignore it.
-`warnings[].code` is `unknown-rule` or `no-files-matched` (1.4). On a **zero-file run** the `--json`
+`warnings[].code` is `unknown-rule`, `no-files-matched` (1.4), or — new in **1.6** —
+`playwright-config-partial` / `playwright-config-ignored`, so a discovery problem reaches the table,
+the HTML report, and SARIF (as `invocations[].toolExecutionNotifications`), not just stderr. On a **zero-file run** the `--json`
 and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
 no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
 still have something to read; the table and HTML reporters print only the error.
@@ -549,10 +552,14 @@ it in `e2e/`); an ambiguous result adopts nothing.
 - An explicit `include` or `exclude` in `testpilot.config.ts` outranks Playwright's `testMatch` /
   `testIgnore`, exactly as an explicit `testDir` does.
 - Playwright's `testMatch`/`testIgnore` — globs **and** RegExps, with their flags — are matched
-  against the **absolute** path, as Playwright matches them. TestPilot's own `include` keeps its
-  documented root-relative meaning.
-- A config that declares no `testDir` still contributes its **own directory**, which is Playwright's
-  default test root — so a minimal `e2e/playwright.config.ts` points discovery at `e2e/`.
+  against the **absolute** path, as Playwright matches them. TestPilot's own `include`/`exclude` keep
+  their documented root-relative meaning.
+- A config in a **sub-directory** that declares no `testDir` contributes that directory (Playwright's
+  default test root) when it demonstrably holds test files — so a minimal `e2e/playwright.config.ts`
+  points discovery at `e2e/`, while an `examples/` config does not hijack it. A bare config at the
+  project root is reported rather than adopted.
+- `defineConfig(base, override)` is read with **later arguments winning**, as Playwright merges them,
+  and the layers that could not be read are reported.
 - Anything the parse can't resolve — a computed value, a spread, a `projects` array built by a
   function — is reported. The config is still used for what *was* readable, and `discovery`
   distinguishes "partially read" (`playwrightConfigPartial`) from "not used" (`playwrightConfigIgnored`).

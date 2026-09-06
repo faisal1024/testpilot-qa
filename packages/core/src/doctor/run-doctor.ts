@@ -239,13 +239,16 @@ function checkPlaywrightDiscovery(discovery: ConfigDiscovery): DoctorCheck {
 
 function checkIncludeGlobs(include: string[], discovery: ConfigDiscovery): DoctorCheck {
   // When Playwright supplied the selectors, `config.include` is not what runs.
-  if (discovery.include === 'playwright-config') {
+  if (discovery.include === 'playwright-config' || discovery.include === 'mixed') {
     return {
       id: 'include-globs',
       title: 'Include patterns',
       category: 'config',
       status: 'pass',
-      message: `Test selection comes from ${discovery.playwrightConfigPath}.`,
+      message:
+        discovery.include === 'mixed'
+          ? `Test selection comes partly from ${discovery.playwrightConfigPath}.`
+          : `Test selection comes from ${discovery.playwrightConfigPath}.`,
     }
   }
   const usable =

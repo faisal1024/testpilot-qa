@@ -35,7 +35,11 @@ export interface Finding {
 
 /** A non-fatal problem detected while analyzing (e.g. an unknown rule id in config). */
 export interface AnalysisWarning {
-  code: 'unknown-rule' | 'no-files-matched'
+  code:
+    | 'unknown-rule'
+    | 'no-files-matched'
+    | 'playwright-config-partial'
+    | 'playwright-config-ignored'
   message: string
   ruleId?: string
 }
@@ -117,9 +121,9 @@ export interface AnalysisReport {
 
 /**
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
- * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`.
+ * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.5'
+export const ANALYSIS_SCHEMA_VERSION = '1.6'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).
