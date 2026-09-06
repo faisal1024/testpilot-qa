@@ -5,8 +5,14 @@
 > `fix` preview).
 > **✅ Published: `testpilot-qa@0.1.0-alpha.0` is live on npm** under the **`alpha`** dist-tag, with SLSA
 > provenance, released by CI via the Changesets workflow (2026-09-05).
-> The deferred runtime/toolchain dependency majors (`commander`, `zod`, `typescript`, `@biomejs/biome`)
-> remain **post-alpha hardening** — each handled in its own PR with full validation.
+> **The active plan is [`docs/Post-Alpha-Plan.md`](Post-Alpha-Plan.md)** (signal quality, measured on a
+> five-repo corpus). The deferred runtime/toolchain dependency majors (`commander`, `zod`,
+> `typescript`, `@biomejs/biome`) are **background work** — each in its own PR with full validation,
+> never ahead of a user-visible fix.
+>
+> **`alpha.1` is pending release.** `main` carries the fix for the false-green bug (#71): the
+> published `0.1.0-alpha.0` still reports `100 (A)` on suites it never opened, so publishing this is
+> the highest-value action available. See the launch gate below.
 >
 >
 > **Dist-tags — decided policy.** npm sets `latest` on a package's first publish, so today both `alpha`
