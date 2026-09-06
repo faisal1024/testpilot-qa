@@ -236,16 +236,30 @@ function declaresTagsIn(rootDir: string, hint: string): boolean {
 }
 
 /**
- * The `use.testIdAttribute` for a project, read the same way and at the same
- * moments as `declaresTagsIn`.
+ * The `use.testIdAttribute` for a project, read at the same moments as
+ * `declaresTagsIn`.
  *
- * No config found means Playwright's own default applies — `null`, not
- * unknown. That is the ordinary case for a project with no Playwright config
- * at all, and treating it as unknown would silence the rule everywhere.
+ * `findPlaywrightConfigNearby`, **not** `findPlaywrightConfig`: the narrow
+ * lookup does not descend a level, and immich and Ghost — two of the five
+ * corpus repos — keep their config in `e2e/`. Missing it there returned `null`,
+ * which the rule reads as the positive claim "the config sets none, so
+ * `data-testid` applies" — a default asserted over a file we never opened, and
+ * the same mistake one layer up from where it was last fixed.
+ *
+ * Genuinely finding nothing *is* `null`: Playwright's own default then applies,
+ * and treating that as unknown would qualify every suggestion in every project
+ * that has no Playwright config. Ambiguity is not an answer, so several
+ * candidate configs are `'unresolved'` — the discovery path refuses to pick one
+ * and this must not pick one either.
  */
 function testIdAttributeIn(rootDir: string, hint: string): string | null | 'unresolved' {
-  const path = findPlaywrightConfig(rootDir, hint)
-  return path ? readPlaywrightTestSettings(path).testIdAttribute : null
+  const located = findPlaywrightConfigNearby(rootDir, hint)
+  if (!located) {
+    return null
+  }
+  return 'ambiguous' in located
+    ? 'unresolved'
+    : readPlaywrightTestSettings(located.path).testIdAttribute
 }
 
 export function resolveDiscovery(

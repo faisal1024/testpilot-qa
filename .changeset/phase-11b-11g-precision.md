@@ -23,8 +23,9 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   It stays silent where `getByTestId()` has no equivalent: a bare `[data-testid]` presence check, a
   test id inside `:not()`/`:has()` (where it names an element the selector excludes, or a
   descendant), a selector list (more than one target), a test id reached through a `+`/`~` sibling
-  step (`[data-testid="row"] + button` puts it on a sibling), a `>>` part *preceding* the test id
-  (`#modal >> [data-testid=x]` — an ancestor scope `getByTestId()` would drop), and a call whose own
+  step (`[data-testid="row"] + button` puts it on a sibling), **anything preceding the test id's own
+  compound** — an earlier compound, a `>>` part, or a leading combinator, each an ancestor scope
+  `getByTestId()` would drop — and a call whose own
   options carry a filter (`locator('[data-testid=row]', { hasText: 'Alice' })` is not
   `getByTestId('row')`, which selects every row). A chained `.filter()` still reports, because it
   survives the rewrite.
@@ -32,7 +33,10 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   ARIA handle. It stays quiet on `[role=]`/`[aria-*]`, on content composition in **either**
   spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
   `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
-  `.filter()`/`.first()`/`.last()`/`.nth()` — and on test ids.
+  `.filter()`/`.first()`/`.last()`/`.nth()` — and on a test id **that
+  `prefer-get-by-test-id` actually reports**. Where that rule abstains (an ancestor before the test
+  id, a selector list, a bare presence check) this one speaks instead, so no call site falls between
+  them.
 
 **A config or baseline written against the old id keeps working**: `prefer-user-facing-locator` maps
 to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It is no

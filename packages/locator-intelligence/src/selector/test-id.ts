@@ -130,6 +130,14 @@ export function testIdReplacement(
   // Otherwise an earlier `>>` part, which chains as a scope. The match has to
   // be on that part's own target — `[data-testid=a] + div >> button` scopes
   // from the div, and the test id is that div's sibling.
+  // `xpath=..` walks UP from the scope, so a later xpath part can put the
+  // target outside the test id's subtree: in `'[data-testid=x] >> .. >> div'`
+  // the target is under x's *parent*, and calling x an ancestor is false.
+  // The rewrite would still be sound — `>>` is a chained `locator()` — but the
+  // sentence would not be, and the sentence is what this rule sells.
+  if (parsed.parts.slice(1).some((part) => part.engine === 'xpath')) {
+    return null
+  }
   // Only the *first* part: anything before the one holding the test id is a
   // further ancestor that `getByTestId()` would drop.
   const first = parsed.parts[0]

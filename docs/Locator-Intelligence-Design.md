@@ -148,7 +148,7 @@ Headline = weighted mean (default weights configurable). This is why "100% test-
 | `no-css-class-selector` | locator | error | no | no | `.class` selectors tied to styling. |
 | `no-deep-css-chain` | locator | warn | no | no | Long ` > ` / descendant CSS chains. |
 | `prefer-get-by-test-id` | locator | warn | no | yes (Phase 13) | A test id addressed through a raw CSS attribute selector, when `getByTestId()` says the same thing. Attribute list configurable via `ruleOptions`. |
-| `prefer-semantic-locator` | locator | info | no | no | A `locator()` selector with no role/label/ARIA handle. Abstains on `[role=]`/`[aria-*]`, `has`/`hasText` composition, a `getBy*()` parent, and test ids. **Category guidance only — no concrete rewrite in Tier 1.** |
+| `prefer-semantic-locator` | locator | info | no | no | A `locator()` selector with no role/label/ARIA handle. Abstains on `[role=]`/`[aria-*]`, `has`/`hasText` composition, a `getBy*()` parent, and any test id `prefer-get-by-test-id` reports. **Category guidance only — no concrete rewrite in Tier 1.** |
 | `avoid-positional-access` | locator | warn | no | no | `.nth(n)` — selecting by position rather than identity. (`.first()`/`.last()` arrive with Phase 12.) |
 | `avoid-parent-traversal` | locator | info | no | no | `locator('..')` — walking up to the parent instead of locating the container. |
 | `no-hard-wait` | flakiness | error | no | no¹ | `waitForTimeout(<n>)` hard sleeps. |

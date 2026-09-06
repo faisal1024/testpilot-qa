@@ -195,6 +195,10 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('> [data-testid="a"] > b'))).toBeNull()
     // The two spellings of one locator now agree.
     expect(preferGetByTestId.evaluate(css('#modal >> [data-testid="save"] .child'))).toBeNull()
+    // `xpath=..` walks UP, so the target sits under the test id's PARENT and
+    // calling it an ancestor is false — even though the rewrite itself would
+    // hold. The sentence is what this rule sells.
+    expect(preferGetByTestId.evaluate(css('[data-testid="x"] >> .. >> div'))).toBeNull()
     // Still fires where nothing precedes it, including under a getBy* parent —
     // there the chain preserves the scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
@@ -236,7 +240,7 @@ describe('prefer-get-by-test-id', () => {
     // open. This is the only place `null` and `'unresolved'` differ, so it is
     // what stops the distinction from being unobservable machinery.
     expect(preferGetByTestId.evaluate(css('[data-test="s"]'), unknown)?.suggestion).toContain(
-      'which could not be read here',
+      'which could not be determined here',
     )
     expect(preferGetByTestId.evaluate(css('[data-test="s"]'), stock)?.suggestion).toContain(
       "queries only `data-testid` (Playwright's default)",

@@ -41,14 +41,19 @@ function queriedBy(attribute: string, resolved: RuleOptions['resolvedTestIdAttri
  * How to say "and here is what your config must say for that to be true".
  *
  * Distinguishes the three states rather than collapsing them: a config that
- * was read and sets nothing really does mean `data-testid`, while a config
- * that could not be read means we do not know — and stating the default there
- * is a claim about a file we failed to open.
+ * was read and sets nothing really does mean `data-testid`, while "could not
+ * be determined" means we do not know — and stating the default there is a
+ * claim about a file we failed to open.
+ *
+ * The unknown case covers more than an unreadable file: a spread, a non-literal
+ * value, several candidate configs, or projects that declare different
+ * attributes. Saying "could not be read" for the last of those would be a false
+ * explanation of a correct answer — the config was read perfectly.
  */
 function configCaveat(attribute: string, resolved: RuleOptions['resolvedTestIdAttribute']): string {
   const unknown = resolved === undefined || resolved === 'unresolved'
   const queried = unknown
-    ? `the \`testIdAttribute\` your Playwright config declares (default \`${PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`), which could not be read here`
+    ? `the \`testIdAttribute\` your Playwright config declares (default \`${PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`), which could not be determined here`
     : `\`${resolved ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`${
         resolved === null ? " (Playwright's default)" : ''
       }`
