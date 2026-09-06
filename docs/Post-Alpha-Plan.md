@@ -140,17 +140,33 @@ Goal: **`analyze` can never report a score for files it did not open — and it 
   `testDir` relative to the config file for `analyze`, `fix`, and `doctor` alike; report `rootDir`
   with SARIF URIs kept `--cwd`-relative; schema 1.4 `no-files-matched`; real generated rule docs;
   `engines`.
-- **9b — Playwright-aware discovery.** When no `testpilot.config.ts` sets `testDir`/`include`, read
-  `testDir` and `testMatch` from `playwright.config.{ts,js,mjs}` (doctor already locates it). Report
-  which source was used (`--verbose` and in the JSON `summary`). Corpus target: cal.com and immich find
-  their suites with **no flags**.
+- ✅ **9b — Playwright-aware discovery (#73).** With no `testpilot.config.ts` (or one that omits
+  `testDir`), discovery reads `testDir`/`testMatch`/`testIgnore` from `playwright.config.*` —
+  **parsed, never executed**, so `analyze` stays static and offline and cannot be derailed by another
+  repo's config. Covers the shapes real suites use: `projects[]` (each entry its own scope, so one
+  project's `testIgnore` can't delete another's files), RegExp matchers with flags applied to absolute
+  paths as Playwright applies them, `defineConfig(a, b)` merged per key, CommonJS configs, and a
+  config kept in a sub-directory. Anything not statically knowable is **reported**, never guessed —
+  in the report's `warnings[]`, so it reaches the table, HTML, and SARIF, not just stderr. Report
+  schema 1.6 adds `discovery` (per-setting provenance + the roots actually scanned).
+  **Corpus target met:** cal.com and immich analyze with no flags.
+
+  *Seven review rounds. Every round found the same failure class in a new disguise — a config we only
+  partly understood producing a confident grade over part of the suite. That is worse than the total
+  miss #71 fixed, because `filesAnalyzed > 0` means the zero-file guard never fires. The lasting
+  lessons: the reader must say "I don't know" rather than guess, a partial read must widen rather than
+  narrow, and disclosure has to live in the report — stderr is exactly what `--quiet` drops and what
+  shared artifacts never carry.*
 - **9c — Helper/POM discovery, opt-in first.** `include` gains a documented `helpers` companion
   (e.g. `analyze --with-helpers` / `config.includeHelpers: ['**/pages/**', '**/fixtures/**']`), with
   the rule engine tagging findings `inHelper: true` so reports can group them. Making this default is
   a Phase 11 decision once precision is fixed (otherwise it triples noise).
-- **9d — `doctor` stops being noisy on repos you don't own.** It already anchors where `analyze`
-  does (#71); it still needs the Playwright-config fallback from 9b, and it should skip the
-  AI-guidance checks unless a `testpilot.config.ts` exists or `--strict-guidance` is passed.
+- ✅ **9d — `doctor` stops being noisy on repos you don't own (#73).** It uses the same discovery as
+  `analyze` (same config lookup, same roots, same `--no-playwright-discovery`), names where `testDir`
+  came from, and skips the AI-guidance checks unless a `testpilot.config.ts` exists or
+  `--strict-guidance` is passed. Doctor schema 1.1. **Follow-up:** `doctor` verifies that the resolved
+  roots *exist*, not that they contain matching files, so an empty test directory passes `doctor` and
+  still exits `3` under `analyze`.
 - **9f — Honesty stopgaps, docs-only, same week as `alpha.1`:** a README "Known limitations" section
   that says plainly that `prefer-user-facing-locator` over-fires on test-id/role/aria selectors and
   how to set it to `info` or `off` until Phase 11; `analyze --help` lists the global flags; a
