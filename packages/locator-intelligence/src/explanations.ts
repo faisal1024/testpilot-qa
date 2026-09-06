@@ -1,4 +1,6 @@
 import type { RuleExplanation } from '@testpilot/core'
+import { avoidParentTraversal } from './rules/avoid-parent-traversal.js'
+import { avoidPositionalAccess } from './rules/avoid-positional-access.js'
 import { noCssClassSelector } from './rules/no-css-class-selector.js'
 import { noDeepCssChain } from './rules/no-deep-css-chain.js'
 import { noHardWait } from './rules/no-hard-wait.js'
@@ -113,6 +115,41 @@ await expect(page.getByRole('alert')).toHaveText('Saved')`,
       'Rely on Playwright auto-waiting for actionability.',
       'Use web-first assertions like expect(locator).toBeVisible() / toHaveText().',
       'Wait for a specific condition (e.g. waitForResponse) instead of a fixed delay.',
+    ],
+  }),
+  fromRule(avoidPositionalAccess, {
+    title: 'Prefer identity over position',
+    summary:
+      'Selecting by position (.first(), .last(), .nth(n)) depends on how many elements match and in what order.',
+    whyItMatters:
+      'A positional call silently retargets when the matched collection changes — a new row, a reordered list, a filter applied earlier in the test. It does not fail loudly; it acts on a different element. That said, picking one of an intentionally repeated element is idiomatic Playwright and appears throughout its own docs, which is why this is a `warn` and not an error: it is a nudge to check whether the element has an identity you could target instead.',
+    badExample: `await page.getByRole('listitem').first().click()`,
+    betterExample: `await page.getByRole('link', { name: 'Settings' }).click()`,
+    guidance: [
+      'If the element is distinguishable — a name, a label, a test id — target it directly.',
+      'If the collection is genuinely uniform (a row in a results table), positional access is fine; silence this rule for the file or set it to `off`.',
+      'CSS `:nth-child()` is a different matter and stays an error — see `no-nth-child`.',
+    ],
+    notFlagged: [
+      `page.getByRole('button', { name: 'Save' })  // targeted by identity, not position`,
+      `page.locator('li:nth-child(2)')             // a CSS positional selector — see no-nth-child`,
+    ],
+  }),
+  fromRule(avoidParentTraversal, {
+    title: "Avoid locator('..') parent traversal",
+    summary:
+      "locator('..') walks up to the parent element, so the test depends on how the DOM is nested.",
+    whyItMatters:
+      "Reaching a container by walking up from a child couples the test to the exact nesting between them: wrap the child in one more div and the locator points somewhere else. It is a recognised Playwright idiom rather than hand-written XPath, which is why it is `info` and lives apart from `no-xpath` — on real suites it was the majority of that rule's findings, and reporting it at error meant the genuinely hand-written XPath did not stand out.",
+    badExample: `await page.getByText('Total').locator('..').click()`,
+    betterExample: `await page.getByRole('row', { name: 'Total' }).click()`,
+    guidance: [
+      'Locate the container directly — getByRole with a name, or getByTestId — then narrow inside it.',
+      'If the container genuinely has no handle of its own, adding a data-testid to it is usually the smaller change.',
+    ],
+    notFlagged: [
+      `page.locator('//button[@type="submit"]')  // hand-written XPath — see no-xpath`,
+      `page.getByRole('row').getByRole('cell')   // narrowing down, not walking up`,
     ],
   }),
   fromRule(requireTestTag, {

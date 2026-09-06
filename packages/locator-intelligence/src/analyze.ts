@@ -17,7 +17,7 @@ import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
 import { allBuiltinRules, builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
 import { abstentionFor, requireTestTag } from './rules/require-test-tag.js'
-import type { Rule, TestRule } from './rules/types.js'
+import type { Rule, RuleOptions, TestRule } from './rules/types.js'
 import { computeScore } from './score.js'
 import { extractTests } from './tags/extract-tests.js'
 
@@ -204,6 +204,10 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     }
 
     const contexts = extractLocators(code, program)
+    // Every extracted call site counts. A call that can produce a finding must
+    // also contribute to the denominator — penalty without denominator is not a
+    // ratio, and excluding `.first()` while still flagging it dropped Ghost
+    // from 98 to 79 on a suite whose locators did not change.
     callSites += contexts.length
 
     // A second AST pass, so only when a test-level rule is actually enabled.
@@ -270,7 +274,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 
     for (const context of contexts) {
       for (const { rule, severity } of rules) {
-        const violation = rule.evaluate(context)
+        const violation = rule.evaluate(context, optionsFor(rule.id, options.config))
         if (!violation) {
           continue
         }
@@ -451,4 +455,12 @@ function tagCoverageWarning(
       }`,
     },
   ]
+}
+
+/** Per-rule settings from the config, or `undefined` when the rule has none. */
+function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | undefined {
+  if (ruleId === 'no-deep-css-chain') {
+    return { maxChainDepth: config.ruleOptions['no-deep-css-chain'].maxChainDepth }
+  }
+  return undefined
 }

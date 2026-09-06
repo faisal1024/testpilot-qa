@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { LocatorContext } from '../src/locator-context.js'
+import { avoidParentTraversal } from '../src/rules/avoid-parent-traversal.js'
+import { avoidPositionalAccess } from '../src/rules/avoid-positional-access.js'
 import { noCssClassSelector } from '../src/rules/no-css-class-selector.js'
-import { cssChainDepth, noDeepCssChain } from '../src/rules/no-deep-css-chain.js'
+import { noDeepCssChain } from '../src/rules/no-deep-css-chain.js'
 import { noHardWait } from '../src/rules/no-hard-wait.js'
 import { noNthChild } from '../src/rules/no-nth-child.js'
 import { noXpath } from '../src/rules/no-xpath.js'
 import { preferUserFacingLocator } from '../src/rules/prefer-user-facing-locator.js'
+import { maxChainDepth } from '../src/selector/depth.js'
 import { tokenizeSelector } from '../src/selector/tokenize.js'
 
 function ctx(overrides: Partial<LocatorContext>): LocatorContext {
@@ -46,8 +49,16 @@ describe('no-nth-child', () => {
   it('flags :nth-child() css selectors', () => {
     expect(noNthChild.evaluate(css('ul li:nth-child(2)'))).not.toBeNull()
   })
-  it('flags .nth() chains', () => {
-    expect(noNthChild.evaluate(ctx({ apiCall: 'nth' }))).not.toBeNull()
+  it('no longer flags .nth() — that is avoid-positional-access now', () => {
+    expect(noNthChild.evaluate(ctx({ apiCall: 'nth' }))).toBeNull()
+  })
+
+  it('does not fire on the pseudo name inside an attribute value', () => {
+    expect(noNthChild.evaluate(css('[title=":nth-child(2)"]'))).toBeNull()
+  })
+
+  it('finds :nth-child nested inside :has()', () => {
+    expect(noNthChild.evaluate(css('ul:has(li:nth-child(2))'))).not.toBeNull()
   })
   it('ignores selectors without positional selection', () => {
     expect(noNthChild.evaluate(css('button'))).toBeNull()
@@ -60,13 +71,13 @@ describe('no-nth-child', () => {
 
 describe('no-deep-css-chain', () => {
   it('computes a conservative combinator depth', () => {
-    expect(cssChainDepth('.a')).toBe(0)
-    expect(cssChainDepth('div > button')).toBe(1)
-    expect(cssChainDepth('#c > div > button')).toBe(2)
-    expect(cssChainDepth('header nav ul li a')).toBe(4)
+    expect(maxChainDepth(tokenizeSelector('.a'))).toBe(0)
+    expect(maxChainDepth(tokenizeSelector('div > button'))).toBe(1)
+    expect(maxChainDepth(tokenizeSelector('#c > div > button'))).toBe(2)
+    expect(maxChainDepth(tokenizeSelector('header nav ul li a'))).toBe(4)
     // Spaces inside brackets/parens are not miscounted.
-    expect(cssChainDepth('a[title="x y z"]')).toBe(0)
-    expect(cssChainDepth('li:nth-child(2)')).toBe(0)
+    expect(maxChainDepth(tokenizeSelector('a[title="x y z"]'))).toBe(0)
+    expect(maxChainDepth(tokenizeSelector('li:nth-child(2)'))).toBe(0)
   })
   it('flags deep chains only at/above the threshold', () => {
     expect(noDeepCssChain.evaluate(css('div > button'))).toBeNull()
@@ -169,3 +180,73 @@ describe('no-css-class-selector — nested selectors', () => {
     expect(noCssClassSelector.evaluate(css('button:has-text("save.all")'))).toBeNull()
   })
 })
+
+describe('avoid-positional-access', () => {
+  it.each(['nth', 'first', 'last'] as const)('flags .%s()', (apiCall) => {
+    const finding = avoidPositionalAccess.evaluate(ctx({ apiCall }))
+    expect(finding?.message).toContain(`.${apiCall}()`)
+  })
+
+  it('is a warning, not an error — positional access over a repeated element is idiomatic', () => {
+    expect(avoidPositionalAccess.defaultSeverity).toBe('warn')
+  })
+
+  it('does not fire on anything else', () => {
+    expect(avoidPositionalAccess.evaluate(css('.a'))).toBeNull()
+    expect(avoidPositionalAccess.evaluate(ctx({ apiCall: 'getByRole' }))).toBeNull()
+  })
+})
+
+describe('avoid-parent-traversal', () => {
+  it("flags locator('..')", () => {
+    expect(avoidParentTraversal.evaluate(xpath('..'))).not.toBeNull()
+  })
+
+  it('does not fire on real XPath', () => {
+    expect(avoidParentTraversal.evaluate(xpath('//button[@type="submit"]'))).toBeNull()
+  })
+
+  it('is info — it is a recognised Playwright idiom, not a hand-written path', () => {
+    expect(avoidParentTraversal.defaultSeverity).toBe('info')
+  })
+})
+
+describe('no-xpath after the split', () => {
+  it("no longer fires on '..', so real XPath stands out", () => {
+    expect(noXpath.evaluate(xpath('..'))).toBeNull()
+  })
+
+  it('still fires on a hand-written path', () => {
+    expect(noXpath.evaluate(xpath('//div[@class="x"]/span[2]'))).not.toBeNull()
+  })
+})
+
+describe('no-deep-css-chain after the split', () => {
+  it('does not count a comma list as a chain', () => {
+    // `strong em, em strong` is two one-step selectors, not a three-step chain.
+    expect(noDeepCssChain.evaluate(css('strong em, em strong'))).toBeNull()
+  })
+
+  it('still flags a genuinely deep chain', () => {
+    expect(noDeepCssChain.evaluate(css('header nav ul li a'))).not.toBeNull()
+  })
+
+  it('counts depth inside :has()', () => {
+    // `b > c > d > e` is 3 combinator steps; `b > c > d` would be 2.
+    expect(noDeepCssChain.evaluate(css('.a:has(b > c > d > e)'))).not.toBeNull()
+    expect(noDeepCssChain.evaluate(css('.a:has(b > c)'))).toBeNull()
+  })
+
+  it('respects a configured threshold', () => {
+    expect(noDeepCssChain.evaluate(css('a b c'), { maxChainDepth: 2 })).not.toBeNull()
+    expect(noDeepCssChain.evaluate(css('a b c'), { maxChainDepth: 5 })).toBeNull()
+  })
+
+  it('names the depth it measured', () => {
+    expect(noDeepCssChain.evaluate(css('header nav ul li a'))?.message).toContain('4 combinator')
+  })
+})
+
+function xpath(selector: string): LocatorContext {
+  return ctx({ selector, selectorEngine: 'xpath', parsed: tokenizeSelector(selector) })
+}

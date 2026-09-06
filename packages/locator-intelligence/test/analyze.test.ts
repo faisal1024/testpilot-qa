@@ -40,7 +40,7 @@ function config(overrides: Partial<TestPilotConfig> = {}): TestPilotConfig {
 }
 
 describe('analyze — Tier 1 rule set', () => {
-  it('detects all six MVP rules with a stable, JSON-serializable report', async () => {
+  it('detects the Tier 1 rules with a stable, JSON-serializable report', async () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
@@ -53,11 +53,13 @@ describe('analyze — Tier 1 rule set', () => {
       findings: 9,
       unscoredFindings: 0,
       unscoredRuleIds: [],
-      bySeverity: { error: 5, warn: 4, info: 0 },
+      // `.nth(3)` moved from no-nth-child (error) to avoid-positional-access (warn).
+      bySeverity: { error: 4, warn: 5, info: 0 },
     })
 
     const ids = [...new Set(report.findings.map((f) => f.ruleId))].sort()
     expect(ids).toEqual([
+      'avoid-positional-access',
       'no-css-class-selector',
       'no-deep-css-chain',
       'no-hard-wait',
@@ -337,10 +339,13 @@ describe('analyze — Tier 1 rule set', () => {
     it('lowers the score for fragile locators with dimension breakdown', async () => {
       writeFixture('tests/all.spec.ts', ALL_RULES)
       const report = await analyze({ cwd: dir, config: config() })
-      // 8 call-sites; penalty 33 (5 errors × 5 + 4 warns × 2) / max 40 → 18 (F).
+      // 8 call-sites; penalty 30 (4 errors × 5 + 5 warns × 2) / max 40 → 25 (F).
+      // Was 33/18: `.nth(3)` is now a warn, which is the point of the split.
       expect(report.score.callSites).toBe(8)
-      expect(report.score).toMatchObject({ score: 18, grade: 'F' })
-      expect(report.score.subScores.resilience).toEqual({ score: 30, grade: 'F' })
+      expect(report.score).toMatchObject({ score: 25, grade: 'F' })
+      // Resilience penalty 25 (css-class 5 + xpath 5 + nth-child 5 + deep 2
+      // + positional 2 + prefer 3×2) / 40 → 38.
+      expect(report.score.subScores.resilience).toEqual({ score: 38, grade: 'F' })
       expect(report.score.subScores.flakiness).toEqual({ score: 88, grade: 'B' })
       expect(report.score.subScores.accessibility.score).toBe(100)
       expect(report.score.subScores.maintainability.score).toBe(100)
@@ -358,6 +363,8 @@ describe('analyze — Tier 1 rule set', () => {
             'no-deep-css-chain': 'off',
             'prefer-user-facing-locator': 'off',
             'no-hard-wait': 'off',
+            'avoid-positional-access': 'off',
+            'avoid-parent-traversal': 'off',
           },
         }),
       })
@@ -371,8 +378,8 @@ describe('analyze — Tier 1 rule set', () => {
         cwd: dir,
         config: config({ scoring: { weights: { error: 5, warn: 0, info: 0 } } }),
       })
-      // warns now cost nothing: penalty 25 / max 40 → 38 (F).
-      expect(report.score.score).toBe(38)
+      // warns now cost nothing: penalty 20 (4 errors × 5) / max 40 → 50 (F).
+      expect(report.score.score).toBe(50)
     })
 
     it('does not penalize the score for parse errors', async () => {

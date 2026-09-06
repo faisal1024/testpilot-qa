@@ -117,8 +117,10 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 
 `analyze` statically flags fragile locators with six Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
-`no-hard-wait` — and prints a human table or stable JSON. Severity is configurable per rule
-(`off` disables a rule).
+`no-hard-wait` — plus `avoid-positional-access` (`.first()`/`.nth()`, `warn`) and
+`avoid-parent-traversal` (`locator('..')`, `info`), and prints a human table or stable JSON.
+Severity is configurable per rule (`off` disables a rule), and `no-deep-css-chain`'s threshold is
+configurable via `ruleOptions`.
 
 One further rule, **`require-test-tag`**, is **off by default** and flags tests carrying no tag. It
 is opt-in because a suite that never adopted tags would otherwise light up with one finding per

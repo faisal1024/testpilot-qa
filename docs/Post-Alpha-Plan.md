@@ -297,7 +297,7 @@ a quiet score adjustment would be the same dishonesty this plan spent Phase 9 re
 Goal: **every finding at `warn`/`error` is one an engineer would act on.** Corpus target: hard
 false-positive rate < 5% per rule.
 
-- **11a — Selector tokenizer.** Replace regex scans with a one-pass CSS selector tokenizer
+- **11a — Selector tokenizer. ✅ Complete.** Replace regex scans with a one-pass CSS selector tokenizer
   (`packages/locator-intelligence/src/selector/`): selector lists, compound selectors, attribute values
   (quoted/unquoted), escapes, pseudo-classes, and the static prefix of template literals. Everything
   below builds on it.
@@ -308,14 +308,35 @@ false-positive rate < 5% per rule.
     handle. Never fires on `[role=]`, `[aria-*]`, `has:`/`hasText:` composition, or calls chained off
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
-- **11c — `no-css-class-selector`**: fires only on a real class token in the selector (tokenizer);
+- **11c — `no-css-class-selector`. ✅ Complete.**: fires only on a real class token in the selector (tokenizer);
   never on `#id`, attribute values, or escaped dots. `#id` selectors are not this rule's business.
-- **11d — `no-deep-css-chain`**: depth per selector in a list; threshold documented and configurable.
-- **11e — `no-nth-child`**: treat `.first()`/`.last()`/`.nth(n)` consistently; default severity
+- **11d — `no-deep-css-chain`. ✅ Complete.**: depth per selector in a list; threshold documented and configurable.
+- **11e — `no-nth-child`. ✅ Complete (severity as planned; `.first()`/`.last()` deferred — see below).**: treat `.first()`/`.last()`/`.nth(n)` consistently; default severity
   **warn** (positional access over an intentionally repeated element is idiomatic); `:nth-child()` in
   CSS stays **error**.
-- **11f — `no-xpath`**: the `locator('..')` parent-traversal idiom becomes a separate **info**
+- **11f — `no-xpath`. ✅ Complete.**: the `locator('..')` parent-traversal idiom becomes a separate **info**
   finding (`avoid-parent-traversal`), so real hand-written XPath stands out.
+**What landed (11a, 11c–11f), and one deliberate deviation.** The tokenizer's contract is that it
+never guesses: anything unreadable lands in `unparsed` and rules abstain. A differential test pins it
+to Playwright's own parser over every corpus selector — a hand-written parser for someone else's
+syntax drifts, and that test is what makes maintaining one defensible.
+
+**`.first()`/`.last()` are deferred to Phase 12, against 11e's wording.** Extracting them is not a
+rule change: they become **call sites**, which is the score's denominator. Measured, that moves every
+score 3–8 points — enough to flip a `--min-score 70` gate on cal.com from fail to pass. A precision
+phase must not move the score sideways while claiming to be about false positives, and the
+denominator is Phase 12's subject. The rule already handles them.
+
+**Scores did rise anyway**, and only from the two deliberate re-gradings: `.nth()` error→warn and
+`..` error→info. cal.com 69→74 is exactly 113 findings × 3 weight points ÷ (1326 × 5). `callSites` is
+identical on all five repos, which is how you can tell the rise is the re-grading and not the
+denominator.
+
+**A lesson worth keeping.** Twice in this phase a claim about the corpus was wrong because the
+measurement script differed from the shipped rule — once omitting the engine gate, once excluding
+selectors containing a backslash so the oracle never saw the syntax the bugs lived in. Measure with
+the real code path, or the number is about something else.
+
 - **11g — Uninspectable call sites** (template literals with `${}`, `as string`, variables): count
   them in a new `summary.uninspectedCallSites`, surface a `warn`-level note when they exceed 10% of
   call sites, and **exclude them from the score denominator** (Phase 12 lands the denominator

@@ -48,21 +48,23 @@ jobs:
           restore-keys: bench-corpus-
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
-      # The differential test pins the hand-written selector tokenizer to
-      # Playwright's own parser. It needs the corpus, which only this job has —
-      # in `verify` it skips, and the env var is what stops that skip being
-      # silent here too.
-      - name: Selector tokenizer differential vs real Playwright
-        env:
-          TESTPILOT_DIFFERENTIAL: '1'
-        run: pnpm exec vitest run packages/locator-intelligence/test/tokenize-differential.test.ts
-
       - name: Run the corpus benchmark
         # `shell: bash` for pipefail: without it the step takes tee's exit status and
         # the gate can never turn this job red. stderr carries the per-repo lines and
         # every validation failure, so it is folded in.
         shell: bash
         run: pnpm bench 2>&1 | tee bench-output.md
+
+      # After the benchmark, not before: `.bench-cache` is materialized by
+      # `bench-corpus.mjs` itself, so on any cache miss (a fork, a fresh branch,
+      # GitHub's 7-day eviction landing on the weekly cron) this step went red
+      # at a check unrelated to the change — and the benchmark never ran.
+      # `always()` so a red gate still leaves the parser pinned.
+      - name: Selector tokenizer differential vs real Playwright
+        if: always()
+        env:
+          TESTPILOT_DIFFERENTIAL: '1'
+        run: pnpm exec vitest run packages/locator-intelligence/test/tokenize-differential.test.ts
       - name: Publish the comparison
         if: always()
         shell: bash

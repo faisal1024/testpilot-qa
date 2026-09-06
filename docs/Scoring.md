@@ -45,9 +45,10 @@ Findings are weighted by severity. The defaults:
 | `warn`  | **2** | A risky pattern worth revisiting (e.g. a deep CSS chain or a non-user-facing locator). |
 | `info`  | **0.5** | A minor nudge. |
 
-The shipped default severities are: **`error`** — `no-xpath`, `no-css-class-selector`, `no-nth-child`,
-`no-hard-wait`; **`warn`** — `no-deep-css-chain`, `prefer-user-facing-locator`. (There are no `info`
-rules by default — `info` exists for rules you downgrade.)
+The shipped default severities are: **`error`** — `no-xpath`, `no-css-class-selector`,
+`no-nth-child`, `no-hard-wait`; **`warn`** — `no-deep-css-chain`, `prefer-user-facing-locator`,
+`avoid-positional-access`; **`info`** — `avoid-parent-traversal`. One further rule,
+`require-test-tag`, is **off** by default and is not scored at all (see above).
 
 Weights are configurable in `testpilot.config.ts` under `scoring.weights`, and **per-rule severity** is
 configurable under `rules` (setting a rule to `off` removes its findings from the score entirely):
@@ -141,7 +142,7 @@ penalty:
 
 | Sub-score | Driven by | Status |
 |---|---|---|
-| **Resilience** | locator rules (`no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`) | active |
+| **Resilience** | locator rules (`no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, `avoid-positional-access`, `avoid-parent-traversal`) | active |
 | **Flakiness** | flakiness rules (`no-hard-wait`) | active |
 | **Accessibility** | *(no rules yet)* | reserved — stays 100 |
 | **Maintainability** | `require-test-tag` — but it is **unscored** (see above) | reserved — stays 100 |

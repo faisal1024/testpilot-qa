@@ -145,15 +145,7 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
   return contexts
 }
 
-/**
- * The recognized locator method a call is chained off, if any.
- *
- * Note `first`/`last` are deliberately NOT in `LOCATOR_METHODS`: extracting
- * them would add them to `callSites`, which is the score's denominator, and a
- * precision PR must not move the score by enlarging the denominator — Ghost
- * went 98 -> 99 and mattermost 66 -> 69 with no quality change at all. 11e
- * adds them together with the denominator handling that has to accompany them.
- */
+/** The recognized locator method a call is chained off, if any. */
 function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
   if (!receiver || receiver.type !== 'CallExpression') {
     return undefined

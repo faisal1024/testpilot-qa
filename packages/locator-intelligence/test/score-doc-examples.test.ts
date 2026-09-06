@@ -61,8 +61,10 @@ describe('docs/Scoring.md worked examples', () => {
     expect(bySeverity('error')).toEqual(
       ['no-css-class-selector', 'no-hard-wait', 'no-nth-child', 'no-xpath'].sort(),
     )
-    expect(bySeverity('warn')).toEqual(['no-deep-css-chain', 'prefer-user-facing-locator'].sort())
-    expect(bySeverity('info')).toEqual([]) // no info rules by default
+    expect(bySeverity('warn')).toEqual(
+      ['avoid-positional-access', 'no-deep-css-chain', 'prefer-user-facing-locator'].sort(),
+    )
+    expect(bySeverity('info')).toEqual(['avoid-parent-traversal'])
   })
 
   it('sub-score penalties split by category and sum to the headline', () => {

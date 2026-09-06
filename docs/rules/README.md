@@ -7,6 +7,8 @@ rules are static (Tier 1): they read your test source and never touch a browser 
 
 | Rule | Category | Default | Summary |
 |---|---|---|---|
+| [`avoid-parent-traversal`](avoid-parent-traversal.md) | locator | info | locator('..') walks up to the parent element, so the test depends on how the DOM is nested. |
+| [`avoid-positional-access`](avoid-positional-access.md) | locator | warn | Selecting by position (.first(), .last(), .nth(n)) depends on how many elements match and in what order. |
 | [`no-css-class-selector`](no-css-class-selector.md) | locator | error | Class names exist for styling and change often, so class-based locators are brittle. |
 | [`no-deep-css-chain`](no-deep-css-chain.md) | locator | warn | Long descendant/child chains encode the DOM hierarchy and break on structural changes. |
 | [`no-hard-wait`](no-hard-wait.md) | flakiness | error | Fixed waitForTimeout() sleeps make tests slow and flaky. |

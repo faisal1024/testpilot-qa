@@ -98,6 +98,22 @@ export const configSchema = z
      */
     suites: z.record(suiteSchema).default({}),
     rules: z.record(severitySchema).default({}),
+    /**
+     * Per-rule settings, separate from `rules` so a severity stays a severity.
+     * Only rules with a genuine knob appear here.
+     */
+    ruleOptions: z
+      .object({
+        'no-deep-css-chain': z
+          .object({
+            /** Combinator steps at which a chain counts as deep. */
+            maxChainDepth: z.number().int().min(1).max(20).default(3),
+          })
+          .strict()
+          .default({}),
+      })
+      .strict()
+      .default({}),
     scoring: scoringSchema,
     ai: aiSchema,
   })

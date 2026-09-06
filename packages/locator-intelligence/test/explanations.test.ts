@@ -5,6 +5,8 @@ import { allBuiltinRules } from '../src/rules/index.js'
 describe('rule explanations', () => {
   it('covers exactly the built-in rules', () => {
     expect(explanationIds()).toEqual([
+      'avoid-parent-traversal',
+      'avoid-positional-access',
       'no-css-class-selector',
       'no-deep-css-chain',
       'no-hard-wait',

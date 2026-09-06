@@ -390,3 +390,20 @@ function classesOf2(parsed: ReturnType<typeof tokenizeSelector>): string[] {
     ),
   )
 }
+
+describe('nth-child(… of S) spacing', () => {
+  it.each([
+    ['li:nth-child(2 of .foo)', 'foo'],
+    ['li:nth-child(2 of.foo)', 'foo'],
+    ['li:nth-child(2n+1 of.foo)', 'foo'],
+    ['li:nth-last-child(1 of.bar)', 'bar'],
+  ])('reads the selector in %s', (selector, expected) => {
+    // CSS-4 needs no space after `of`, and Playwright accepts it. Requiring one
+    // dropped the selector with a clean parse.
+    expect(classesOf(selector)).toContain(expected)
+  })
+
+  it('still accepts a plain index with no `of`', () => {
+    expect(tokenizeSelector('li:nth-child(2n+1)').unparsed).toEqual([])
+  })
+})

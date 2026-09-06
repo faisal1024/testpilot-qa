@@ -1,41 +1,37 @@
+import { maxChainDepth } from '../selector/depth.js'
 import type { Rule } from './types.js'
 
-/** Combinator steps to flag (>= this many → "deep"). Conservative to limit false positives. */
-const MIN_CHAIN_DEPTH = 3
+/** Combinator steps to flag (>= this many -> "deep"). Configurable per project. */
+export const DEFAULT_MAX_CHAIN_DEPTH = 3
 
 /**
- * Approximate combinator depth of a CSS selector. Bracketed/parenthesized
- * sections are neutralized first so their internal spaces are not miscounted,
- * then combinators (`>`, `+`, `~`, descendant whitespace) split compound parts.
+ * Flags long CSS selector chains, which couple a test to DOM structure.
+ *
+ * Depth is now measured per selector in a list, from the tokenizer. The old
+ * string-mangling neutralised brackets and split on whitespace, so a comma made
+ * a list of shallow selectors look like one deep chain: `strong em, em strong`
+ * scored 3 when each selector is one step deep.
  */
-export function cssChainDepth(selector: string): number {
-  const cleaned = selector
-    .replace(/\[[^\]]*\]/g, '[]')
-    .replace(/\([^)]*\)/g, '()')
-    .replace(/[>+~]/g, ' ')
-  const parts = cleaned.split(/\s+/).filter(Boolean)
-  return Math.max(parts.length - 1, 0)
-}
-
-/** Flags long/deep CSS selector chains that couple tests to DOM structure. */
 export const noDeepCssChain: Rule = {
   id: 'no-deep-css-chain',
   category: 'locator',
   defaultSeverity: 'warn',
   docsUrl: 'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-deep-css-chain.md',
-  evaluate(context) {
-    if (context.isDynamic || context.apiCall !== 'locator') {
+  evaluate(context, options) {
+    if (context.isDynamic || context.apiCall !== 'locator' || !context.parsed) {
       return null
     }
-    if (context.selectorEngine !== 'css' || context.selector === undefined) {
+    const depth = maxChainDepth(context.parsed)
+    if (depth === null) {
       return null
     }
-    if (cssChainDepth(context.selector) >= MIN_CHAIN_DEPTH) {
-      return {
-        message: 'Deep CSS selector chains are tightly coupled to DOM structure.',
-        suggestion: 'Prefer a single user-facing locator such as getByRole() or getByTestId().',
-      }
+    const threshold = options?.maxChainDepth ?? DEFAULT_MAX_CHAIN_DEPTH
+    if (depth < threshold) {
+      return null
     }
-    return null
+    return {
+      message: `This selector is ${depth} combinator steps deep, which couples the test to DOM structure.`,
+      suggestion: 'Prefer a single user-facing locator such as getByRole() or getByTestId().',
+    }
   },
 }

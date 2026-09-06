@@ -536,8 +536,14 @@ export default defineConfig({
     'no-deep-css-chain': 'warn',
     'prefer-user-facing-locator': 'warn',
     'no-hard-wait': 'error',
+    'avoid-positional-access': 'warn',
+    'avoid-parent-traversal': 'info',
     // Off by default — opt in once the suite has a tag vocabulary.
     'require-test-tag': 'info',
+  },
+  // Per-rule settings, separate from `rules` so a severity stays a severity.
+  ruleOptions: {
+    'no-deep-css-chain': { maxChainDepth: 3 },
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
   // `doctor` warns when a referenced tag exists in no test, so a typo surfaces
