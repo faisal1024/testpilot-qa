@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import {
+  DEFAULT_HELPER_PATTERNS,
   type DiscoveryScope,
   type RegexPattern,
   type TestPilotConfig,
@@ -155,6 +156,13 @@ function compile(patterns: RegexPattern[] | undefined): RegExp[] {
 /** Discovered files, split by whether they are the suite's own or its helper layer. */
 export interface ResolvedFiles {
   files: string[]
+  /**
+   * Page-object / fixture files that exist and use Playwright but were **not**
+   * analyzed, because helper analysis was not asked for. Reported, because most
+   * suites keep most of their locators there: on Ghost it is 673 of 768 call sites,
+   * and a score that omits them silently is a score of the wrong thing.
+   */
+  helpersNotAnalyzed: number
   /** Absolute paths within `files` that came from `helperGlobs`. */
   helpers: Set<string>
   /**
@@ -195,6 +203,7 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       files: [...new Set(matched)].sort(),
       helpers: new Set(),
       helperCandidatesRejected: 0,
+      helpersNotAnalyzed: 0,
     }
   }
 
@@ -257,7 +266,31 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
   // exists for back into a green one.
   const helpers = new Set<string>()
   let helperCandidatesRejected = 0
+  let helpersNotAnalyzed = 0
   const helperScope = scopes.find((scope) => scope.helperGlobs.length > 0)
+
+  // When helper analysis is off, look anyway — but only to count. Most suites keep
+  // most of their locators in page objects (Ghost: 673 of 768 call sites), so a score
+  // that omits them without saying so is a confident number about the wrong files.
+  if (!helperScope && testFiles.size > 0) {
+    const probeScope = scopes[0]
+    if (probeScope) {
+      const isHelper = picomatch(DEFAULT_HELPER_PATTERNS, { dot: true })
+      const candidates = await run(
+        probeScope.helperRoot,
+        ANY_SOURCE_FILE,
+        probeScope.excludeGlobs,
+        true,
+      )
+      for (const file of candidates) {
+        if (testFiles.has(file) || !isHelper(toPosix(file))) continue
+        if (withinRoot(file, probeScope.helperRoot) && usesPlaywright(file)) {
+          helpersNotAnalyzed += 1
+        }
+      }
+    }
+  }
+
   if (helperScope && testFiles.size > 0) {
     const isHelper = picomatch(helperScope.helperGlobs, { dot: true })
     const candidates = await run(
@@ -284,5 +317,10 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
     }
   }
 
-  return { files: [...testFiles, ...helpers].sort(), helpers, helperCandidatesRejected }
+  return {
+    files: [...testFiles, ...helpers].sort(),
+    helpers,
+    helperCandidatesRejected,
+    helpersNotAnalyzed,
+  }
 }

@@ -91,7 +91,7 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const { files, helpers, helperCandidatesRejected } = await resolveFiles({
+  const { files, helpers, helperCandidatesRejected, helpersNotAnalyzed } = await resolveFiles({
     cwd: options.cwd,
     patterns: options.patterns,
     config: options.config,
@@ -106,6 +106,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
+  if (helpersNotAnalyzed > 0) {
+    warnings.push({
+      code: 'helpers-not-analyzed',
+      message: `${helpersNotAnalyzed} page object/fixture file(s) use Playwright but were not analyzed — Playwright does not run them, so this score covers your tests only. Add --with-helpers to include them.`,
+    })
+  }
   if (helperCandidatesRejected > 0) {
     // Not only when *every* candidate was rejected: a layer where one file is admitted
     // and twenty real ones are dropped is the same blindness, one level down.

@@ -188,6 +188,18 @@ describe('bench comparison', () => {
       expect(formatDiff([measurement()], [result]).signalLoss).toBe(true)
     })
 
+    it('records a warning about the repository, but not one about the checkout', () => {
+      // `helpers-not-analyzed` says the repo has a page-object layer we did not
+      // analyze — a property of the corpus. `test-root-missing` says our checkout is
+      // wrong. Only the second may never become the expected state.
+      expect(validateResults([measurement({ warnings: { 'helpers-not-analyzed': 1 } })])).toEqual(
+        [],
+      )
+      expect(validateResults([measurement({ warnings: { 'no-files-matched': 1 } })])[0]).toContain(
+        'no-files-matched',
+      )
+    })
+
     it('rejects a run whose warnings the harness caused', () => {
       // A baseline carrying `test-root-missing` normalizes the very signal the tool
       // emits to say "I did not analyze this directory".

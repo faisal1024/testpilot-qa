@@ -357,6 +357,34 @@ the **[release checklist](docs/Release-Checklist.md)**.
 
 ---
 
+## Known limitations (alpha)
+
+Written down because a tool that hides these is worse than one that doesn't have them yet.
+
+- **`prefer-user-facing-locator` over-fires.** It flags every `page.locator()` with a CSS or text
+  selector, including `[data-testid="…"]`, `[role="…"]`, `[aria-label="…"]`, and calls chained off a
+  `getByRole()` parent. On a five-repo survey of real suites it was ~65% of all findings and roughly
+  half of those were wrong. Until it is split into a mechanical rule and a judgement rule, set it to
+  `info` or `off` in `testpilot.config.ts`:
+
+  ```ts
+  rules: { 'prefer-user-facing-locator': 'info' }
+  ```
+
+- **The score is not yet comparable between projects.** The same selectors score differently
+  depending on whether you wrote `page.locator('[data-testid=x]')` or `page.getByTestId('x')`, and a
+  single line can carry two findings. Use it as a trend within one repo, not as a bar between repos.
+  `--baseline` is the honest gate today: it fails on *new* findings and grandfathers what you have.
+- **Accessibility and Maintainability sub-scores are always 100 A.** No rule feeds them yet.
+- **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there;
+  `analyze` says so when it finds them. Add `--with-helpers`.
+- **`no-hard-wait` overlaps `eslint-plugin-playwright`.** If you already run that plugin's
+  `no-wait-for-timeout`, TestPilot adds nothing there — its value is the suite-level score, the
+  brownfield baseline, and the report formats.
+
+Found a rule firing on correct code? That is the most useful bug report we get —
+[open a false-positive issue](https://github.com/faisal1024/testpilot-qa/issues/new?template=false-positive.yml).
+
 ## Documentation
 
 The design and planning docs (the alpha is implemented; these capture the architecture and

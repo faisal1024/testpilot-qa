@@ -43,6 +43,21 @@ import picomatch from 'picomatch'
 const warningCounts = (result) => result?.warnings ?? {}
 
 /**
+ * Warnings that mean the *checkout* is wrong — a missing test root, a config we could
+ * not read. Recording one enshrines a harness bug as the expected state.
+ *
+ * Warnings about the repository itself (it has a page-object layer we did not analyze)
+ * are legitimate properties of the corpus and may be recorded.
+ */
+const HARNESS_WARNINGS = new Set([
+  'no-files-matched',
+  'test-root-missing',
+  'playwright-config-partial',
+  'playwright-config-ignored',
+  'unknown-rule',
+])
+
+/**
  * Rows describing how one repo's measurement moved: `{ metric, before, after }`.
  * Empty when nothing meaningful changed.
  */
@@ -152,7 +167,7 @@ export function validateResults(results, { recording = true } = {}) {
     // *tool* regressing, and it must reach the diff table and the gate rather than
     // aborting with a message that blames the checkout.
     if (recording) {
-      const codes = Object.keys(warningCounts(result))
+      const codes = Object.keys(warningCounts(result)).filter((code) => HARNESS_WARNINGS.has(code))
       if (codes.length > 0) {
         problems.push(
           `${result.name}: the run reported ${codes.join(', ')} — fix the checkout rather than recording the warning as expected`,

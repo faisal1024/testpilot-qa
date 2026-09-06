@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 9c: records the --with-helpers file counts, so a change to the content-based helper admission gate cannot narrow the corpus silently.",
+  "reason": "Phase 9f: cal.com and Ghost now report helpers-not-analyzed. Not a loss — it is the disclosure that their scores cover the tests only, which was previously silent. Ghost's 98 A is measured over 95 of its 768 call sites.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -30,7 +30,9 @@
         "no-xpath": 1,
         "prefer-user-facing-locator": 684
       },
-      "warnings": {},
+      "warnings": {
+        "helpers-not-analyzed": 1
+      },
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
@@ -82,7 +84,9 @@
       "byRule": {
         "no-nth-child": 2
       },
-      "warnings": {},
+      "warnings": {
+        "helpers-not-analyzed": 1
+      },
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
@@ -110,7 +114,9 @@
         "no-xpath": 3,
         "prefer-user-facing-locator": 335
       },
-      "warnings": {},
+      "warnings": {
+        "helpers-not-analyzed": 1
+      },
       "discovery": {
         "testDir": "playwright-config",
         "include": "playwright-config"
@@ -139,7 +145,9 @@
         "no-xpath": 4,
         "prefer-user-facing-locator": 891
       },
-      "warnings": {},
+      "warnings": {
+        "helpers-not-analyzed": 1
+      },
       "discovery": {
         "testDir": "playwright-config",
         "include": "mixed"

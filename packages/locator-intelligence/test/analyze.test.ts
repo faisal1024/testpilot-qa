@@ -78,8 +78,12 @@ describe('analyze — Tier 1 rule set', () => {
     const report = await analyze({ cwd: dir, config: config() })
     expect(report.summary.filesAnalyzed).toBe(7)
     expect(report.summary.filesWithParseErrors).toBe(0)
-    expect(report.warnings).toEqual([])
     expect(report.rootDir).toBe(dir)
+    // The page object is not analyzed — but the run says so rather than reporting a
+    // score over the tests as if it covered the suite's locators.
+    expect(report.warnings).toEqual([
+      { code: 'helpers-not-analyzed', message: expect.stringContaining('1 page object') },
+    ])
   })
 
   it('ignores build output by default so compiled tests are not analyzed twice', async () => {

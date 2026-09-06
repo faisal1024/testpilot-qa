@@ -130,7 +130,7 @@ run; after **10**, they run a smoke subset with one flag instead of a regex; aft
 findings list is worth reading top to bottom; after **12**, the number is worth gating on; after
 **13**, `fix --write` removes a meaningful share of what was found.
 
-### Phase 9 — Trust the gate (`alpha.1` now, `alpha.2` for the rest)
+### Phase 9 — Trust the gate — **complete** (`alpha.1` now, `alpha.2` for the rest)
 
 Goal: **`analyze` can never report a score for files it did not open — and it finds the suite.**
 
@@ -157,22 +157,29 @@ Goal: **`analyze` can never report a score for files it did not open — and it 
   lessons: the reader must say "I don't know" rather than guess, a partial read must widen rather than
   narrow, and disclosure has to live in the report — stderr is exactly what `--quiet` drops and what
   shared artifacts never carry.*
-- **9c — Helper/POM discovery, opt-in first.** `include` gains a documented `helpers` companion
-  (e.g. `analyze --with-helpers` / `config.includeHelpers: ['**/pages/**', '**/fixtures/**']`), with
-  the rule engine tagging findings `inHelper: true` so reports can group them. Making this default is
-  a Phase 11 decision once precision is fixed (otherwise it triples noise).
+- ✅ **9c — Helper/POM discovery, opt-in (#76).** `analyze --with-helpers` / `fix --with-helpers`, or
+  an `includeHelpers` list. Findings carry `inHelper` and are marked in the table, HTML and SARIF.
+  A candidate must *use Playwright* to qualify — a directory name is a hint, not evidence, and
+  without that gate `fix --write` reached seven Next.js route files on cal.com. `getBy*`/`.nth(` count
+  only when Testing Library isn't claiming them: an RTL helper adds call sites without findings, which
+  moved a failing `--min-score` to passing. Helpers never rescue a run that found no tests.
+  **Ghost: 2 findings / 98 A → 116 findings, 114 of them in page objects.** Default-on is a Phase 11
+  decision, once the noisiest rule is fixed.
 - ✅ **9d — `doctor` stops being noisy on repos you don't own (#73).** It uses the same discovery as
   `analyze` (same config lookup, same roots, same `--no-playwright-discovery`), names where `testDir`
   came from, and skips the AI-guidance checks unless a `testpilot.config.ts` exists or
   `--strict-guidance` is passed. Doctor schema 1.1. **Follow-up:** `doctor` verifies that the resolved
   roots *exist*, not that they contain matching files, so an empty test directory passes `doctor` and
   still exits `3` under `analyze`.
-- **9f — Honesty stopgaps, docs-only, same week as `alpha.1`:** a README "Known limitations" section
-  that says plainly that `prefer-user-facing-locator` over-fires on test-id/role/aria selectors and
-  how to set it to `info` or `off` until Phase 11; `analyze --help` lists the global flags; a
-  **false-positive issue template** (rule id + snippet required) and Discussions turned on. Phase 11
-  needs real users' false positives to calibrate against, so the feedback loop opens before it, not
-  after. (Moved up from Phase 14.)
+- ✅ **9f — Honesty stopgaps (#77).** A README "Known limitations" section naming the over-firing
+  rule, the score's non-comparability, the two dead sub-scores, and the `eslint-plugin-playwright`
+  overlap. `analyze --help` now lists the global flags. False-positive and bug issue templates, both
+  requiring the snippet, because Phase 11 calibrates against real reports.
+
+  And the disclosure the reviews kept asking for: **`analyze` says when a page-object layer exists and
+  was not analyzed** (`helpers-not-analyzed`). Ghost's `98 A` now arrives with "73 page object/fixture
+  file(s) use Playwright but were not analyzed". The number was never wrong; it was about the wrong
+  files, silently.
 - ✅ **9e — Corpus benchmark (#75).** `pnpm bench` runs the built CLI against pinned commits of the
   five repos (blobless sparse clones, cached) and diffs files/findings-by-rule/score/warnings against
   `bench/baseline.json`. The gate is the **evidence that analysis happened** — files opened, locator

@@ -1,0 +1,36 @@
+name: Bug
+description: Something behaves differently than documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the command you ran and its output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Project shape
+      description: |
+        The parts that decide what gets analyzed — your `testpilot.config.ts` if you
+        have one, the `testDir`/`testMatch`/`projects` from `playwright.config.*`, and
+        where your tests live. `npx testpilot-qa analyze --verbose` prints what was
+        discovered and why.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `npx testpilot-qa --version`.
+    validations:
+      required: true
