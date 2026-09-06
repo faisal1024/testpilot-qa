@@ -19,6 +19,7 @@ function fromRule(rule: AnyRule, education: Education): RuleExplanation {
     id: rule.id,
     category: rule.category,
     defaultSeverity: rule.defaultSeverity,
+    ...(rule.defaultOff === true ? { defaultOff: true } : {}),
     docsUrl: rule.docsUrl,
     ...education,
   }

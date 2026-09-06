@@ -57,7 +57,8 @@ function toBreakdown(penalty: number, maxPenalty: number): ScoreBreakdown {
  * The headline uses all findings; each sub-score uses only the findings whose
  * category maps to that dimension, over the same denominator — so the dimension
  * penalties sum to the headline penalty. Accessibility/maintainability have no
- * rules yet, so they stay at 100 until such rules exist.
+ * *scored* rules yet, so they stay at 100 until such rules exist — `analyze`
+ * filters unscored findings (see `RuleMeta.scored`) before calling this.
  */
 export function computeScore(
   findings: Finding[],

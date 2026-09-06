@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { explanationIds, getExplanation, ruleExplanations } from '../src/explanations.js'
-import { builtinRules } from '../src/rules/index.js'
+import { allBuiltinRules } from '../src/rules/index.js'
 
 describe('rule explanations', () => {
   it('covers exactly the built-in rules', () => {
@@ -16,7 +16,7 @@ describe('rule explanations', () => {
   })
 
   it('stays consistent with each rule (id, category, severity, docs)', () => {
-    for (const rule of builtinRules) {
+    for (const rule of allBuiltinRules) {
       const explanation = getExplanation(rule.id)
       expect(explanation, rule.id).toBeDefined()
       expect(explanation?.category).toBe(rule.category)

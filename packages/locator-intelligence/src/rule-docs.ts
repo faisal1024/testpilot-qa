@@ -12,7 +12,7 @@ export function renderRuleDoc(explanation: RuleExplanation): string {
     '',
     '<!-- Generated from packages/locator-intelligence/src/explanations.ts by `pnpm docs:rules`. Do not edit by hand. -->',
     '',
-    `> **Category:** ${explanation.category} · **Default severity:** ${explanation.defaultSeverity}`,
+    `> **Category:** ${explanation.category} · **Default severity:** ${severityLabel(explanation)}`,
     '',
     explanation.summary,
     '',
@@ -54,7 +54,7 @@ export function renderRuleIndex(explanations: RuleExplanation[]): string {
   const rows = [...explanations]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map(
-      (e) => `| [\`${e.id}\`](${e.id}.md) | ${e.category} | ${e.defaultSeverity} | ${e.summary} |`,
+      (e) => `| [\`${e.id}\`](${e.id}.md) | ${e.category} | ${severityLabel(e)} | ${e.summary} |`,
     )
     .join('\n')
   return [
@@ -72,4 +72,16 @@ export function renderRuleIndex(explanations: RuleExplanation[]): string {
     'How findings turn into the 0–100 Locator Quality Score is documented in [Scoring.md](../Scoring.md).',
     '',
   ].join('\n')
+}
+
+/**
+ * "off (info when enabled)" for an opt-in rule.
+ *
+ * Printing the bare `defaultSeverity` claimed the rule ships on, in the one
+ * table a browsing user reads.
+ */
+function severityLabel(explanation: RuleExplanation): string {
+  return explanation.defaultOff === true
+    ? `off (\`${explanation.defaultSeverity}\` when enabled)`
+    : explanation.defaultSeverity
 }

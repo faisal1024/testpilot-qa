@@ -25,7 +25,7 @@ export function toHtml(report: AnalysisReport): string {
     '<main>',
     `<h1>${esc(title)}</h1>`,
     `<p class="lede">Static <strong>Tier&nbsp;1</strong> locator analysis — deterministic and offline. Category-level guidance only; <strong>no DOM-aware suggestions, no automatic rewrites</strong>.</p>`,
-    scoreCard(score),
+    scoreCard(score, report.summary),
     summarySection(summary, baseline),
     helperSection(report),
     discoverySection(report),
@@ -54,7 +54,7 @@ function gradeClass(grade: string): string {
   return `grade-${/^[A-F]$/.test(grade) ? grade : 'NA'}`
 }
 
-function scoreCard(score: AnalysisReport['score']): string {
+function scoreCard(score: AnalysisReport['score'], summary: AnalysisReport['summary']): string {
   const subs: Array<[string, ScoreBreakdown]> = [
     ['Resilience', score.subScores.resilience],
     ['Accessibility', score.subScores.accessibility],
@@ -76,8 +76,25 @@ function scoreCard(score: AnalysisReport['score']): string {
     `<div class="score-meta">Locator Quality Score · ${score.callSites} call-site(s)</div>`,
     '</div>',
     `<ul class="subscores">${rows}</ul>`,
+    // The shared artifact must not show a clean sub-score bar above a findings
+    // list those very findings are in. Naming the exclusion here is the whole
+    // point of counting it.
+    unscoredNote(summary),
     '</section>',
-  ].join('\n')
+  ]
+    .filter((part) => part !== '')
+    .join('\n')
+}
+
+/** Names findings counted but excluded from the score, or '' when there are none. */
+function unscoredNote(summary: AnalysisReport['summary']): string {
+  const unscored = summary.unscoredFindings ?? 0
+  if (unscored === 0) {
+    return ''
+  }
+  const rules = summary.unscoredRuleIds ?? []
+  const from = rules.length > 0 ? ` (${esc(rules.join(', '))})` : ''
+  return `<p class="unscored"><strong>${unscored}</strong> finding(s)${from} are counted but <strong>not scored</strong> — they are measured per test, while the score is per locator call-site. The sub-scores above do not reflect them.</p>`
 }
 
 function summarySection(
@@ -204,6 +221,7 @@ border:1px solid var(--line);border-radius:12px;padding:20px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:96px}
 .stat-value{font-size:24px;font-weight:700}.stat-label{color:var(--muted);font-size:13px}
 .baseline{color:var(--muted);margin:12px 0 0}
+.unscored{color:var(--muted);margin:14px 0 0;font-size:13px;line-height:1.5}
 .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700;color:#0b0d11}
 .grade-A,.bar-fill.grade-A{background:var(--a)}.grade-B,.bar-fill.grade-B{background:var(--b)}
 .grade-C,.bar-fill.grade-C{background:var(--c)}.grade-D,.bar-fill.grade-D{background:var(--d)}

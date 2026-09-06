@@ -21,10 +21,23 @@ Tagged scaffold, tag guidance for AI agents, and an opt-in `require-test-tag` ru
   test, which says nothing about quality. It does not fire on a test whose title could not be read
   statically: that title may well carry a tag, and flagging it would be an accusation based on our
   own blind spot.
+  It also abstains wherever it cannot see: a title or `tag` entry that is not statically readable
+  (its own or an enclosing `test.describe`'s), and any suite whose Playwright config declares a
+  global `testConfig.tag` — which tags every test, so none is untagged. It judges on
+  **selectable** tags, so a tag fused into a word (`user@example.com`) does not count, matching what
+  `testpilot tags` reports as unselectable.
+- **A one-line coverage rollup** (`warnings[].code: 'test-tag-coverage'`) replaces triaging N
+  interleaved `info` lines, and reconciles against `testpilot tags` — which counts more, because it
+  includes the tests this rule declines to judge.
 - **Its findings are counted but not scored.** The Locator Quality Score's denominator is locator
   call sites; a per-test rule has no relation to it (on Ghost — 95 call sites, 321 tests — scoring
-  it would drop a 98 to roughly 64). `summary.unscoredFindings` reports the exclusion rather than
-  applying it silently. **`analyze` schema `1.8` → `1.9`.**
+  it would drop a 98 to roughly 64). A rule declares this itself via `RuleMeta.scored: false`, not
+  by its kind, so a later test-level rule that *does* belong in the score is not blocked.
+  `summary.unscoredFindings` and `summary.unscoredRuleIds` report the exclusion, and it is stated in
+  the table and the HTML report too — a silent adjustment to a number you gate on would be worse
+  than the rule not existing. `docs/Scoring.md` documents it. **`analyze` schema `1.8` → `1.9`.**
+- Test-rule findings use a title-free snippet, so renaming an untagged test does not read as a new
+  finding and fail a `--baseline` gate for a reason unrelated to tagging.
 - The rule engine gains a second rule kind (`TestRule`, over a `test()` declaration rather than a
   locator call site) — the shape any rule about test *organization* needs. Extracting declarations
   is a second AST pass, so `analyze` only does it when such a rule is actually enabled.

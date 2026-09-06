@@ -2,7 +2,7 @@
 
 <!-- Generated from packages/locator-intelligence/src/explanations.ts by `pnpm docs:rules`. Do not edit by hand. -->
 
-> **Category:** maintainability · **Default severity:** info
+> **Category:** maintainability · **Default severity:** off (`info` when enabled)
 
 A test with no tag cannot be selected by any tag-based run, so it silently misses every suite.
 

@@ -606,6 +606,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "filesWithParseErrors": 0,
     "findings": 9,
     "unscoredFindings": 0,
+    "unscoredRuleIds": [],
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
   },
   "score": {
@@ -648,10 +649,14 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
 can represent, so every message that names a test directory renders these. `inHelper` (1.7) is present only on findings from the helper layer — absent, not `false`, otherwise.
-`unscoredFindings` (1.9) counts findings included in `summary.findings` but excluded from the
-score: `require-test-tag` is per **test**, and the score's denominator is locator **call sites**, so
-scoring it would move the grade for a reason it does not measure. The exclusion is reported rather
-than applied silently.
+`unscoredFindings` / `unscoredRuleIds` (1.9) count and name findings included in `summary.findings`
+but excluded from the score. A rule declares this itself (`RuleMeta.scored: false`) — it is not a
+property of the rule's kind, so a later test-level rule that *does* belong in the score is not
+blocked by the abstraction. Today only `require-test-tag` is unscored: it is per **test**, while the
+score's denominator is locator **call sites**, so scoring it would move the grade for a reason it
+does not measure. The exclusion is named in `--json`, in the table, and in the HTML report — never
+applied silently. `warnings[].code` also gains `test-tag-coverage`, a one-line rollup that
+reconciles the flagged count against `testpilot tags`.
 `playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
 `testConfig.tag`, which Playwright applies to every test — `analyze` does not use it, but `tags`
 cannot claim a complete vocabulary while one is declared.

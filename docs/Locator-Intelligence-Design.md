@@ -3,7 +3,8 @@
 > Status: Approved — aligned to *Updated Plan After Claude Review*
 > The differentiating capability of TestPilot QA.
 
-> **Alignment note (approved plan):** The **MVP (Tier 1) rule set is exactly six rules** —
+> **Alignment note (approved plan):** The **MVP (Tier 1) rule set is six scored rules** (plus
+> `require-test-tag`, added in Phase 10e — `off` by default and excluded from the score) —
 > `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`,
 > `prefer-user-facing-locator`, `no-hard-wait`. Sub-scores are Resilience, Accessibility,
 > Maintainability, Flakiness. Tier 1 must **never emit a concrete locator it cannot prove**
@@ -137,7 +138,7 @@ Headline = weighted mean (default weights configurable). This is why "100% test-
 
 ## 5. Rule Catalog
 
-### 5.1 MVP rule set (Tier 1, static — exactly six)
+### 5.1 MVP rule set (Tier 1, static — six scored rules, plus one opt-in test-organization rule)
 
 | Rule id | Cat | Sev | DOM? | Auto-fix | Detects |
 |---|---|---|---|---|---|

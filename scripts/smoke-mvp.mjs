@@ -211,6 +211,8 @@ check('require-test-tag is off unless asked for', () => {
       "test('untagged', async ({ page }) => {\n  await page.getByRole('button').click()\n})\n",
     )
     const off = JSON.parse(cli(['analyze', '--json', '--cwd', dir]).stdout)
+    // Without this the negative assertion below passes vacuously on 0 files.
+    assert(off.summary.filesAnalyzed === 1, `expected 1 file, got ${off.summary.filesAnalyzed}`)
     assert(
       !off.findings.some((finding) => finding.ruleId === 'require-test-tag'),
       'require-test-tag fired without being enabled',

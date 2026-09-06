@@ -74,6 +74,7 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
       `${summary.findings} finding(s) in ${summary.filesAnalyzed} file(s) — ` +
         `${error} error, ${warn} warn, ${info} info.`,
     )
+    lines.push(...unscoredNote(summary))
   }
 
   if (parseErrors.length > 0) {
@@ -85,4 +86,22 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
   }
 
   return lines.join('\n')
+}
+
+/**
+ * Names findings that were counted but kept out of the score.
+ *
+ * The JSON carries `unscoredFindings`, but the table is what a human reads and
+ * the HTML report is what gets shared — a silent adjustment in either is the
+ * failure this project spent Phase 9 removing.
+ */
+function unscoredNote(summary: AnalysisReport['summary']): string[] {
+  const unscored = summary.unscoredFindings ?? 0
+  if (unscored === 0) {
+    return []
+  }
+  const rules = summary.unscoredRuleIds ?? []
+  return [
+    `  ${unscored} of those are not scored${rules.length > 0 ? ` (${rules.join(', ')})` : ''} — measured per test, while the score is per locator call-site.`,
+  ]
 }

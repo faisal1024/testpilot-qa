@@ -1,3 +1,4 @@
+import { buildTagSelection, tagSelectionArgs } from '@testpilot/core'
 import type { Template, TemplateContext, TemplateFile } from './types.js'
 
 const PLAYWRIGHT_CONFIG = `import { defineConfig, devices } from '@playwright/test'
@@ -160,15 +161,22 @@ function packageJson(ctx: TemplateContext): string {
       'test:e2e:api': 'playwright test tests/api',
       'test:e2e:parallel': 'playwright test --workers=2',
       'test:e2e:headed': 'playwright test --headed',
-      // Plain Playwright, so the project stays ejectable. `testpilot run --tag
-      // smoke` writes the same flag for you and prints what it compiled to.
-      'test:e2e:smoke': 'playwright test --grep "/(?<!\\S)@smoke(?!\\S)/"',
+      // Plain Playwright, so the project stays ejectable — but *derived* from the
+      // same compiler `testpilot run --tag smoke` uses, so the scaffold cannot
+      // silently drift into selecting a different subset than the CLI does.
+      'test:e2e:smoke': `playwright test ${smokeGrepArgs()}`,
     },
     devDependencies: {
       '@playwright/test': '^1.49.0',
     },
   }
   return `${JSON.stringify(pkg, null, 2)}\n`
+}
+
+/** The exact flags `testpilot run --tag smoke` compiles to, shell-quoted. */
+function smokeGrepArgs(): string {
+  const args = tagSelectionArgs(buildTagSelection({ tag: ['smoke'] }))
+  return args.map((arg) => (arg.startsWith('--') ? arg : `"${arg}"`)).join(' ')
 }
 
 function readme(ctx: TemplateContext): string {

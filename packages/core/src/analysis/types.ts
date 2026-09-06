@@ -43,6 +43,7 @@ export interface AnalysisWarning {
   code:
     | 'unknown-rule'
     | 'no-files-matched'
+    | 'test-tag-coverage'
     | 'playwright-config-partial'
     | 'playwright-config-ignored'
     | 'test-root-missing'
@@ -77,6 +78,11 @@ export interface AnalysisSummary {
    * Present so the exclusion is visible rather than a silent adjustment.
    */
   unscoredFindings?: number
+  /**
+   * Which rules those came from, so a consumer can reconcile the count without
+   * hardcoding rule ids. Only rules that actually produced findings.
+   */
+  unscoredRuleIds?: string[]
   findings: number
   bySeverity: Record<FindingSeverity, number>
 }
@@ -147,7 +153,7 @@ export interface AnalysisReport {
  * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`);
  * 1.7 `inHelper` on findings + `summary.helperFiles`;
  * 1.8 `discovery.playwrightConfigDeclaresTags`;
- * 1.9 `summary.unscoredFindings`.
+ * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`.
  */
 export const ANALYSIS_SCHEMA_VERSION = '1.9'
 
@@ -160,6 +166,8 @@ export interface RuleExplanation {
   id: string
   category: RuleCategory
   defaultSeverity: FindingSeverity
+  /** True when the rule only runs if the config opts in. */
+  defaultOff?: boolean
   title: string
   summary: string
   whyItMatters: string

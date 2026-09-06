@@ -42,6 +42,12 @@ export interface TestDeclaration {
    * not here, so nothing is double-counted.
    */
   unreadableTags: number
+  /**
+   * False when anything about this test's tags could not be read — its own
+   * `tag` entries, or those on an enclosing `test.describe`. A rule must not
+   * accuse a test of being untagged on the strength of our own blind spot.
+   */
+  tagsComplete: boolean
   line: number
   column: number
 }
@@ -312,6 +318,8 @@ interface OwnTags {
   all: string[]
   title: string[]
   details: string[]
+  /** Unreadable `tag` entries on enclosing describes, folded down. */
+  inheritedUnreadable: number
   /** True when a title was expected in this position and could not be read. */
   titleUnreadable: boolean
   /** True when the title is a template literal with interpolations. */
@@ -330,6 +338,7 @@ const EMPTY_TAGS: OwnTags = {
   details: [],
   anchored: [],
   unreadable: 0,
+  inheritedUnreadable: 0,
   titleUnreadable: false,
   titleDynamic: false,
 }
@@ -341,9 +350,11 @@ function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
     title: sortedUnique([...inherited.title, ...own.title]),
     details: sortedUnique([...inherited.details, ...own.details]),
     anchored: sortedUnique([...inherited.anchored, ...own.anchored]),
-    // Only ever read off the declaration itself; a describe's unreadable
-    // entries are counted when that describe is visited.
+    // Counted once, when the describe itself is visited — but the *fact* that
+    // something was unreadable has to reach the tests inside, or a rule over
+    // them cannot know its view is partial.
     unreadable: own.unreadable,
+    inheritedUnreadable: inherited.inheritedUnreadable + inherited.unreadable,
     titleUnreadable: own.titleUnreadable,
     titleDynamic: own.titleDynamic,
   }
@@ -372,6 +383,7 @@ function ownTagsOf(node: AstNode, titled: boolean): OwnTags {
     details: sortedUnique(fromDetails.tags),
     anchored: sortedUnique([...fromTitle.anchored, ...fromDetails.tags]),
     unreadable: fromDetails.unreadable,
+    inheritedUnreadable: 0,
     titleUnreadable: titled && title === null,
     titleDynamic: title?.dynamic === true,
   }
@@ -473,6 +485,7 @@ export function extractTests(program: AstNode): ExtractedTests {
           detailTags: effective.details,
           anchoredTags: effective.anchored,
           unreadableTags: own.unreadable,
+          tagsComplete: own.unreadable === 0 && effective.inheritedUnreadable === 0,
           effectiveTags: effective.all,
           line: loc?.start.line ?? 0,
           column: (loc?.start.column ?? 0) + 1,

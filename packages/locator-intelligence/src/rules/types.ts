@@ -22,6 +22,18 @@ export interface RuleMeta {
    * nothing about quality, so it has to be asked for.
    */
   defaultOff?: boolean
+  /**
+   * False when the rule's findings are counted but must not move the Locator
+   * Quality Score.
+   *
+   * A property of the rule, deliberately **not** of its kind: "measured per
+   * test" and "not scored" are different questions, and a later test-level rule
+   * (a stray `test.only`, say) may well belong in the score. The score's
+   * denominator is locator call sites, so a rule whose findings do not scale
+   * with call sites cannot share it — `require-test-tag` on Ghost would turn 95
+   * call sites and 321 tests into a 98 → 64 drop that measures nothing.
+   */
+  scored?: boolean
 }
 
 /**
@@ -39,9 +51,19 @@ export interface Rule extends RuleMeta {
  * shape needed for anything about test *organization*. Kept a separate type so
  * the engine cannot accidentally hand one a `LocatorContext`.
  */
+/** Facts about the run that a test-level rule needs beyond the declaration. */
+export interface TestRuleContext {
+  /**
+   * True when the Playwright config declares a `tag` that applies to every test
+   * in every file — so no test in this suite is untagged, whatever its own
+   * declaration says.
+   */
+  playwrightConfigDeclaresTags: boolean
+}
+
 export interface TestRule extends RuleMeta {
   kind: 'test'
-  evaluate(test: TestDeclaration): RuleViolation | null
+  evaluate(test: TestDeclaration, context: TestRuleContext): RuleViolation | null
 }
 
 /** Either rule kind, for lookups that only need the shared metadata. */

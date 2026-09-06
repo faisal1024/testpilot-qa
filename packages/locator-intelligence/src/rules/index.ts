@@ -7,7 +7,14 @@ import { preferUserFacingLocator } from './prefer-user-facing-locator.js'
 import { requireTestTag } from './require-test-tag.js'
 import type { AnyRule, Rule, TestRule } from './types.js'
 
-export type { AnyRule, Rule, RuleMeta, RuleViolation, TestRule } from './types.js'
+export type {
+  AnyRule,
+  Rule,
+  RuleMeta,
+  RuleViolation,
+  TestRule,
+  TestRuleContext,
+} from './types.js'
 
 /**
  * Built-in MVP Tier 1 rules (static analysis only). Order here does not affect

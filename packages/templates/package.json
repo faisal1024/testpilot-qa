@@ -16,5 +16,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsup"
+  },
+  "dependencies": {
+    "@testpilot/core": "workspace:*"
   }
 }

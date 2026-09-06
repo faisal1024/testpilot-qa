@@ -15,7 +15,8 @@ import {
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
-import { builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
+import { allBuiltinRules, builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
+import { isJudgeable } from './rules/require-test-tag.js'
 import type { Rule, TestRule } from './rules/types.js'
 import { computeScore } from './score.js'
 import { extractTests } from './tags/extract-tests.js'
@@ -177,6 +178,8 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
   let callSites = 0
+  let testDeclarations = 0
+  let unjudgeableTests = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
@@ -203,9 +206,16 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     // A second AST pass, so only when a test-level rule is actually enabled.
     // All of them are `off` by default, so an ordinary run pays nothing.
     if (testRules.length > 0) {
+      const testContext = {
+        playwrightConfigDeclaresTags: options.discovery?.playwrightConfigDeclaresTags === true,
+      }
       for (const declaration of extractTests(program).tests) {
+        testDeclarations += 1
+        if (!isJudgeable(declaration, testContext)) {
+          unjudgeableTests += 1
+        }
         for (const { rule, severity } of testRules) {
-          const violation = rule.evaluate(declaration)
+          const violation = rule.evaluate(declaration, testContext)
           if (!violation) {
             continue
           }
@@ -218,7 +228,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
             ...(inHelper ? { inHelper: true } : {}),
             line: declaration.line,
             column: declaration.column,
-            snippet: declaration.title ? `test('${declaration.title}')` : 'test(...)',
+            // NOT the title: `findingKey` is (ruleId, file, snippet), so a
+            // title-bearing snippet would make renaming an untagged test read
+            // as a new finding and fail a `--baseline` gate for a reason
+            // unrelated to tagging. Locator rules are immune because their
+            // snippet is the locator; this one has to say so explicitly.
+            snippet: 'test(…)',
             suggestion: violation.suggestion,
             docsUrl: rule.docsUrl,
           })
@@ -249,6 +264,25 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     }
   }
 
+  // One line a reader can act on, instead of N interleaved `info` lines they
+  // cannot triage — and it reconciles against `testpilot tags`, which counts
+  // every untagged test including the ones this rule abstains on.
+  if (testRules.length > 0 && testDeclarations > 0) {
+    const flagged = findings.filter((finding) => finding.ruleId === 'require-test-tag').length
+    if (flagged > 0 || unjudgeableTests > 0) {
+      const judged = testDeclarations - unjudgeableTests
+      const coverage = judged > 0 ? Math.round(((judged - flagged) / judged) * 100) : 100
+      warnings.push({
+        code: 'test-tag-coverage',
+        message: `require-test-tag: ${flagged} of ${judged} readable test declaration(s) carry no tag (${coverage}% tagged)${
+          unjudgeableTests > 0
+            ? `; a further ${unjudgeableTests} could not be judged — their title or tags are not statically readable, so they are neither flagged here nor counted as tagged. \`testpilot tags\` counts whichever of those it sees as untagged, so its total is the higher of the two.`
+            : '.'
+        }`,
+      })
+    }
+  }
+
   findings.sort(compareFindings)
   parseErrors.sort((a, b) => a.file.localeCompare(b.file))
 
@@ -257,13 +291,15 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     bySeverity[finding.severity] += 1
   }
 
-  // Test-level findings are counted but NOT scored. The Locator Quality Score's
-  // denominator is call sites, and a per-test rule has no relationship to it: on
-  // Ghost (95 call sites, 321 tests) `require-test-tag` alone would drop a 98 to
-  // roughly 64, a number about nothing. Excluding them silently would be its own
-  // dishonesty, so `summary.unscoredFindings` says how many were left out.
-  const testRuleIds = new Set(builtinTestRules.map((rule) => rule.id))
-  const scoredFindings = findings.filter((finding) => !testRuleIds.has(finding.ruleId))
+  // Some findings are counted but NOT scored — see `RuleMeta.scored`. Keyed on
+  // the rule's own declaration rather than on its kind, so a later test-level
+  // rule that *does* belong in the score is not blocked by the abstraction.
+  // Excluding them silently would be its own dishonesty, so the exclusion is
+  // named in the report and in every human-facing output.
+  const unscoredRuleIds = new Set(
+    allBuiltinRules.filter((rule) => rule.scored === false).map((rule) => rule.id),
+  )
+  const scoredFindings = findings.filter((finding) => !unscoredRuleIds.has(finding.ruleId))
   const score = computeScore(scoredFindings, callSites, options.config.scoring.weights)
 
   return {
@@ -278,6 +314,9 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       filesWithParseErrors: parseErrors.length,
       findings: findings.length,
       unscoredFindings: findings.length - scoredFindings.length,
+      unscoredRuleIds: [...unscoredRuleIds].filter((id) =>
+        findings.some((finding) => finding.ruleId === id),
+      ),
       bySeverity,
     },
     score,

@@ -17,13 +17,21 @@ This page explains exactly how the number is produced, so you can trust it and p
 ## The formula
 
 ```
-penalty    = Σ weight(finding.severity)        # summed over every finding
+penalty    = Σ weight(finding.severity)        # over every SCORED finding (see below)
 maxPenalty = callSites × weight(error)         # the worst case for this many call-sites
 score      = clamp( round( 100 × (1 − penalty / maxPenalty) ), 0, 100 )
 ```
 
 - A **call-site** is one locator call the analyzer looked at (e.g. a `page.locator(...)`,
   `getByRole(...)`, `getByText(...)`). `callSites` is the denominator basis.
+- **Not every finding is scored.** A rule measured per *test* cannot share a denominator counted per
+  *call site*: on Ghost (95 call-sites, 321 tests) `require-test-tag` alone would turn a `98 (A)`
+  into roughly `64 (D)` without a single locator changing. Such rules are **counted** in
+  `summary.findings` and reported in full, and **excluded** from `penalty`. `summary.unscoredFindings`
+  and `summary.unscoredRuleIds` name the exclusion, and the table and HTML report both say so — a
+  silent adjustment to a number you gate on would be worse than the rule not existing.
+  Today exactly one rule is unscored: [`require-test-tag`](rules/require-test-tag.md), which is also
+  `off` by default.
 - Each **finding** subtracts its severity's weight from the score.
 - The result is rounded and clamped to `[0, 100]`, then graded.
 
@@ -136,7 +144,7 @@ penalty:
 | **Resilience** | locator rules (`no-xpath`, `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`) | active |
 | **Flakiness** | flakiness rules (`no-hard-wait`) | active |
 | **Accessibility** | *(no rules yet)* | reserved — stays 100 |
-| **Maintainability** | *(no rules yet)* | reserved — stays 100 |
+| **Maintainability** | `require-test-tag` — but it is **unscored** (see above) | reserved — stays 100 |
 
 Example — 4 call-sites with one locator `error` (5) and one flakiness `warn` (2) — the flakiness
 finding is a `warn` here because `no-hard-wait` has been downgraded from its `error` default:
@@ -145,7 +153,7 @@ finding is a `warn` here because `no-hard-wait` has been downgraded from its `er
 headline:     round(100 × (1 − 7/20)) = 65
 resilience:   round(100 × (1 − 5/20)) = 75    (only the locator error)
 flakiness:    round(100 × (1 − 2/20)) = 90    (only the flakiness warn)
-accessibility / maintainability = 100         (no rules in those dimensions yet)
+accessibility / maintainability = 100         (no *scored* rules in those dimensions)
 ```
 
 Accessibility and Maintainability stay at 100 until rules exist for them — they're **reserved, not

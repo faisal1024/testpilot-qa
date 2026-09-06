@@ -35,9 +35,15 @@ export { type ExtractedTests, type TestDeclaration, extractTests } from './tags/
 export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'
 export { computeScore, gradeFor, type ScoringWeights } from './score.js'
 export {
+  allBuiltinRules,
   builtinRuleIds,
   builtinRules,
+  builtinTestRules,
   getRule,
+  type AnyRule,
   type Rule,
+  type RuleMeta,
   type RuleViolation,
+  type TestRule,
+  type TestRuleContext,
 } from './rules/index.js'

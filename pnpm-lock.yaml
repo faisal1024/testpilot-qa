@@ -125,7 +125,11 @@ importers:
         specifier: workspace:*
         version: link:../templates
 
-  packages/templates: {}
+  packages/templates:
+    dependencies:
+      '@testpilot/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
