@@ -12,6 +12,7 @@ import {
 import { type ConfigDiscovery, DEFAULT_DISCOVERY } from '../config/discovery.js'
 import { ConfigError } from '../config/errors.js'
 import { loadConfig } from '../config/load-config.js'
+import { resolveDiscovery } from '../config/resolve-discovery.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
 import {
   findPlaywrightConfig,
@@ -20,8 +21,12 @@ import {
   resolvePlaywrightBin,
 } from '../project/discovery.js'
 
-/** Bumped on changes to the doctor report shape. */
-export const DOCTOR_SCHEMA_VERSION = '1.0'
+/**
+ * Bumped on changes to the doctor report shape.
+ * 1.1: `checks` is variable-length (`ai-guidance` is omitted on a project without a
+ * `testpilot.config.ts` unless `--strict-guidance`); `test-directory` gained `details`.
+ */
+export const DOCTOR_SCHEMA_VERSION = '1.1'
 
 const MIN_NODE_MAJOR = 20
 
@@ -177,6 +182,24 @@ function checkTestDirectory(
       }
 }
 
+/**
+ * Surfaced only when a Playwright config was found but could not be used for
+ * discovery — otherwise the user is left wondering why their suite is invisible.
+ */
+function checkPlaywrightDiscovery(discovery: ConfigDiscovery): DoctorCheck {
+  const ignored = discovery.playwrightConfigIgnored
+  return {
+    id: 'playwright-discovery',
+    title: 'Playwright config discovery',
+    category: 'config',
+    status: 'warn',
+    message: `${ignored?.path} was not used for test discovery: ${ignored?.reason}.`,
+    remediation:
+      'Set `testDir` (and `include`) explicitly in testpilot.config.ts — TestPilot reads the Playwright config statically and cannot evaluate computed values.',
+    details: { playwrightConfigPath: ignored?.path, reason: ignored?.reason },
+  }
+}
+
 function checkIncludeGlobs(include: string[]): DoctorCheck {
   const usable =
     Array.isArray(include) &&
@@ -327,13 +350,16 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   let configFilePresent = false
   let configDir: string | null = null
   let discovery: ConfigDiscovery = DEFAULT_DISCOVERY
+  let roots: string[] = []
   let configCheck: DoctorCheck
   try {
     const result = await loadConfig({ cwd, configPath: options.configPath })
-    config = result.config
     configFilePresent = result.filepath !== null
     configDir = result.filepath === null ? null : dirname(result.filepath)
-    discovery = result.discovery
+    const resolved = resolveDiscovery(result, { rootDir: configDir ?? projectRoot })
+    config = resolved.config
+    discovery = resolved.discovery
+    roots = resolved.roots
     configCheck = {
       id: 'config',
       title: 'TestPilot config',
@@ -341,8 +367,8 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
       status: 'pass',
       message: configFilePresent
         ? `Loaded ${result.filepath}.`
-        : result.discovery.playwrightConfigPath
-          ? `No testpilot.config.ts — discovery falls back to ${result.discovery.playwrightConfigPath}.`
+        : discovery.playwrightConfigPath
+          ? `No testpilot.config.ts — discovery falls back to ${discovery.playwrightConfigPath}.`
           : 'No testpilot.config.ts found — using defaults.',
     }
   } catch (error) {
@@ -360,7 +386,10 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   // Resolve testDir exactly as `analyze`/`fix` do (see resolveRootDir in the CLI):
   // the config file's directory, else the project root. `doctor` must predict what
   // `analyze` will do, so these two fallbacks have to stay in step.
-  const testDirExists = isDirectory(join(configDir ?? projectRoot, config.testDir))
+  const testDirExists =
+    roots.length > 0
+      ? roots.every((root) => isDirectory(root))
+      : isDirectory(join(configDir ?? projectRoot, config.testDir))
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),
@@ -370,6 +399,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     configCheck,
     checkTestDirectory(config.testDir, testDirExists, discovery),
     checkIncludeGlobs(config.include),
+    ...(discovery.playwrightConfigIgnored ? [checkPlaywrightDiscovery(discovery)] : []),
     checkProjectStructure(configFilePresent, playwrightConfigPath !== null, testDirExists),
   ]
   // Guidance files are a TestPilot-project concern. On a repo that has not adopted

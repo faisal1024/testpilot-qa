@@ -12,7 +12,7 @@ import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
-import { describeDiscovery, resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
+import { resolveDiscoveryOrExit } from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
@@ -40,20 +40,28 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const { config, filepath, discovery } = await resolveConfigOrExit(globals)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const { config, filepath, discovery, rootDir } = resolved
   const write = options.write === true
 
-  const rootDir = resolveRootDir(globals.cwd, filepath)
-  if (globals.verbose && !globals.quiet) {
-    console.error(`[testpilot] ${describeDiscovery(config, discovery)}`)
-  }
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
-  const files = await resolveTestFiles(globals.cwd, explicitPatterns, config, rootDir)
+  const files = await resolveTestFiles({
+    cwd: globals.cwd,
+    patterns: explicitPatterns,
+    config,
+    rootDir,
+    roots: resolved.roots,
+    matchRegex: resolved.matchRegex,
+    ignoreRegex: resolved.ignoreRegex,
+  })
   if (files.length === 0) {
-    failNoFilesMatched(globals, patterns, config, filepath)
+    failNoFilesMatched(globals, patterns, config, filepath, discovery)
   }
   // Display paths use the same base as `analyze` reports, so the two agree.
-  const displayBase = discoveryBase(globals.cwd, explicitPatterns, rootDir)
+  const displayBase =
+    resolved.roots.length === 1 && !explicitPatterns
+      ? (resolved.roots[0] ?? rootDir)
+      : discoveryBase(globals.cwd, explicitPatterns, rootDir)
 
   const results: FileFixSummary[] = []
   const diffs: string[] = []

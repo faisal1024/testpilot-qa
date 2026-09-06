@@ -10,6 +10,8 @@ export interface GlobalOptions {
   yes: boolean
   cwd: string
   configPath: string | undefined
+  /** `--no-playwright-discovery` turns off the Playwright-config fallback. */
+  playwrightDiscovery: boolean
 }
 
 /** Reads the merged global options for a (sub)command. */
@@ -24,5 +26,6 @@ export function readGlobalOptions(command: Command): GlobalOptions {
     // Absolute: `--cwd` reaches the report as `rootDir`, which is documented absolute.
     cwd: resolve(typeof opts.cwd === 'string' ? opts.cwd : process.cwd()),
     configPath: typeof opts.config === 'string' ? opts.config : undefined,
+    playwrightDiscovery: opts.playwrightDiscovery !== false,
   }
 }

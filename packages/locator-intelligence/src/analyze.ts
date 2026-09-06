@@ -33,6 +33,12 @@ export interface AnalyzeOptions {
   rootDir?: string
   /** How the files were selected; surfaced verbatim in the report. */
   discovery?: ConfigDiscovery
+  /** Absolute test roots (Playwright suites can declare several via `projects[]`). */
+  roots?: string[]
+  /** Playwright RegExp `testMatch` sources. */
+  matchRegex?: string[]
+  /** Playwright RegExp `testIgnore` sources. */
+  ignoreRegex?: string[]
 }
 
 interface EnabledRule {
@@ -88,12 +94,15 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const files = await resolveTestFiles(
-    options.cwd,
-    options.patterns,
-    options.config,
-    options.rootDir,
-  )
+  const files = await resolveTestFiles({
+    cwd: options.cwd,
+    patterns: options.patterns,
+    config: options.config,
+    rootDir: options.rootDir,
+    roots: options.roots,
+    matchRegex: options.matchRegex,
+    ignoreRegex: options.ignoreRegex,
+  })
   // Paths are reported relative to the same base discovery used (see discoveryBase).
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.

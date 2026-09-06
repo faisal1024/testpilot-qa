@@ -1,5 +1,10 @@
 import { resolve } from 'node:path'
-import { type TestPilotConfig, isDirectory } from '@testpilot/core'
+import {
+  type ConfigDiscovery,
+  type TestPilotConfig,
+  formatDiscoverySource,
+  isDirectory,
+} from '@testpilot/core'
 import { ExitCode } from './exit-codes.js'
 import { fail } from './fail.js'
 import type { GlobalOptions } from './global-options.js'
@@ -19,9 +24,11 @@ export function failNoFilesMatched(
   patterns: string[],
   config: TestPilotConfig,
   configPath: string | null,
+  discovery: ConfigDiscovery,
 ): never {
-  const source = configPath ?? 'the built-in defaults (no config file found)'
-  const includeHint = `include ${JSON.stringify(config.include)} (exclude ${JSON.stringify(config.exclude)}) from ${source}`
+  // Name the real source. Attributing a Playwright-supplied glob to "the built-in
+  // defaults" sends the user to edit a file that has nothing to do with the problem.
+  const includeHint = `include ${JSON.stringify(config.include)} ${formatDiscoverySource(discovery, 'include')} (exclude ${formatDiscoverySource(discovery, 'exclude')})`
   if (patterns.length > 0) {
     const allDirectories = patterns.every((pattern) => isDirectory(resolve(globals.cwd, pattern)))
     if (allDirectories) {
@@ -43,7 +50,12 @@ export function failNoFilesMatched(
   fail(
     globals,
     [
-      `No test files matched ${includeHint} under testDir "${config.testDir}".`,
+      `No test files matched ${includeHint} under testDir "${config.testDir}" (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
+      ...(discovery.playwrightConfigIgnored
+        ? [
+            `A Playwright config was found at ${discovery.playwrightConfigIgnored.path} but not used for discovery: ${discovery.playwrightConfigIgnored.reason}.`,
+          ]
+        : []),
       'Set testDir/include in testpilot.config.ts to point at your suite, or pass explicit patterns: testpilot analyze "e2e/**/*.spec.ts".',
     ].join('\n'),
     ExitCode.CONFIG,

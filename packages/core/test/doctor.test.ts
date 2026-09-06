@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { GUIDANCE_VERSION, generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type DoctorReport, runDoctor } from '../src/index.js'
+import { DOCTOR_SCHEMA_VERSION, type DoctorReport, runDoctor } from '../src/index.js'
 
 let dir: string
 
@@ -98,7 +98,7 @@ describe('runDoctor', () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
 
-    expect(report.schemaVersion).toBe('1.0')
+    expect(report.schemaVersion).toBe(DOCTOR_SCHEMA_VERSION)
     expect(report.command).toBe('doctor')
     expect(report.status).toBe('pass')
     expect(report.checks.every((check) => check.status === 'pass')).toBe(true)

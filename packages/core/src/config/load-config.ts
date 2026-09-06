@@ -1,10 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { createJiti } from 'jiti'
-import { findPlaywrightConfig, findProjectRoot } from '../project/discovery.js'
-import { type ConfigDiscovery, DEFAULT_DISCOVERY } from './discovery.js'
 import { ConfigError } from './errors.js'
-import { readPlaywrightTestSettings } from './playwright-config.js'
 import { type TestPilotConfig, configSchema } from './schema.js'
 
 const CONFIG_BASENAMES = [
@@ -26,51 +23,12 @@ export interface LoadConfigResult {
   config: TestPilotConfig
   /** Absolute path of the loaded file, or `null` when defaults were used. */
   filepath: string | null
-  /** Where `testDir` / `include` came from — see {@link ConfigDiscovery}. */
-  discovery: ConfigDiscovery
-}
-
-/**
- * Fills `testDir` / `include` from the project's Playwright config for any key the
- * user did not set explicitly, so a repo with no `testpilot.config.ts` analyzes the
- * suite Playwright actually runs (cal.com's `*.e2e.ts` and immich's `*.e2e-spec.ts`
- * matched nothing under the built-in defaults). An explicit TestPilot setting always
- * wins; `testIgnore` is appended to `exclude` rather than replacing it.
- */
-async function applyPlaywrightDiscovery(
-  config: TestPilotConfig,
-  explicitKeys: Set<string>,
-  root: string,
-): Promise<ConfigDiscovery> {
-  const discovery: ConfigDiscovery = {
-    testDir: explicitKeys.has('testDir') ? 'testpilot-config' : 'default',
-    include: explicitKeys.has('include') ? 'testpilot-config' : 'default',
-    playwrightConfigPath: null,
-  }
-  if (discovery.testDir !== 'default' && discovery.include !== 'default') {
-    return discovery
-  }
-  const playwrightConfigPath = findPlaywrightConfig(root, config.playwrightConfig)
-  if (!playwrightConfigPath) {
-    return discovery
-  }
-  const settings = await readPlaywrightTestSettings(playwrightConfigPath)
-  if (!settings) {
-    return discovery
-  }
-  discovery.playwrightConfigPath = playwrightConfigPath
-  if (discovery.testDir === 'default' && settings.testDir) {
-    config.testDir = settings.testDir
-    discovery.testDir = 'playwright-config'
-  }
-  if (discovery.include === 'default' && settings.testMatch) {
-    config.include = settings.testMatch
-    discovery.include = 'playwright-config'
-  }
-  if (settings.testIgnore && !explicitKeys.has('exclude')) {
-    config.exclude = [...config.exclude, ...settings.testIgnore]
-  }
-  return discovery
+  /**
+   * Keys the user set in the config file (with a defined value). Lets callers
+   * distinguish "the user chose `tests`" from "zod applied its default", which is
+   * what makes the Playwright fallback safe — see `resolveDiscovery`.
+   */
+  explicitKeys: ReadonlySet<string>
 }
 
 /** Walks up from `cwd` looking for a `testpilot.config.*` file. */
@@ -114,9 +72,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadC
   }
 
   if (!filepath) {
-    const config = configSchema.parse({})
-    const discovery = await applyPlaywrightDiscovery(config, new Set(), findProjectRoot(cwd))
-    return { config, filepath: null, discovery }
+    return { config: configSchema.parse({}), filepath: null, explicitKeys: new Set() }
   }
 
   let loaded: unknown
@@ -135,11 +91,14 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadC
     throw new ConfigError(`Invalid TestPilot config in ${filepath}:\n${issues}`)
   }
 
+  // An explicitly-`undefined` value is not a choice — zod's default applies, and so
+  // should the Playwright fallback.
   const explicitKeys = new Set(
-    loaded && typeof loaded === 'object' ? Object.keys(loaded as object) : [],
+    loaded && typeof loaded === 'object'
+      ? Object.entries(loaded as Record<string, unknown>)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key)
+      : [],
   )
-  const discovery = await applyPlaywrightDiscovery(parsed.data, explicitKeys, dirname(filepath))
-  return { config: parsed.data, filepath, discovery }
+  return { config: parsed.data, filepath, explicitKeys }
 }
-
-export { DEFAULT_DISCOVERY }

@@ -39,6 +39,7 @@
 | `--quiet`, `-q` | Errors only. |
 | `--verbose` | Debug logging. |
 | `--no-color` | Disable ANSI color. |
+| `--no-playwright-discovery` | Do not read `testDir`/`testMatch` from `playwright.config.*`. |
 | `--version`, `-v` | Print version. |
 | `--help`, `-h` | Contextual help (works on every subcommand). |
 
@@ -296,6 +297,11 @@ envelope:
 }
 ```
 
+The `ai-guidance` check runs only on a project that has a `testpilot.config.ts` (or with
+`--strict-guidance`), so `doctor` on a repository you are merely evaluating does not report missing
+guidance files it was never asked for. A `playwright-discovery` check appears only when a Playwright
+config was found and could not be used for discovery.
+
 **Exit codes:** `0` when no checks fail (warnings are not hard problems); `3` when the config is
 invalid; `4` for environment/project setup problems (e.g. missing Playwright or `package.json`);
 `5` only on an unexpected internal error. (Config failure takes precedence → `3`.)
@@ -407,13 +413,20 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.4`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.5`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.4",
+  "schemaVersion": "1.5",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
+  "discovery": {
+    "testDir": "playwright-config",
+    "include": "playwright-config",
+    "exclude": "default",
+    "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
+    "playwrightConfigIgnored": null
+  },
   "summary": {
     "filesAnalyzed": 3,
     "filesWithParseErrors": 0,
@@ -453,7 +466,10 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 }
 ```
 
-`rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
+`discovery` (1.5) says where each file-selection setting came from —
+`testpilot-config` | `playwright-config` | `default` — plus the Playwright config that supplied them
+(`playwrightConfigPath`) or the one that was found and could not be used
+(`playwrightConfigIgnored: { path, reason }`). `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
@@ -512,6 +528,24 @@ you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still
 `testDir` is resolved relative to the directory of the loaded `testpilot.config.ts` — or, when there is
 no config file, the **project root** (nearest `package.json`), which is the same base `doctor` checks —
 so running from a sub-directory of a monorepo still finds the suite.
+
+### Playwright-config fallback
+
+When `testpilot.config.ts` does not set `testDir` (or does not exist), TestPilot reads `testDir`,
+`testMatch`, and `testIgnore` from the project's `playwright.config.*` — including entries under
+`projects[]`, and `RegExp` matchers, which are applied to absolute paths exactly as Playwright applies
+them. If the root has no Playwright config, one first-level sub-directory is checked (real suites keep
+it in `e2e/`); an ambiguous result adopts nothing.
+
+- The config is **parsed, never executed.** `analyze` is static and offline, and is routinely pointed
+  at a repository the user is only evaluating. A value that isn't a literal (`testDir: process.env.DIR
+  ?? 'e2e'`) is reported as unusable rather than guessed at, and named in the zero-file error and by
+  `doctor`.
+- `testDir` and `testMatch` are adopted **as a pair** — taking one without the other produces a
+  selection neither tool would make.
+- An explicit TestPilot `testDir` always wins; `testIgnore` is appended to `exclude`.
+- Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
+- `--no-playwright-discovery` turns the fallback off. Explicit CLI patterns skip it automatically.
 
 ---
 

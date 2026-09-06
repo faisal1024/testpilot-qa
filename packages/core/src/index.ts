@@ -39,11 +39,20 @@ export {
   type ConfigDiscovery,
   DEFAULT_DISCOVERY,
   type DiscoverySource,
+  formatDiscoverySource,
 } from './config/discovery.js'
 export {
+  type PathPattern,
+  type PlaywrightConfigRead,
   type PlaywrightTestSettings,
   readPlaywrightTestSettings,
 } from './config/playwright-config.js'
+export {
+  findPlaywrightConfigNearby,
+  type ResolveDiscoveryOptions,
+  type ResolvedDiscovery,
+  resolveDiscovery,
+} from './config/resolve-discovery.js'
 export { ConfigError } from './config/errors.js'
 export {
   findConfigFile,
