@@ -11,7 +11,7 @@ import type { AnyRule } from './rules/types.js'
 /** The educational fields — id/category/severity/docsUrl come from the rule itself. */
 type Education = Pick<
   RuleExplanation,
-  'title' | 'summary' | 'whyItMatters' | 'badExample' | 'betterExample' | 'guidance'
+  'title' | 'summary' | 'whyItMatters' | 'badExample' | 'betterExample' | 'guidance' | 'notFlagged'
 >
 
 function fromRule(rule: AnyRule, education: Education): RuleExplanation {
@@ -48,6 +48,13 @@ const EXPLANATIONS: RuleExplanation[] = [
     guidance: [
       'Prefer role/label/text locators that reflect what the user sees.',
       'If there is no semantic handle, add a stable data-testid and use getByTestId().',
+      'A class nested in `:has()`, `:not()` or `:is()` counts — the test depends on it either way.',
+    ],
+    notFlagged: [
+      `page.locator('[href=".pdf"]')      // a dot inside a quoted attribute value is not a class`,
+      `page.locator('#main')              // an id is a different trade-off, not this rule's business`,
+      `page.locator('text=Save file.txt') // not a CSS selector at all`,
+      `page.locator('button:has-text("a.b")') // :has-text() takes text, not a selector`,
     ],
   }),
   fromRule(noNthChild, {

@@ -48,6 +48,15 @@ jobs:
           restore-keys: bench-corpus-
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
+      # The differential test pins the hand-written selector tokenizer to
+      # Playwright's own parser. It needs the corpus, which only this job has —
+      # in `verify` it skips, and the env var is what stops that skip being
+      # silent here too.
+      - name: Selector tokenizer differential vs real Playwright
+        env:
+          TESTPILOT_DIFFERENTIAL: '1'
+        run: pnpm exec vitest run packages/locator-intelligence/test/tokenize-differential.test.ts
+
       - name: Run the corpus benchmark
         # `shell: bash` for pipefail: without it the step takes tee's exit status and
         # the gate can never turn this job red. stderr carries the per-repo lines and

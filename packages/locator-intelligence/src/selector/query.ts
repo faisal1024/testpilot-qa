@@ -1,0 +1,52 @@
+import type { ComplexSelector, ParsedSelector } from './types.js'
+
+/**
+ * Helpers that ask one question of a parsed selector.
+ *
+ * Every one of them returns `null` for "I could not read this", never a
+ * default. A rule that treats an unreadable selector as an empty one produces
+ * exactly the confident-wrong-answer this package exists to avoid.
+ */
+
+/** Every CSS selector across all `>>` parts, or `null` if any CSS part failed to parse. */
+export function cssSelectors(parsed: ParsedSelector): ComplexSelector[] | null {
+  if (parsed.unparsed.length > 0) {
+    return null
+  }
+  const out: ComplexSelector[] = []
+  for (const part of parsed.parts) {
+    if (part.engine === 'css') {
+      if (!part.css) {
+        return null
+      }
+      out.push(...part.css)
+    }
+  }
+  return out
+}
+
+/** Class names used anywhere in the selector, deduped, or `null` when unreadable. */
+export function classTokens(parsed: ParsedSelector): string[] | null {
+  const selectors = cssSelectors(parsed)
+  if (selectors === null) {
+    return null
+  }
+  const classes = new Set<string>()
+  const visit = (list: ComplexSelector[]): void => {
+    for (const selector of list) {
+      for (const compound of selector.compounds) {
+        for (const name of compound.classes) {
+          classes.add(name)
+        }
+        // A class nested in `:has(i.icon)` is still a class the test depends on.
+        for (const pseudo of compound.pseudos) {
+          if (pseudo.selectors) {
+            visit(pseudo.selectors)
+          }
+        }
+      }
+    }
+  }
+  visit(selectors)
+  return [...classes]
+}

@@ -1,5 +1,6 @@
 import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './locator-context.js'
 import { type AstNode, walk } from './parser.js'
+import { tokenizeSelector } from './selector/tokenize.js'
 
 const LOCATOR_METHODS = new Set<LocatorApi>([
   'locator',
@@ -117,12 +118,23 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
     const selectorEngine = SELECTOR_ARG_APIS.has(name as LocatorApi)
       ? inferEngine(value)
       : undefined
+    // Tokenized once here rather than per rule: six rules asking the same
+    // question of the same string is six chances for them to disagree.
+    const parsed =
+      SELECTOR_ARG_APIS.has(name as LocatorApi) && value !== undefined
+        ? tokenizeSelector(value)
+        : undefined
+    const parentApi = receiverApi(callee.object as AstNode | undefined)
+    const options = readLocatorOptions(args[1])
 
     const call = node as unknown as WithLoc
     contexts.push({
       apiCall,
       selector: value,
       selectorEngine,
+      parsed,
+      parentApi,
+      options,
       isDynamic,
       raw: code.slice(call.range[0], call.range[1]),
       line: property.loc.start.line,
@@ -131,4 +143,58 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
   })
 
   return contexts
+}
+
+/**
+ * The recognized locator method a call is chained off, if any.
+ *
+ * Note `first`/`last` are deliberately NOT in `LOCATOR_METHODS`: extracting
+ * them would add them to `callSites`, which is the score's denominator, and a
+ * precision PR must not move the score by enlarging the denominator — Ghost
+ * went 98 -> 99 and mattermost 66 -> 69 with no quality change at all. 11e
+ * adds them together with the denominator handling that has to accompany them.
+ */
+function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
+  if (!receiver || receiver.type !== 'CallExpression') {
+    return undefined
+  }
+  const callee = receiver.callee as AstNode | undefined
+  if (!callee || callee.type !== 'MemberExpression') {
+    return undefined
+  }
+  const property = propertyNode(callee)
+  const name = property?.name as string | undefined
+  return name !== undefined && LOCATOR_METHODS.has(name as LocatorApi)
+    ? (name as LocatorApi)
+    : undefined
+}
+
+/**
+ * Reads which composition options a `locator()` call passed.
+ *
+ * Only presence is recorded: a rule needs to know that the call is composed,
+ * not what it composes with. A non-literal options object yields `undefined`,
+ * so a rule cannot read absence as "no options".
+ */
+function readLocatorOptions(arg: AstNode | undefined): LocatorContext['options'] {
+  if (!arg || arg.type !== 'ObjectExpression') {
+    return undefined
+  }
+  const options: NonNullable<LocatorContext['options']> = {}
+  for (const property of (arg.properties as AstNode[]) ?? []) {
+    if (property.type !== 'Property' || property.computed === true) {
+      continue
+    }
+    const key = property.key as AstNode | undefined
+    const name =
+      key?.type === 'Identifier'
+        ? (key.name as string)
+        : key?.type === 'Literal' && typeof key.value === 'string'
+          ? key.value
+          : null
+    if (name === 'has' || name === 'hasNot' || name === 'hasText' || name === 'hasNotText') {
+      options[name] = true
+    }
+  }
+  return Object.keys(options).length > 0 ? options : undefined
 }

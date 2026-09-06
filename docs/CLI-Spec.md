@@ -625,7 +625,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
       "ruleId": "no-css-class-selector",
       "category": "locator",
       "severity": "error",
-      "message": "CSS class selectors are coupled to styling and change frequently.",
+      "message": "The CSS class selector .btn-primary is coupled to styling and changes frequently.",
       "file": "tests/login.spec.ts",
       "line": 3,
       "column": 14,
