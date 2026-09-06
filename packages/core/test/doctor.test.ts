@@ -362,7 +362,7 @@ describe('doctor: tag suites', () => {
       )
       const report = await runDoctor({
         cwd: dir,
-        tagVocabulary: async () => new Set(['regression']),
+        tagVocabulary: async () => ({ tags: new Set(['regression']), complete: true }),
       })
       const check = report.checks.find((c) => c.id === 'suites')
       expect(check?.status).toBe('warn')
@@ -383,9 +383,53 @@ describe('doctor: tag suites', () => {
       )
       const report = await runDoctor({
         cwd: dir,
-        tagVocabulary: async () => new Set(['regression', 'flaky']),
+        tagVocabulary: async () => ({ tags: new Set(['regression', 'flaky']), complete: true }),
       })
       expect(report.checks.find((c) => c.id === 'suites')?.status).toBe('pass')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('scopes the doubt to the missing tag when the vocabulary is incomplete', async () => {
+    // A tag we DID read is confirmed good whatever else was unreadable; nulling
+    // the whole vocabulary made this check silent on any real suite.
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { suites: { good: ['regression'], typo: ['regresion'] } }\n",
+      )
+      const report = await runDoctor({
+        cwd: dir,
+        tagVocabulary: async () => ({ tags: new Set(['regression']), complete: false }),
+      })
+      const check = report.checks.find((c) => c.id === 'suites')
+      expect(check?.status).toBe('warn')
+      expect(check?.message).toMatch(/may be a typo or may be fine/)
+      // The suite whose tag WAS found is not accused.
+      expect(check?.details?.unknownTags).toEqual({ typo: ['regresion'] })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('says every referenced tag was found, noting the incomplete read', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { suites: { good: ['regression'] } }\n",
+      )
+      const report = await runDoctor({
+        cwd: dir,
+        tagVocabulary: async () => ({ tags: new Set(['regression']), complete: false }),
+      })
+      const check = report.checks.find((c) => c.id === 'suites')
+      expect(check?.status).toBe('pass')
+      expect(check?.message).toMatch(/could not be read/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

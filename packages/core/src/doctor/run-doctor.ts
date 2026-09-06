@@ -19,6 +19,7 @@ import {
 } from '../config/resolve-discovery.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
 import { findProjectRoot, isDirectory, resolvePlaywrightBin } from '../project/discovery.js'
+import type { TagVocabulary } from '../tags/report.js'
 import type { SuiteMap } from '../tags/suites.js'
 import { unknownSuiteTags, validateSuites } from '../tags/validate-suites.js'
 
@@ -73,7 +74,7 @@ export interface DoctorOptions {
    * downstream of core. Returning `null` means "could not be determined" — the
    * check then says so instead of silently reporting every tag as valid.
    */
-  tagVocabulary?: () => Promise<ReadonlySet<string> | null>
+  tagVocabulary?: () => Promise<TagVocabulary | null>
   /** Skip the Playwright-config fallback, so `doctor` matches `--no-playwright-discovery`. */
   disablePlaywrightFallback?: boolean
   /**
@@ -391,7 +392,7 @@ function checkAiGuidance(projectRoot: string, agents: AgentId[]): DoctorCheck {
  */
 async function checkSuites(
   suites: SuiteMap,
-  vocabulary: (() => Promise<ReadonlySet<string> | null>) | undefined,
+  vocabulary: (() => Promise<TagVocabulary | null>) | undefined,
 ): Promise<DoctorCheck> {
   const names = Object.keys(suites)
   if (names.length === 0) {
@@ -418,7 +419,7 @@ async function checkSuites(
     }
   }
 
-  let known: ReadonlySet<string> | null = null
+  let known: TagVocabulary | null = null
   try {
     known = vocabulary ? await vocabulary() : null
   } catch {
@@ -438,7 +439,7 @@ async function checkSuites(
   const unknownBySuite: Record<string, string[]> = {}
   for (const name of names.sort()) {
     const entry = suites[name]
-    const unknown = entry ? unknownSuiteTags(entry, known) : []
+    const unknown = entry ? unknownSuiteTags(entry, known.tags) : []
     if (unknown.length > 0) {
       unknownBySuite[name] = unknown
     }
@@ -451,10 +452,16 @@ async function checkSuites(
       category: 'config',
       status: 'warn',
       message: [
-        ...offenders.map(
-          (name) =>
-            `Suite "${name}" references ${(unknownBySuite[name] ?? []).map((tag) => `@${tag}`).join(', ')}, which no test carries — \`--suite ${name}\` would not select what you expect.`,
-        ),
+        ...offenders.map((name) => {
+          const named = (unknownBySuite[name] ?? []).map((tag) => `@${tag}`).join(', ')
+          // A tag we *did* read is confirmed good whatever else was unreadable;
+          // only an absent one is in doubt. Nulling the whole vocabulary made
+          // this check silent on any real suite (mattermost has 28 unreadable
+          // tag entries), so the doubt is scoped to the tags it applies to.
+          return known.complete
+            ? `Suite "${name}" references ${named}, which no test carries — \`--suite ${name}\` would not select what you expect.`
+            : `Suite "${name}" references ${named}, which no test we could read carries. Some tags in this suite could not be read, so this may be a typo or may be fine — run \`testpilot tags\`.`
+        }),
         // Non-blocking issues (an awkward suite name) would otherwise be lost
         // whenever an unknown tag happened to be present too.
         ...issues.map((issue) => issue.message),
@@ -481,7 +488,9 @@ async function checkSuites(
     title: 'Tag suites',
     category: 'config',
     status: 'pass',
-    message: `${names.length} suite(s) configured; every referenced tag exists.`,
+    message: known.complete
+      ? `${names.length} suite(s) configured; every referenced tag exists.`
+      : `${names.length} suite(s) configured; every referenced tag was found, though some tags elsewhere could not be read.`,
   }
 }
 

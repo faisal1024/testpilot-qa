@@ -111,6 +111,44 @@ describe('extractTests', () => {
     expect(found[0]).toMatchObject({ titleKnown: false, effectiveTags: ['regression'] })
   })
 
+  it('finds a test whose body is passed by reference', () => {
+    // `test('one @smoke', body)` is a real declaration. Requiring a literal
+    // function argument deleted it and its tags with no disclosure at all.
+    const found = tests(
+      [
+        'const body = async ({ page }) => {}',
+        "test('one @smoke', body)",
+        "test('two @smoke', body)",
+      ].join('\n'),
+    )
+    expect(found).toHaveLength(2)
+    expect(found.every((t) => t.effectiveTags.includes('smoke'))).toBe(true)
+  })
+
+  it('finds a test with both title and body by reference', () => {
+    const found = tests('for (const n of C) { test(n, body) }')
+    expect(found).toHaveLength(1)
+    expect(found[0]?.titleKnown).toBe(false)
+  })
+
+  it('still tells a modifier from a declaration by the second argument', () => {
+    // `test.skip(cond, 'reason')` is a modifier; its second argument is a
+    // description string. A declaration's is a body or a details object.
+    expect(tests("test.skip(isCI, 'not on CI')")).toHaveLength(0)
+    expect(tests("test.fixme(cond, 'later')")).toHaveLength(0)
+    expect(tests('test.skip(title, body)')).toHaveLength(1)
+    expect(tests('test.only(title, body)')).toHaveLength(1)
+    expect(tests("test.skip('t @a', { tag: ['@b'] }, body)")[0]?.effectiveTags).toEqual(['a', 'b'])
+  })
+
+  it('counts a details tag with no leading @ as unreadable, since Playwright rejects it', () => {
+    // Playwright throws "Tag must start with '@' symbol" at load, so the file
+    // cannot run; naming the tag would put an impossible entry in the vocabulary.
+    const found = tests("test('x', { tag: ['smoke'] }, async () => {})")
+    expect(found[0]?.effectiveTags).toEqual([])
+    expect(found[0]?.unreadableTags).toBe(1)
+  })
+
   it('marks a literal title as known', () => {
     expect(tests("test('x', async () => {})")[0]?.titleKnown).toBe(true)
     expect(tests('test(`x ${y}`, async () => {})')[0]?.titleKnown).toBe(true)

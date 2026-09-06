@@ -30,11 +30,16 @@ Run tests by tag, and see what tags exist.
   the real ones), a tag both included and excluded, a malformed tag token, an **empty** flag value
   (`--tag "$UNSET_VAR"` must not run everything), more than one `--suite` (two suites cannot fold
   into one include/exclude pair without changing what either selects), and `--tag` combined with a
-  forwarded grep flag in any spelling (`--grep`, `-g`, `-G`, `-gv`, `--flag=value`, `-g@smoke`).
+  forwarded grep flag (`--grep`, `-g`, `-G`, `--flag=value`, `-g@smoke`, and combined clusters such
+  as `-xg`, which commander parses as `-x -g`), and `--suite` combined with `--tag` (both choose what
+  to include, and neither "either" nor "both" is the obvious reading). `--exclude-tag` still composes
+  with `--suite`: narrowing a suite is unambiguous.
 - **`tags` discloses its own bounds** in the report, not just on stderr: template-literal titles,
-  `tag` entries it cannot read statically, files where no `test()` was recognized (a renamed import
-  such as `import { test as setup }`), and tags whose names contain a comma and so cannot be selected
-  with `--tag`.
+  titles built from a variable, `tag` entries it cannot read statically, files where no `test()` was
+  recognized (a renamed import such as `import { test as setup }`), and tags `--tag` cannot select.
+  `summary.vocabularyComplete` is the single flag `tags`, `doctor` and the suite counts all key on,
+  so they cannot disagree about whether a tag exists: when it is `false`, a tag we did not find is
+  reported as *unconfirmed*, never as a typo.
 - **Fix:** `analyze` no longer warns that a `testDir` is missing when explicit patterns were passed —
   discovery never consulted it, so the warning named the wrong directory.
 

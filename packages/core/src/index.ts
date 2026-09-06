@@ -106,6 +106,7 @@ export {
   type SuiteUsage,
   TAGS_SCHEMA_VERSION,
   type TagUsage,
+  type TagVocabulary,
   type TagsReport,
   type TagsSummary,
   type TagsWarning,

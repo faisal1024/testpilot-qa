@@ -293,8 +293,10 @@ Playwright treats any `@word` in a title as a tag, so a test named *"turn off me
 contributes `@here` whether you meant it or not. Tags written with `{ tag: [...] }` are always
 deliberate.
 
-It also says where the list is incomplete — titles built from template literals, `tag` entries it
-could not read statically, and files where no `test()` was recognized at all.
+It also says where the list is incomplete — titles built from template literals or variables, `tag`
+entries it could not read statically, and files where no `test()` was recognized at all. When the
+list is incomplete, `doctor` reports a suite tag it did not find as *unconfirmed* rather than as a
+typo.
 
 ---
 

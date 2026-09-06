@@ -296,32 +296,46 @@ describe('describeTagSelection', () => {
 })
 
 describe('findConflictingGrep', () => {
-  // -G is Playwright's --grep-invert alias on 1.61+, -gv on 1.42-~1.53. An alias
-  // we miss means Playwright keeps the user's flag and silently drops ours,
-  // because our args are prepended.
-  it.each([['--grep'], ['-g'], ['--grep-invert'], ['-G'], ['-gv']])('detects %s', (flag) => {
+  // Playwright 1.63's complete short-option set (from its program.js):
+  // -c config, -g grep, -G grep-invert, -u update-snapshots [optional],
+  // -j workers, -x fail-fast. Our args are prepended, so an alias we miss means
+  // Playwright keeps the user's flag and silently drops ours.
+  it.each([['--grep'], ['--grep-invert']])('detects %s', (flag) => {
     expect(findConflictingGrep(['--headed', flag, 'x'])).toBe(flag)
   })
 
   it('detects the --flag=value form', () => {
     expect(findConflictingGrep(['--grep=foo'])).toBe('--grep')
+    expect(findConflictingGrep(['--grep-invert=foo'])).toBe('--grep-invert')
   })
 
-  it('detects a combined single-dash cluster containing g or G', () => {
-    // commander parses `-xg '@foo'` as `-x -g @foo`.
-    expect(findConflictingGrep(['-xg', '@foo'])).toBe('-xg')
-    expect(findConflictingGrep(['-xG', '@foo'])).toBe('-xG')
-    expect(findConflictingGrep(['-xj'])).toBeNull()
+  it.each([
+    ['-g', '-g'],
+    ['-G', '-G'],
+    ['-g@smoke', '-g'],
+    ['-G@flaky', '-G'],
+    // commander parses a cluster left to right: -x is boolean, so -g follows.
+    ['-xg', '-g'],
+    ['-xG', '-G'],
+    ['-xg@regression', '-g'],
+  ])('detects %s as %s', (arg, expected) => {
+    expect(findConflictingGrep([arg, '@foo'])).toBe(expected)
   })
 
-  it('detects a short flag with an attached value', () => {
-    expect(findConflictingGrep(['-g@smoke'])).toBe('-g')
-    expect(findConflictingGrep(['-gv@flaky'])).toBe('-gv')
+  it('does not refuse an unrelated flag whose value happens to contain a g', () => {
+    // -u takes an optional value, so `-uchanged` is --update-snapshots=changed.
+    // A "cluster contains a g" heuristic refused these.
+    expect(findConflictingGrep(['-uchanged'])).toBeNull()
+    expect(findConflictingGrep(['-umissing'])).toBeNull()
+    expect(findConflictingGrep(['-xuchanged'])).toBeNull()
+    expect(findConflictingGrep(['-cplaywright.config.ts'])).toBeNull()
+    expect(findConflictingGrep(['-j2'])).toBeNull()
   })
 
   it('ignores unrelated args', () => {
     expect(findConflictingGrep(['--headed', '--workers=2', 'a.spec.ts'])).toBeNull()
     expect(findConflictingGrep(['--global-timeout=1000'])).toBeNull()
+    expect(findConflictingGrep(['-x'])).toBeNull()
   })
 })
 

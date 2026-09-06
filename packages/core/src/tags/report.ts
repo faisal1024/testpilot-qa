@@ -25,8 +25,13 @@ export interface TagUsage {
    */
   sources: Array<'title' | 'details'>
   /**
-   * True when `--tag` can select this tag. False when its name contains a
-   * comma, which the CLI splits on; `run -- --grep` is the escape hatch.
+   * True when `testpilot run --tag <name>` can actually select this tag.
+   *
+   * False when the name does not survive `--tag` parsing (it contains a comma,
+   * which is split on, or leads with `-`, which reads as a negation), or when
+   * the tag only ever appears fused to a word (`user@smoke.example`) — which
+   * Playwright reads as a tag and our leading boundary deliberately does not.
+   * `run -- --grep` is the escape hatch.
    */
   selectable: boolean
 }
@@ -39,7 +44,12 @@ export interface SuiteUsage {
   all: string[]
   /** Tags the suite excludes. */
   exclude: string[]
-  /** Referenced tags that no test carries — a typo, or a tag not written yet. */
+  /**
+   * Referenced tags absent from the vocabulary. When
+   * {@link TagsSummary.vocabularyComplete} is false these are *unconfirmed*,
+   * not missing — the tag may live in a file we could not fully read, and
+   * calling it a typo would accuse a correct config.
+   */
   unknownTags: string[]
   /**
    * Tests the suite would select, or `null` when no honest count exists: the
@@ -47,7 +57,11 @@ export interface SuiteUsage {
    * incomplete. A count over a vocabulary we know is wrong is worse than none.
    */
   matchingTests: number | null
-  /** True when the suite's own tokens could not be parsed (see `doctor`). */
+  /**
+   * True when the suite cannot run as written — its tokens do not parse, or it
+   * is empty. Either way the empty selection left behind would match every
+   * test, so no count is reported.
+   */
   malformed: boolean
 }
 
@@ -78,6 +92,13 @@ export interface TagsSummary {
    * loop). No tag on such a test can be read from its title.
    */
   unreadableTitles: number
+  /**
+   * False when anything above (or an unscanned test root) means the vocabulary
+   * is knowingly short of the truth. The single flag every consumer keys on —
+   * `tags`, `doctor`, and the suite counts — so they cannot drift apart and
+   * disagree about whether a tag exists.
+   */
+  vocabularyComplete: boolean
 }
 
 /**
@@ -116,4 +137,15 @@ export interface TagsReport {
   suites: SuiteUsage[]
   warnings: TagsWarning[]
   parseErrors: ParseError[]
+}
+
+/**
+ * The tag vocabulary of a suite, with whether it is known to be complete.
+ *
+ * Carrying completeness alongside the set is the point: an absent tag means
+ * "typo" only when the read was complete, and "unconfirmed" otherwise.
+ */
+export interface TagVocabulary {
+  tags: ReadonlySet<string>
+  complete: boolean
 }

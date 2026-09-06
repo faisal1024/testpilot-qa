@@ -148,6 +148,16 @@ function normalizeTag(raw: string): string | null {
   return body === '' ? null : body
 }
 
+/**
+ * Playwright throws at load time on a details tag without a leading `@`
+ * ("Tag must start with '@' symbol"), so such a file cannot run at all. Naming
+ * the tag anyway would put something in the vocabulary that can never exist;
+ * it is counted as unreadable instead.
+ */
+function isWellFormedDetailsTag(raw: string): boolean {
+  return raw.trim().startsWith('@')
+}
+
 function matchTags(text: string, pattern: RegExp): string[] {
   const found = text.match(pattern)
   if (!found) {
@@ -206,7 +216,7 @@ function tagsFromDetails(arg: AstNode | undefined): { tags: string[]; unreadable
         unreadable += 1
         continue
       }
-      const tag = normalizeTag(read.title)
+      const tag = isWellFormedDetailsTag(read.title) ? normalizeTag(read.title) : null
       if (tag) {
         tags.push(tag)
       } else {
@@ -243,15 +253,25 @@ function classify(node: AstNode): CallKind {
   if (!rest.every((part) => TEST_MODIFIERS.has(part))) {
     return null
   }
-  // A declaration is `(title, body)` or `(title, details, body)`; the in-body
-  // modifiers are `test.skip(condition, reason)` and `test.skip(callback, reason)`.
-  // The discriminator is the *first* argument, not whether the title is a string
-  // literal: `test(name, fn)` inside a `for` loop is a real declaration, and
-  // requiring a literal title dropped it — and every tag on it — silently.
-  if (isFunctionNode(args[0])) {
+  // A declaration is `(title, body)` or `(title, details, body)`. Neither the
+  // title nor the body has to be a literal — `test(name, body)` with both held
+  // in variables is a real declaration, and requiring either to be literal
+  // deleted it, and every tag on it, silently.
+  if (args.length < 2 || isFunctionNode(args[0])) {
     return null
   }
-  return args.some(isFunctionNode) ? 'test' : null
+  // `test` and `test.only` have no non-declaration overload, so nothing more to
+  // disambiguate. The others do: `test.skip(condition, description)` and
+  // `test.skip(callback, description)` are in-body modifiers. Their second
+  // argument is a description *string*; a declaration's is a body or a details
+  // object. That is the only discriminator available, and it errs toward
+  // "declaration" — which widens the vocabulary rather than narrowing it.
+  const ambiguous = rest.some((part) => part !== 'only')
+  const secondArg = args[1]
+  if (ambiguous && secondArg?.type === 'Literal' && typeof secondArg.value === 'string') {
+    return null
+  }
+  return 'test'
 }
 
 interface OwnTags {

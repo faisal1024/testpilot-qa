@@ -135,9 +135,10 @@ CI. Two details of Playwright's matching drive that shape, both checked against 
   never fall through to running the whole suite.
 - Combining `--tag`/`--suite` with a forwarded grep flag is a **usage error** (`2`): Playwright keeps
   only the last occurrence, so one of the two filters would be silently lost. Refused spellings:
-  `--grep`, `--grep-invert`, `-g`, `-G` (the `--grep-invert` alias in Playwright 1.63), `-gv`,
-  `--flag=value`, short flags with an attached value (`-g@smoke`), and combined single-dash clusters
-  containing `g`/`G` (`-xg`, which commander parses as `-x -g`).
+  `--grep`, `--grep-invert`, `-g`, `-G`, `--flag=value`, short flags with an attached value
+  (`-g@smoke`), and combined single-dash clusters (`-xg`, `-xg@foo` — commander parses these as
+  `-x -g …`). Detection models Playwright's actual option table, so `-uchanged`
+  (`--update-snapshots=changed`) is **not** refused despite containing a `g`.
 - **One `--suite` at a time** (`2` otherwise). Two suites cannot be folded into a single
   include/exclude pair without changing what either selects: `{ fast: ['!slow'], nightly:
   ['regression'] }` would become "regression, excluding slow", which is neither suite.
@@ -310,7 +311,7 @@ is the difference between a vocabulary and noise: mattermost's `@abac` (122 test
 | `dynamic-test-titles` | Titles built from a template literal. Text touching a `${...}` hole is not read at all, because it fuses with the hole at runtime — ``test(`@smoke${x}`)`` is the tag `@smokeX`, not `@smoke`. |
 | `unreadable-tag-expressions` | A `tag` entry that is a spread, a variable, or an interpolated template. Each is at least one tag the suite carries and this list cannot name. |
 | `no-tests-recognized` | Files were scanned but no `test()` was recognized — usually a renamed import (`import { test as setup }`), which the walk keys on by name. "No tags" would otherwise answer a question that was never asked. |
-| `unselectable-tags` | A tag whose name contains a comma. Playwright reads it as one tag; `--tag` splits on commas, so only `run -- --grep` can select it. |
+| `unselectable-tags` | A tag `--tag` cannot select: the name contains a comma (split on) or leads with `-` (reads as a negation), or the tag only ever appears fused to a word (`user@smoke.example`), which Playwright reads as a tag and the leading boundary deliberately does not. `run -- --grep` reaches these. |
 | `files-not-parsed` | Files that failed to parse contribute no tags. |
 | `no-files-matched` | Discovery matched nothing. Exits `3`/`2` like `analyze` — "no tags" must never be the answer to "we scanned nothing". |
 
@@ -669,7 +670,9 @@ deterministic and diffable.
     "untaggedTests": 41,
     "distinctTags": 3,
     "dynamicTitles": 2,
-    "unreadableTagExpressions": 0
+    "unreadableTagExpressions": 0,
+    "unreadableTitles": 0,
+    "vocabularyComplete": false
   },
   "tags": [
     { "tag": "regression", "tests": 86, "files": 14, "sources": ["details"], "selectable": true }
@@ -689,9 +692,15 @@ deterministic and diffable.
 }
 ```
 
-Tag names are stored **without** the leading `@`. `matchingTests` is `null` when the suite
-references a tag no test carries — a count over a vocabulary we know is wrong would be worse than no
-count. `warnings[].code` is its **own** union for this command (`no-files-matched`,
+Tag names are stored **without** the leading `@`. **`summary.vocabularyComplete`** is the single flag
+every consumer keys on — `tags`, `doctor`, and the suite counts — so they cannot drift apart and
+disagree about whether a tag exists. It is `false` whenever anything above means the read fell short
+of the truth.
+
+`matchingTests` is `null` when no honest count exists: the suite references a tag we did not find,
+is malformed or empty (either would match every test), or the vocabulary is incomplete. A count over
+a vocabulary we know is wrong would be worse than no count. Counts are over **selectable**
+occurrences, so they never promise more tests than `--tag` can reach. `warnings[].code` is its **own** union for this command (`no-files-matched`,
 `test-root-missing`, `playwright-config-partial`, `dynamic-test-titles`,
 `unreadable-tag-expressions`, `no-tests-recognized`, `unselectable-tags`); `analyze`'s
 `AnalysisWarning` union is deliberately unchanged, so its `1.7` contract still holds.

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type TestPilotConfig, defaultConfig } from '@testpilot/core'
+import { DEFAULT_DISCOVERY, type TestPilotConfig, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { collectTags } from '../src/tags/collect-tags.js'
 
@@ -258,6 +258,68 @@ describe('collectTags', () => {
     )
     const report = await collectTags({ cwd: dir, config: config() })
     expect(report.tags[0]?.selectable).toBe(true)
+  })
+
+  it('refuses to count an empty suite, which run and doctor both reject', async () => {
+    write('tests/a.spec.ts', "test('1 @x', async () => {})\ntest('2', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { emptyList: [], emptyObj: { any: [], all: [], none: [] } } }),
+    })
+    for (const suite of report.suites) {
+      expect(suite).toMatchObject({ malformed: true, matchingTests: null })
+    }
+  })
+
+  it('does not call a suite tag a typo when the vocabulary is incomplete', async () => {
+    // @regression exists; the loop title just cannot be read. Accusing the
+    // config is the same error as missing a real typo, in the other direction.
+    write(
+      'tests/a.spec.ts',
+      ["for (const n of NAMES) { test(n + ' @regression', async () => {}) }"].join('\n'),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { nightly: ['regression'] } }),
+    })
+    expect(report.summary.vocabularyComplete).toBe(false)
+  })
+
+  it('reports a complete vocabulary for an ordinary suite, so counts still work', async () => {
+    write('tests/a.spec.ts', "test('1 @regression', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { nightly: ['regression'] } }),
+    })
+    expect(report.summary.vocabularyComplete).toBe(true)
+    expect(report.suites[0]?.matchingTests).toBe(1)
+  })
+
+  it('marks the vocabulary incomplete when a declared test root is missing', async () => {
+    write('tests/a.spec.ts', "test('1 @x', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config(),
+      discovery: { ...DEFAULT_DISCOVERY, roots: [join(dir, 'tests'), join(dir, 'gone')] },
+    })
+    expect(report.warnings.map((w) => w.code)).toContain('test-root-missing')
+    expect(report.summary.vocabularyComplete).toBe(false)
+  })
+
+  it('counts a suite over selectable occurrences only', async () => {
+    // `user@dual` is a tag to Playwright but unreachable by --tag, so promising
+    // 2 tests would overstate what `run --suite d` actually runs.
+    write(
+      'tests/a.spec.ts',
+      ["test('anchored @dual', async () => {})", "test('fused user@dual', async () => {})"].join(
+        '\n',
+      ),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { d: ['dual'] } }),
+    })
+    expect(report.suites[0]?.matchingTests).toBe(1)
   })
 
   it('resolves an all-of suite', async () => {

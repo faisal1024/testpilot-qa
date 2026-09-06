@@ -12,6 +12,7 @@ import {
   type TestPilotConfig,
   buildTagSelection,
   isDirectory,
+  isEmptySuite,
   parseTagToken,
   selectionInputForSuite,
   splitTagList,
@@ -213,11 +214,17 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   const vocabulary = new Set(tags.map((usage) => usage.tag))
   // Every way the vocabulary is knowingly short of the truth. A suite count
   // computed over it would be a lower bound stated as a fact.
+  // `test-root-missing` / `playwright-config-partial` mean whole files were
+  // never read at all, which is the largest gap of the lot.
   const vocabularyComplete =
     unreadableTagExpressions === 0 &&
     unreadableTitles === 0 &&
     dynamicTitles === 0 &&
-    parseErrors.length === 0
+    parseErrors.length === 0 &&
+    !warnings.some(
+      (warning) =>
+        warning.code === 'test-root-missing' || warning.code === 'playwright-config-partial',
+    )
   const suites: SuiteUsage[] = Object.keys(options.config.suites)
     .sort()
     .map((name) => {
@@ -225,7 +232,10 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       let include: string[] = []
       let all: string[] = []
       let exclude: string[] = []
-      let malformed = false
+      // An empty suite does not throw — it yields the empty selection, which
+      // matches every test. `run` and `doctor` both refuse it, so reporting a
+      // healthy count here would have the three commands disagree.
+      let malformed = isEmptySuite(entry)
       try {
         const selection = buildTagSelection(selectionInputForSuite(entry))
         include = selection.include
@@ -239,13 +249,17 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       }
       const unknown = unknownSuiteTags(entry, vocabulary)
       const countable = !malformed && unknown.length === 0 && vocabularyComplete
+      // Count over `anchoredTags`, not `effectiveTags`: a tag that only appears
+      // fused to a word (`user@dual`) is one Playwright reads but our leading
+      // boundary deliberately will not, so counting it would promise more tests
+      // than `--tag` can actually select.
       const matchingTests = countable
         ? declarations.filter(
             (declaration) =>
               (include.length === 0 ||
-                include.some((tag) => declaration.effectiveTags.includes(tag))) &&
-              all.every((tag) => declaration.effectiveTags.includes(tag)) &&
-              !exclude.some((tag) => declaration.effectiveTags.includes(tag)),
+                include.some((tag) => declaration.anchoredTags.includes(tag))) &&
+              all.every((tag) => declaration.anchoredTags.includes(tag)) &&
+              !exclude.some((tag) => declaration.anchoredTags.includes(tag)),
           ).length
         : null
       return { name, include, all, exclude, unknownTags: unknown, matchingTests, malformed }
@@ -266,6 +280,7 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       dynamicTitles,
       unreadableTagExpressions,
       unreadableTitles,
+      vocabularyComplete,
     },
     tags,
     suites,

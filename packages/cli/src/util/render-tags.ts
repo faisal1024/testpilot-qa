@@ -78,10 +78,14 @@ export function renderTagsText(report: TagsReport): string {
           : `${suite.matchingTests} test declaration(s)`
       lines.push(`  ${suite.name}: ${what} — ${count}`)
       if (suite.unknownTags.length > 0) {
-        // A suite naming a tag no test carries runs the wrong set silently. Say it
-        // here as well as in `doctor`, because this is the command people read.
+        const named = suite.unknownTags.map((tag) => `@${tag}`).join(', ')
+        // Only call it a typo when the vocabulary is complete. Otherwise the tag
+        // may live in a file we could not fully read, and accusing a correct
+        // config is the same error in the other direction.
         lines.push(
-          `    ⚠ no test carries ${suite.unknownTags.map((tag) => `@${tag}`).join(', ')} — \`testpilot run --suite ${suite.name}\` would not select what you expect.`,
+          summary.vocabularyComplete
+            ? `    ⚠ no test carries ${named} — \`testpilot run --suite ${suite.name}\` would not select what you expect.`
+            : `    ⚠ could not confirm ${named} — the vocabulary above is incomplete, so this may be a typo or may be a tag we could not read.`,
         )
       }
     }

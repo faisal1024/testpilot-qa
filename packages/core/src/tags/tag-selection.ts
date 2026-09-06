@@ -285,23 +285,46 @@ export function describeTagSelection(selection: TagSelection): string {
 }
 
 /**
- * Every spelling Playwright accepts for a grep flag.
- *
- * `-G` is the `--grep-invert` alias in Playwright 1.63 (verified in its
- * `program.js`); `-gv` was the spelling in some earlier releases. Both are
- * listed rather than version-detected because our args are prepended:
- * an alias we fail to recognize means Playwright keeps the user's later flag and
- * silently drops ours, so the excluded tests run.
+ * Playwright's long grep flags.
  */
 const GREP_LONG_FLAGS = new Set(['--grep', '--grep-invert'])
-const GREP_SHORT_FLAGS = ['-gv', '-G', '-g']
 
 /**
- * Finds a caller-supplied grep flag among forwarded args.
+ * Playwright's complete single-letter option set, read from its `program.js`
+ * (1.63): `-c` config, `-g` grep, `-G` grep-invert, `-u` update-snapshots
+ * (optional value), `-j` workers, `-x` fail-fast.
  *
- * Playwright takes the last occurrence of a repeated flag, so appending ours
- * after theirs would silently discard one of the two filters. We refuse instead.
+ * Modelled precisely because commander accepts combined clusters (`-xg @foo`
+ * is `-x -g @foo`) and attached values (`-g@foo`, and `-uchanged` for an
+ * optional-value option). Guessing with "does the cluster contain a g" both
+ * missed `-xg@foo` and wrongly refused `-uchanged` — the mode names `changed`
+ * and `missing` happen to contain a `g`.
  */
+const GREP_LETTERS = new Set(['g', 'G'])
+/** Letters whose option takes a value, which consumes the rest of the cluster. */
+const VALUE_LETTERS = new Set(['c', 'u', 'j'])
+/** Letters whose option is a boolean, so parsing continues past them. */
+const BOOLEAN_LETTERS = new Set(['x'])
+
+/** Finds a grep letter inside a single-dash cluster, the way commander parses it. */
+function grepLetterInCluster(arg: string): string | null {
+  for (let index = 1; index < arg.length; index += 1) {
+    const letter = arg[index] as string
+    if (GREP_LETTERS.has(letter)) {
+      return `-${letter}`
+    }
+    if (VALUE_LETTERS.has(letter)) {
+      // Everything after it is that option's value, grep letters included.
+      return null
+    }
+    if (!BOOLEAN_LETTERS.has(letter)) {
+      // An unknown letter: stop rather than guess about what follows.
+      return null
+    }
+  }
+  return null
+}
+
 export function findConflictingGrep(forwardedArgs: string[]): string | null {
   for (const arg of forwardedArgs) {
     if (GREP_LONG_FLAGS.has(arg)) {
@@ -311,16 +334,11 @@ export function findConflictingGrep(forwardedArgs: string[]): string | null {
     if (eq > 0 && GREP_LONG_FLAGS.has(arg.slice(0, eq))) {
       return arg.slice(0, eq)
     }
-    // Short flags may carry an attached value (`-g@smoke`), so match by prefix.
-    // Longest first, or `-gv@x` would report `-g`.
-    const short = GREP_SHORT_FLAGS.find((flag) => arg === flag || arg.startsWith(flag))
-    if (short) {
-      return short
-    }
-    // Commander also accepts combined single-dash clusters: `-xg '@foo'` parses
-    // as `-x -g @foo`. Any cluster containing g or G is a possible grep.
-    if (/^-[A-Za-z]+$/.test(arg) && /[gG]/.test(arg)) {
-      return arg
+    if (/^-[A-Za-z]/.test(arg)) {
+      const letter = grepLetterInCluster(arg)
+      if (letter) {
+        return letter
+      }
     }
   }
   return null
