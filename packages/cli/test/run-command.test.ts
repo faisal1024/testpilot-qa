@@ -87,7 +87,7 @@ describe.skipIf(process.platform === 'win32')('run --tag', () => {
 
   it('prints the compiled flags so the project stays ejectable', async () => {
     const { stderr } = await runRun(['--tag', 'smoke'])
-    expect(stderr).toContain('Tags: @smoke')
+    expect(stderr).toContain('Tags: any of @smoke')
     expect(stderr).toContain('Compiled to: --grep')
   })
 
@@ -181,6 +181,23 @@ describe.skipIf(process.platform === 'win32')('run --suite', () => {
     const grep = forceRegExp(forwarded[2] as string)
     expect(grep.test('x @regression @critical')).toBe(true)
     expect(grep.test('x @regression')).toBe(false)
+  })
+
+  it('refuses --suite together with --tag rather than guessing the semantics', async () => {
+    // "the nightly suite plus the smoke tests" and "the nightly suite narrowed
+    // to smoke" are equally natural readings; an all-of suite silently gave the
+    // second while the docs promised the first.
+    writeConfig("export default { suites: { nightly: ['regression'] } }\n")
+    const { exitCode, stderr, forwarded } = await runRun(['--suite', 'nightly', '--tag', 'smoke'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Cannot combine --suite with --tag')
+    expect(forwarded).toEqual([])
+  })
+
+  it('refuses a combined short-flag cluster carrying a grep', async () => {
+    // commander parses `-xg '@foo'` as `-x -g @foo`.
+    const { exitCode } = await runRun(['--tag', 'smoke', '--', '-xg', '@foo'])
+    expect(exitCode).toBe(2)
   })
 
   it('composes a suite with an extra --exclude-tag', async () => {

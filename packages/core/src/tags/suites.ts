@@ -104,12 +104,12 @@ export function expandSuites(suites: SuiteMap, names: string[]): SuiteTokens {
 }
 
 /**
- * Merges `--suite` expansions with explicit `--tag` / `--exclude-tag` values.
+ * Merges a `--suite` expansion with explicit `--tag` / `--exclude-tag` values.
  *
- * Includes are **unioned**, not intersected: `--suite nightly --tag smoke` runs
- * the nightly tests plus the smoke tests. Excludes from both sides all apply.
- * Documented in CLI-Spec §3.1a — for an intersection, name it as a suite with
- * `all`.
+ * The CLI refuses `--suite` together with `--tag` (both choose what to
+ * include, and neither "either" nor "both" is the obvious reading), so in
+ * practice at most one include source is populated here. Excludes always
+ * compose: narrowing a suite is unambiguous.
  */
 export function selectionInputFor(options: {
   suites: SuiteMap

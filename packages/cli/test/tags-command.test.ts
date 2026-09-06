@@ -105,7 +105,7 @@ describe('tags command', () => {
       "export default { suites: { nightly: ['regression'], typo: ['regresion'] } }\n",
     )
     const { stdout } = await runTags()
-    expect(stdout).toContain('nightly: @regression — 2 test(s)')
+    expect(stdout).toContain('nightly: any of @regression — 2 test declaration(s)')
     expect(stdout).toContain('no test carries @regresion')
   })
 

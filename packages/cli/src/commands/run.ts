@@ -32,6 +32,20 @@ export async function runCommand(options: RunOptions, command: Command): Promise
 
   const config = await loadProjectConfig(globals)
 
+  // `--suite` and `--tag` both say what to *include*, and there is no reading of
+  // the pair that is obviously right: "the nightly suite plus the smoke tests"
+  // and "the nightly suite narrowed to smoke" are equally natural, and an
+  // all-of suite silently produced the second. Refuse rather than pick one.
+  // `--exclude-tag` still composes: narrowing a suite is unambiguous.
+  if ((options.suite ?? []).length > 0 && (options.tag ?? []).length > 0) {
+    if (!globals.quiet) {
+      console.error(
+        'Cannot combine --suite with --tag: both choose what to include, and whether that means "either" or "both" is ambiguous. Use one, or narrow the suite with --exclude-tag.',
+      )
+    }
+    process.exit(ExitCode.USAGE)
+  }
+
   let selection: TagSelection
   try {
     selection = buildTagSelection(

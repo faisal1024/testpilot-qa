@@ -97,6 +97,34 @@ describe('extractTests', () => {
     expect(found[0]?.effectiveTags).toEqual(['t'])
   })
 
+  it('finds a test whose title is a variable', () => {
+    // `for (const name of CASES) test(name, fn)` is a real declaration.
+    // Requiring a literal title dropped it, and every tag on it, silently.
+    const found = tests(
+      [
+        'for (const name of CASES) {',
+        "  test(name, { tag: ['@regression'] }, async () => {})",
+        '}',
+      ].join('\n'),
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ titleKnown: false, effectiveTags: ['regression'] })
+  })
+
+  it('marks a literal title as known', () => {
+    expect(tests("test('x', async () => {})")[0]?.titleKnown).toBe(true)
+    expect(tests('test(`x ${y}`, async () => {})')[0]?.titleKnown).toBe(true)
+  })
+
+  it('does not treat a conditional-callback modifier as a declaration', () => {
+    // `test.skip(({ browserName }) => …, 'reason')` has a function argument but
+    // is a modifier; the discriminator is the FIRST argument, not the title.
+    expect(
+      tests("test.skip(({ browserName }) => browserName === 'webkit', 'no webkit')"),
+    ).toHaveLength(0)
+    expect(tests("test.skip(isCI, 'not on CI')")).toHaveLength(0)
+  })
+
   it('ignores in-body modifier calls that declare nothing', () => {
     // `test.skip()` / `test.slow(cond, reason)` inside a body are modifiers.
     const found = tests(

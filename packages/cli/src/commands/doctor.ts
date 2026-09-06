@@ -73,10 +73,21 @@ async function readTagVocabulary(globals: GlobalOptions): Promise<ReadonlySet<st
     // A file that failed to parse, or a suite whose test function we did not
     // recognize, contributes no tags — and every suite tag living only in that
     // file would then be reported as a typo. A partial read has to widen.
+    // Every signal that the vocabulary is short of the truth. Any one of them
+    // means a suite tag we do not see may still exist, and reporting it as a
+    // typo would accuse a correct config. mattermost has 28 unreadable tag
+    // expressions, so this is the common case, not the corner one.
     if (
       report.summary.filesAnalyzed === 0 ||
       report.summary.filesWithParseErrors > 0 ||
-      report.summary.tests === 0
+      report.summary.tests === 0 ||
+      report.summary.unreadableTagExpressions > 0 ||
+      report.summary.unreadableTitles > 0 ||
+      report.summary.dynamicTitles > 0 ||
+      report.warnings.some(
+        (warning) =>
+          warning.code === 'test-root-missing' || warning.code === 'playwright-config-partial',
+      )
     ) {
       return null
     }

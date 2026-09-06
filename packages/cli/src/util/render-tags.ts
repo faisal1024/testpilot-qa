@@ -1,4 +1,4 @@
-import type { TagsReport } from '@testpilot/core'
+import { type TagsReport, describeTagSelection } from '@testpilot/core'
 
 function pad(value: string, width: number): string {
   return value.length >= width ? value : value + ' '.repeat(width - value.length)
@@ -61,18 +61,22 @@ export function renderTagsText(report: TagsReport): string {
     lines.push('')
     lines.push('Suites (testpilot.config.ts):')
     for (const suite of suites) {
-      const parts: string[] = []
-      if (suite.include.length > 0) {
-        parts.push(suite.include.map((tag) => `@${tag}`).join(' or '))
-      } else {
-        parts.push('all tests')
-      }
-      if (suite.exclude.length > 0) {
-        parts.push(`excluding ${suite.exclude.map((tag) => `@${tag}`).join(' and ')}`)
-      }
-      const count =
-        suite.matchingTests === null ? 'unknown tag(s)' : `${suite.matchingTests} test(s)`
-      lines.push(`  ${suite.name}: ${parts.join(', ')} — ${count}`)
+      // Reuse the compiler's own prose rather than re-deriving it here: the
+      // first version of this loop forgot `all` entirely and printed
+      // "all tests" for an all-of suite, contradicting the count beside it.
+      const what = suite.malformed
+        ? 'cannot be read'
+        : describeTagSelection({
+            include: suite.include,
+            all: suite.all,
+            exclude: suite.exclude,
+          })
+      const count = suite.malformed
+        ? 'run `testpilot doctor`'
+        : suite.matchingTests === null
+          ? 'count unavailable'
+          : `${suite.matchingTests} test declaration(s)`
+      lines.push(`  ${suite.name}: ${what} — ${count}`)
       if (suite.unknownTags.length > 0) {
         // A suite naming a tag no test carries runs the wrong set silently. Say it
         // here as well as in `doctor`, because this is the command people read.

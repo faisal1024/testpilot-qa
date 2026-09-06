@@ -107,6 +107,7 @@ describe('collectTags', () => {
         exclude: ['flaky'],
         unknownTags: [],
         matchingTests: 1,
+        malformed: false,
       },
       {
         name: 'smoke',
@@ -115,6 +116,7 @@ describe('collectTags', () => {
         exclude: [],
         unknownTags: [],
         matchingTests: 1,
+        malformed: false,
       },
     ])
   })
@@ -174,6 +176,88 @@ describe('collectTags', () => {
     const report = await collectTags({ cwd: dir, config: config() })
     expect(report.tags[0]).toMatchObject({ tag: 'a,@b', selectable: false })
     expect(report.warnings.map((w) => w.code)).toContain('unselectable-tags')
+  })
+
+  it('refuses to count a malformed suite instead of matching every test', async () => {
+    write('tests/a.spec.ts', "test('1 @x', async () => {})\ntest('2', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { bad: ['has space'] } }),
+    })
+    // An empty selection would otherwise match everything and print a count.
+    expect(report.suites[0]).toMatchObject({ malformed: true, matchingTests: null })
+  })
+
+  it('refuses to count when the vocabulary is knowingly incomplete', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "test('1 @regression', async () => {})",
+        "test('2', { tag: [...COMMON] }, async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { nightly: ['regression'] } }),
+    })
+    // The second test may carry @regression; a count of 1 would be a lower
+    // bound stated as a fact.
+    expect(report.summary.unreadableTagExpressions).toBe(1)
+    expect(report.suites[0]?.matchingTests).toBeNull()
+  })
+
+  it('discloses a title it cannot read', async () => {
+    write('tests/a.spec.ts', 'for (const n of C) { test(n, async () => {}) }')
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.summary.tests).toBe(1)
+    expect(report.summary.unreadableTitles).toBe(1)
+    expect(report.warnings.map((w) => w.code)).toContain('unreadable-test-titles')
+  })
+
+  it('still reports unrecognized tests when another file failed to parse', async () => {
+    // A parse error elsewhere must not suppress this disclosure.
+    write('tests/a.spec.ts', "setup('one @smoke', async () => {})")
+    write('tests/broken.spec.ts', 'const = = =')
+    const report = await collectTags({ cwd: dir, config: config() })
+    const codes = report.warnings.map((w) => w.code)
+    expect(codes).toContain('files-not-parsed')
+    expect(codes).toContain('no-tests-recognized')
+  })
+
+  it.each([
+    // `--tag -wip` parses the `-` as negation and would silently EXCLUDE @wip.
+    ['x @-wip', '-wip', false],
+    // `--tag` splits on commas, so this one tag becomes two.
+    ['x @a,@b', 'a,@b', false],
+    ['x @smoke', 'smoke', true],
+    ['x @team:auth', 'team:auth', true],
+    // A dot is fine when the tag stands on its own.
+    ['x @smoke.example', 'smoke.example', true],
+  ])('marks the tag in %j selectable=%s', async (title, tag, expected) => {
+    write('tests/a.spec.ts', `test('${title}', async () => {})`)
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.tags.find((usage) => usage.tag === tag)?.selectable).toBe(expected)
+  })
+
+  it('marks a tag that only ever appears fused to a word as unselectable', async () => {
+    // Playwright reads @smoke.example here; our leading boundary deliberately
+    // will not, so `--tag smoke.example` would select nothing.
+    write('tests/a.spec.ts', "test('notify user@smoke.example now', async () => {})")
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.tags[0]).toMatchObject({ tag: 'smoke.example', selectable: false })
+    expect(report.warnings.map((w) => w.code)).toContain('unselectable-tags')
+  })
+
+  it('marks it selectable when the same tag also appears standalone somewhere', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "test('notify user@smoke.example now', async () => {})",
+        "test('real @smoke.example', async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.tags[0]?.selectable).toBe(true)
   })
 
   it('resolves an all-of suite', async () => {

@@ -284,7 +284,10 @@ describe('suite object form', () => {
 describe('describeTagSelection', () => {
   it('reads as prose', () => {
     expect(describeTagSelection({ include: ['a', 'b'], all: [], exclude: ['c'] })).toBe(
-      '@a or @b, excluding @c',
+      'any of @a, @b, excluding @c',
+    )
+    expect(describeTagSelection({ include: [], all: ['a', 'b'], exclude: [] })).toBe(
+      'all of @a, @b',
     )
     expect(describeTagSelection({ include: [], all: [], exclude: ['c'] })).toBe(
       'all tests, excluding @c',
@@ -302,6 +305,13 @@ describe('findConflictingGrep', () => {
 
   it('detects the --flag=value form', () => {
     expect(findConflictingGrep(['--grep=foo'])).toBe('--grep')
+  })
+
+  it('detects a combined single-dash cluster containing g or G', () => {
+    // commander parses `-xg '@foo'` as `-x -g @foo`.
+    expect(findConflictingGrep(['-xg', '@foo'])).toBe('-xg')
+    expect(findConflictingGrep(['-xG', '@foo'])).toBe('-xG')
+    expect(findConflictingGrep(['-xj'])).toBeNull()
   })
 
   it('detects a short flag with an attached value', () => {

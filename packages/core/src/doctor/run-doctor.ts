@@ -450,15 +450,18 @@ async function checkSuites(
       title: 'Tag suites',
       category: 'config',
       status: 'warn',
-      message: offenders
-        .map(
+      message: [
+        ...offenders.map(
           (name) =>
             `Suite "${name}" references ${(unknownBySuite[name] ?? []).map((tag) => `@${tag}`).join(', ')}, which no test carries — \`--suite ${name}\` would not select what you expect.`,
-        )
-        .join(' '),
+        ),
+        // Non-blocking issues (an awkward suite name) would otherwise be lost
+        // whenever an unknown tag happened to be present too.
+        ...issues.map((issue) => issue.message),
+      ].join(' '),
       remediation:
         'Run `testpilot tags` to see the real vocabulary, then fix `suites` or tag the tests.',
-      details: { unknownTags: unknownBySuite },
+      details: { unknownTags: unknownBySuite, issues },
     }
   }
 

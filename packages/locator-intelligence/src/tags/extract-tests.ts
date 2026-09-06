@@ -13,6 +13,12 @@ export interface TestDeclaration {
   title: string
   /** True when the title contains `${}` — the full title is not knowable statically. */
   dynamicTitle: boolean
+  /**
+   * False when the title is not a string at all (a variable, a call, a member
+   * expression). Nothing about its tags can be read, so the vocabulary is
+   * incomplete by at least this test — which the report has to say.
+   */
+  titleKnown: boolean
   /** Tags written on this test itself, without the leading `@`, deduped and sorted. */
   ownTags: string[]
   /** `ownTags` plus every enclosing `test.describe` tag. */
@@ -26,6 +32,8 @@ export interface TestDeclaration {
   titleTags: string[]
   /** Effective tags from a `{ tag: [...] }` details argument. */
   detailTags: string[]
+  /** Effective tags that appear in a form `--tag` can select. */
+  anchoredTags: string[]
   /**
    * Tag entries on this test that could not be read statically — a spread, a
    * variable, or a template with interpolations. The test carries a tag we
@@ -48,7 +56,15 @@ const TEST_MODIFIERS = new Set(['only', 'skip', 'fixme', 'fail'])
 /** Modifiers that still declare a describe block. */
 const DESCRIBE_MODIFIERS = new Set(['only', 'skip', 'fixme', 'serial', 'parallel'])
 
+/** Playwright's own title-tag tokenization. */
 const TAG_IN_TITLE = /@\S+/g
+/**
+ * The subset `--tag` can select: `@` preceded by whitespace or start-of-string.
+ * In `notify user@smoke.example`, Playwright reads the tag `@smoke.example`
+ * and we deliberately will not — so the report must be able to say which tags
+ * are reachable and which only ever appear fused to a word.
+ */
+const ANCHORED_TAG_IN_TITLE = /(?<!\S)@\S+/g
 
 interface Loc {
   start: { line: number; column: number }
@@ -132,8 +148,8 @@ function normalizeTag(raw: string): string | null {
   return body === '' ? null : body
 }
 
-function tagsFromTitle(read: ReadTitle): string[] {
-  const found = read.scannable.match(TAG_IN_TITLE)
+function matchTags(text: string, pattern: RegExp): string[] {
+  const found = text.match(pattern)
   if (!found) {
     return []
   }
@@ -145,6 +161,13 @@ function tagsFromTitle(read: ReadTitle): string[] {
     }
   }
   return tags
+}
+
+function tagsFromTitle(read: ReadTitle): { tags: string[]; anchored: string[] } {
+  return {
+    tags: matchTags(read.scannable, TAG_IN_TITLE),
+    anchored: matchTags(read.scannable, ANCHORED_TAG_IN_TITLE),
+  }
 }
 
 /** Reads `{ tag: '@a' }` or `{ tag: ['@a', '@b'] }` from a details argument. */
@@ -220,20 +243,30 @@ function classify(node: AstNode): CallKind {
   if (!rest.every((part) => TEST_MODIFIERS.has(part))) {
     return null
   }
-  // `test.skip()` / `test.slow(condition, reason)` inside a body are modifiers,
-  // not declarations: a declaration always has a title *and* a body function.
-  const hasTitle = readTitle(args[0]) !== null
-  return hasTitle && args.some(isFunctionNode) ? 'test' : null
+  // A declaration is `(title, body)` or `(title, details, body)`; the in-body
+  // modifiers are `test.skip(condition, reason)` and `test.skip(callback, reason)`.
+  // The discriminator is the *first* argument, not whether the title is a string
+  // literal: `test(name, fn)` inside a `for` loop is a real declaration, and
+  // requiring a literal title dropped it — and every tag on it — silently.
+  if (isFunctionNode(args[0])) {
+    return null
+  }
+  return args.some(isFunctionNode) ? 'test' : null
 }
 
 interface OwnTags {
   all: string[]
   title: string[]
   details: string[]
+  /**
+   * Tags that appear somewhere in a form `--tag` can select. Details-argument
+   * tags are always here: Playwright space-joins them onto the grep title.
+   */
+  anchored: string[]
   unreadable: number
 }
 
-const EMPTY_TAGS: OwnTags = { all: [], title: [], details: [], unreadable: 0 }
+const EMPTY_TAGS: OwnTags = { all: [], title: [], details: [], anchored: [], unreadable: 0 }
 
 /** Folds an enclosing describe's tags into a test's own, preserving provenance. */
 function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
@@ -241,6 +274,7 @@ function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
     all: sortedUnique([...inherited.all, ...own.all]),
     title: sortedUnique([...inherited.title, ...own.title]),
     details: sortedUnique([...inherited.details, ...own.details]),
+    anchored: sortedUnique([...inherited.anchored, ...own.anchored]),
     // Only ever read off the declaration itself; a describe's unreadable
     // entries are counted when that describe is visited.
     unreadable: own.unreadable,
@@ -250,13 +284,14 @@ function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
 function ownTagsOf(node: AstNode): OwnTags {
   const args = (node.arguments as AstNode[]) ?? []
   const title = readTitle(args[0])
-  const fromTitle = title ? tagsFromTitle(title) : []
+  const fromTitle = title ? tagsFromTitle(title) : { tags: [], anchored: [] }
   // Playwright's details argument is the second positional argument.
   const fromDetails = tagsFromDetails(args[1])
   return {
-    all: sortedUnique([...fromTitle, ...fromDetails.tags]),
-    title: sortedUnique(fromTitle),
+    all: sortedUnique([...fromTitle.tags, ...fromDetails.tags]),
+    title: sortedUnique(fromTitle.tags),
     details: sortedUnique(fromDetails.tags),
+    anchored: sortedUnique([...fromTitle.anchored, ...fromDetails.tags]),
     unreadable: fromDetails.unreadable,
   }
 }
@@ -323,9 +358,11 @@ export function extractTests(program: AstNode): ExtractedTests {
         declarations.push({
           title: title?.title ?? '',
           dynamicTitle: title?.dynamic ?? false,
+          titleKnown: title !== null,
           ownTags: own.all,
           titleTags: effective.title,
           detailTags: effective.details,
+          anchoredTags: effective.anchored,
           unreadableTags: own.unreadable,
           effectiveTags: effective.all,
           line: loc?.start.line ?? 0,

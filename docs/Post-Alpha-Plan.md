@@ -267,8 +267,9 @@ projects being filtered out that would otherwise have shipped as fact.
 - Docs: `run` and `tags` in CLI-Spec §3.1a/§3.2a, README "Run a subset", the `suites` key in
   CLI-Spec §4 (there is no `docs/Configuration.md`; config is documented in the CLI spec).
 - Done when: a scaffolded project runs `testpilot run --tag smoke` and `--suite nightly` with no
-  hand-written regex; `testpilot tags` on the corpus lists real vocabularies (mattermost and cal.com
-  already use `@tag` titles) and the untagged count.
+  hand-written regex; `testpilot tags` on the corpus lists real vocabularies and the untagged count.
+  (Measured: only mattermost is tagged — 83 tags via `{ tag: [...] }`. Ghost, immich, cal.com and
+  documenso are untagged.)
 
 ### Phase 11 — Signal precision (`alpha.3`)
 

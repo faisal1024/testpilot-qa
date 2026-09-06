@@ -122,8 +122,9 @@ function dedupe(values: string[]): string[] {
  */
 function assertNotEmpty(raw: string, flag: string): void {
   if (splitTagList(raw).length === 0) {
+    // `flag` is whatever the caller is: a CLI flag, or a `suites` key name.
     throw new TagSelectionError(
-      `${flag} was given an empty value, which would run every test. Write a tag name (e.g. \`${flag} smoke\`), or drop the flag.`,
+      `${flag} was given an empty value, which would run every test. Write a tag name, or remove it.`,
     )
   }
 }
@@ -150,7 +151,7 @@ export function buildTagSelection(input: BuildTagSelectionInput): TagSelection {
   const exclude: TagName[] = []
 
   for (const raw of input.allTag ?? []) {
-    assertNotEmpty(raw, 'all')
+    assertNotEmpty(raw, "a suite's `all` list")
     for (const token of splitTagList(raw)) {
       const { name, negated } = parseTagToken(token)
       ;(negated ? exclude : all).push(name)
@@ -269,10 +270,10 @@ export function tagSelectionArgs(selection: TagSelection): string[] {
 export function describeTagSelection(selection: TagSelection): string {
   const parts: string[] = []
   if (selection.include.length > 0) {
-    parts.push(selection.include.map((name) => `@${name}`).join(' or '))
+    parts.push(`any of ${selection.include.map((name) => `@${name}`).join(', ')}`)
   }
   if (selection.all.length > 0) {
-    parts.push(selection.all.map((name) => `@${name}`).join(' and '))
+    parts.push(`all of ${selection.all.map((name) => `@${name}`).join(', ')}`)
   }
   if (parts.length === 0) {
     parts.push('all tests')
@@ -286,8 +287,9 @@ export function describeTagSelection(selection: TagSelection): string {
 /**
  * Every spelling Playwright accepts for a grep flag.
  *
- * `-G` is the `--grep-invert` alias on 1.61+, `-gv` on 1.42–~1.53, and some
- * versions in between have none. All are listed because our args are prepended:
+ * `-G` is the `--grep-invert` alias in Playwright 1.63 (verified in its
+ * `program.js`); `-gv` was the spelling in some earlier releases. Both are
+ * listed rather than version-detected because our args are prepended:
  * an alias we fail to recognize means Playwright keeps the user's later flag and
  * silently drops ours, so the excluded tests run.
  */
@@ -314,6 +316,11 @@ export function findConflictingGrep(forwardedArgs: string[]): string | null {
     const short = GREP_SHORT_FLAGS.find((flag) => arg === flag || arg.startsWith(flag))
     if (short) {
       return short
+    }
+    // Commander also accepts combined single-dash clusters: `-xg '@foo'` parses
+    // as `-x -g @foo`. Any cluster containing g or G is a possible grep.
+    if (/^-[A-Za-z]+$/.test(arg) && /[gG]/.test(arg)) {
+      return arg
     }
   }
   return null

@@ -105,7 +105,7 @@ testpilot run [--tag <tags>] [--exclude-tag <tags>] [--suite <name>] [-- <playwr
 |---|---|
 | `--tag <tags>` | Run tests carrying any of these tags. Comma-separated, repeatable. A `!` prefix excludes. |
 | `--exclude-tag <tags>` | Skip tests carrying any of these tags. Comma-separated, repeatable. |
-| `--suite <name>` | Expand a named tag set from the config's `suites` key. Repeatable. |
+| `--suite <name>` | Expand a named tag set from the config's `suites` key. One at a time, and not combinable with `--tag`. |
 
 Tag selection **compiles to Playwright's own flags** and nothing else:
 
@@ -125,7 +125,7 @@ CI. Two details of Playwright's matching drive that shape, both checked against 
 - **The boundaries are deliberately stricter than Playwright.** Playwright reads title tags with
   `/@\S+/` and would call `@smoke.example` in `user@smoke.example` a tag; `--tag` will not select it.
   That strictness is what makes `--tag smoke` skip `@smoketest` and `--tag team` skip `@team:auth` —
-  the mistake hand-written `--grep` invites. `testpilot tags` flags any tag it cannot select.
+  the mistake hand-written `--grep` invites. `testpilot tags` flags every tag it cannot select — including one that only ever appears fused to a word, which Playwright reads as a tag and `--tag` cannot reach.
 
 **Rules**
 - Tag names must start with a letter, digit or `_` and contain no whitespace or `@`. Anything more
@@ -134,15 +134,18 @@ CI. Two details of Playwright's matching drive that shape, both checked against 
 - An unknown `--suite` is a **usage error** (`2`) that lists the suites that do exist. A typo must
   never fall through to running the whole suite.
 - Combining `--tag`/`--suite` with a forwarded grep flag is a **usage error** (`2`): Playwright keeps
-  only the last occurrence, so one of the two filters would be silently lost. Every spelling is
-  refused — `--grep`, `--grep-invert`, `-g`, `-G` (the `--grep-invert` alias on 1.61+), `-gv` (the
-  alias on 1.42–1.53), `--flag=value`, and short flags with an attached value (`-g@smoke`).
+  only the last occurrence, so one of the two filters would be silently lost. Refused spellings:
+  `--grep`, `--grep-invert`, `-g`, `-G` (the `--grep-invert` alias in Playwright 1.63), `-gv`,
+  `--flag=value`, short flags with an attached value (`-g@smoke`), and combined single-dash clusters
+  containing `g`/`G` (`-xg`, which commander parses as `-x -g`).
 - **One `--suite` at a time** (`2` otherwise). Two suites cannot be folded into a single
   include/exclude pair without changing what either selects: `{ fast: ['!slow'], nightly:
   ['regression'] }` would become "regression, excluding slow", which is neither suite.
-- `--tag` and `--suite` compose, and includes are **unioned, not intersected**:
-  `--suite nightly --tag smoke` runs the nightly tests **plus** the smoke tests. The excludes of both
-  apply. For an intersection, give the suite an `all` list.
+- **`--suite` and `--tag` cannot be combined** (`2`). Both choose what to *include*, and "the
+  nightly suite **plus** the smoke tests" and "the nightly suite **narrowed to** smoke" are equally
+  natural readings. Rather than pick one silently, pick neither. `--exclude-tag` **does** compose
+  with `--suite` — narrowing a suite is unambiguous. For an intersection, give the suite an `all`
+  list.
 - An **empty value** (`--tag ''`, `--tag ','`, `--suite ''`) is a **usage error** (`2`), never "no
   filter" — `--tag "$TAGS"` with an unset CI variable must not quietly run the whole suite.
 
@@ -332,7 +335,7 @@ TAG              TESTS  FILES  DECLARED
 3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
 
 Suites (testpilot.config.ts):
-  nightly: @regression, excluding @flaky — 84 test declaration(s)
+  nightly: any of @regression, excluding @flaky — 84 test declaration(s)
 ```
 
 ---

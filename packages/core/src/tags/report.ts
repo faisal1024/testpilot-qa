@@ -41,8 +41,14 @@ export interface SuiteUsage {
   exclude: string[]
   /** Referenced tags that no test carries — a typo, or a tag not written yet. */
   unknownTags: string[]
-  /** Tests the suite would select, or `null` when it references unknown tags. */
+  /**
+   * Tests the suite would select, or `null` when no honest count exists: the
+   * suite references unknown tags, is malformed, or the vocabulary is knowingly
+   * incomplete. A count over a vocabulary we know is wrong is worse than none.
+   */
   matchingTests: number | null
+  /** True when the suite's own tokens could not be parsed (see `doctor`). */
+  malformed: boolean
 }
 
 export interface TagsSummary {
@@ -67,6 +73,11 @@ export interface TagsSummary {
    * carries and this report cannot name.
    */
   unreadableTagExpressions: number
+  /**
+   * Tests whose title is not a string literal at all (`test(name, fn)` in a
+   * loop). No tag on such a test can be read from its title.
+   */
+  unreadableTitles: number
 }
 
 /**
@@ -86,6 +97,7 @@ export interface TagsWarning {
     | 'files-not-parsed'
     | 'dynamic-test-titles'
     | 'unreadable-tag-expressions'
+    | 'unreadable-test-titles'
     | 'no-tests-recognized'
     | 'unselectable-tags'
   message: string

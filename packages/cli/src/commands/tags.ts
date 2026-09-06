@@ -39,7 +39,7 @@ export async function tagsCommand(
   // Zero files is a discovery failure, not an empty vocabulary — the same guard
   // `analyze` uses, for the same reason: "no tags" would read as a clean answer.
   if (report.summary.filesAnalyzed === 0) {
-    failNoFilesMatched(globals, patterns, resolved, resolved.filepath, resolved.rootDir)
+    failNoFilesMatched(globals, patterns, resolved, resolved.filepath, resolved.rootDir, 'tags')
   }
 
   if (options.output) {
