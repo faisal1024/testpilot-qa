@@ -17,12 +17,34 @@ export interface TestDeclaration {
   ownTags: string[]
   /** `ownTags` plus every enclosing `test.describe` tag. */
   effectiveTags: string[]
+  /**
+   * Effective tags written in a title — this test's or an enclosing describe's.
+   * Provenance is effective, like `effectiveTags`: a describe-level
+   * `{ tag: [...] }` is the most deliberate vocabulary there is, and keying it
+   * to the describe rather than the tests would leave it invisible.
+   */
+  titleTags: string[]
+  /** Effective tags from a `{ tag: [...] }` details argument. */
+  detailTags: string[]
+  /**
+   * Tag entries on this test that could not be read statically — a spread, a
+   * variable, or a template with interpolations. The test carries a tag we
+   * cannot name, which the report has to say rather than drop. A describe's
+   * unreadable entries are counted in {@link ExtractedTests.unreadableTagExpressions},
+   * not here, so nothing is double-counted.
+   */
+  unreadableTags: number
   line: number
   column: number
 }
 
-/** Modifiers that still declare a test (as opposed to in-body `test.skip()`). */
-const TEST_MODIFIERS = new Set(['only', 'skip', 'fixme', 'fail', 'slow'])
+/**
+ * Modifiers that still declare a test (as opposed to in-body `test.skip()`).
+ *
+ * `slow` is deliberately absent: Playwright's `TestType.slow` has no
+ * `(title, body)` overload, so `test.slow('x', fn)` is not a declaration.
+ */
+const TEST_MODIFIERS = new Set(['only', 'skip', 'fixme', 'fail'])
 /** Modifiers that still declare a describe block. */
 const DESCRIBE_MODIFIERS = new Set(['only', 'skip', 'fixme', 'serial', 'parallel'])
 
@@ -61,21 +83,45 @@ function isFunctionNode(node: AstNode | undefined): boolean {
   )
 }
 
+interface ReadTitle {
+  /** Static text, for display. */
+  title: string
+  /** True when the title contains `${...}`. */
+  dynamic: boolean
+  /**
+   * The text safe to scan for tags. For a template literal this drops every
+   * run of non-whitespace touching an interpolation, because such a run fuses
+   * with the hole at runtime: ``test(`@smoke${x} y`)`` produces the tag
+   * `@smokeX`, not `@smoke`, so reporting `@smoke` would name a tag no test
+   * carries and `--tag smoke` would run nothing.
+   */
+  scannable: string
+}
+
 /** Reads a title argument: a string literal, or the static parts of a template. */
-function readTitle(arg: AstNode | undefined): { title: string; dynamic: boolean } | null {
+function readTitle(arg: AstNode | undefined): ReadTitle | null {
   if (!arg) {
     return null
   }
   if (arg.type === 'Literal' && typeof arg.value === 'string') {
-    return { title: arg.value, dynamic: false }
+    return { title: arg.value, dynamic: false, scannable: arg.value }
   }
   if (arg.type === 'TemplateLiteral') {
     const quasis = (arg.quasis as Array<{ value: { cooked: string | null } }>) ?? []
     const expressions = (arg.expressions as unknown[]) ?? []
-    // The interpolations are unknowable; join the static runs with a space so a
-    // tag never accidentally fuses with adjacent text.
-    const title = quasis.map((quasi) => quasi.value.cooked ?? '').join(' ')
-    return { title, dynamic: expressions.length > 0 }
+    const parts = quasis.map((quasi) => quasi.value.cooked ?? '')
+    const title = parts.join(' ')
+    if (expressions.length === 0) {
+      return { title, dynamic: false, scannable: title }
+    }
+    const scannable = parts
+      .map((part, index) => {
+        // A hole follows every quasi but the last, and precedes every one but the first.
+        const trimmedEnd = index < parts.length - 1 ? part.replace(/\S+$/, '') : part
+        return index > 0 ? trimmedEnd.replace(/^\S+/, '') : trimmedEnd
+      })
+      .join(' ')
+    return { title, dynamic: true, scannable }
   }
   return null
 }
@@ -86,8 +132,8 @@ function normalizeTag(raw: string): string | null {
   return body === '' ? null : body
 }
 
-function tagsFromTitle(title: string): string[] {
-  const found = title.match(TAG_IN_TITLE)
+function tagsFromTitle(read: ReadTitle): string[] {
+  const found = read.scannable.match(TAG_IN_TITLE)
   if (!found) {
     return []
   }
@@ -102,12 +148,13 @@ function tagsFromTitle(title: string): string[] {
 }
 
 /** Reads `{ tag: '@a' }` or `{ tag: ['@a', '@b'] }` from a details argument. */
-function tagsFromDetails(arg: AstNode | undefined): string[] {
+function tagsFromDetails(arg: AstNode | undefined): { tags: string[]; unreadable: number } {
   if (!arg || arg.type !== 'ObjectExpression') {
-    return []
+    return { tags: [], unreadable: 0 }
   }
   const properties = (arg.properties as AstNode[]) ?? []
   const tags: string[] = []
+  let unreadable = 0
   for (const property of properties) {
     if (property.type !== 'Property' || property.computed === true) {
       continue
@@ -126,17 +173,25 @@ function tagsFromDetails(arg: AstNode | undefined): string[] {
     const literals: AstNode[] =
       value?.type === 'ArrayExpression' ? ((value.elements as AstNode[]) ?? []) : [value as AstNode]
     for (const element of literals) {
+      if (element?.type === 'SpreadElement') {
+        // `tag: [...COMMON, '@b']` — an unknown number of tags, at least one.
+        unreadable += 1
+        continue
+      }
       const read = readTitle(element)
       if (!read || read.dynamic) {
+        unreadable += 1
         continue
       }
       const tag = normalizeTag(read.title)
       if (tag) {
         tags.push(tag)
+      } else {
+        unreadable += 1
       }
     }
   }
-  return tags
+  return { tags, unreadable }
 }
 
 function sortedUnique(values: string[]): string[] {
@@ -171,13 +226,49 @@ function classify(node: AstNode): CallKind {
   return hasTitle && args.some(isFunctionNode) ? 'test' : null
 }
 
-function ownTagsOf(node: AstNode): string[] {
+interface OwnTags {
+  all: string[]
+  title: string[]
+  details: string[]
+  unreadable: number
+}
+
+const EMPTY_TAGS: OwnTags = { all: [], title: [], details: [], unreadable: 0 }
+
+/** Folds an enclosing describe's tags into a test's own, preserving provenance. */
+function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
+  return {
+    all: sortedUnique([...inherited.all, ...own.all]),
+    title: sortedUnique([...inherited.title, ...own.title]),
+    details: sortedUnique([...inherited.details, ...own.details]),
+    // Only ever read off the declaration itself; a describe's unreadable
+    // entries are counted when that describe is visited.
+    unreadable: own.unreadable,
+  }
+}
+
+function ownTagsOf(node: AstNode): OwnTags {
   const args = (node.arguments as AstNode[]) ?? []
   const title = readTitle(args[0])
-  const fromTitle = title ? tagsFromTitle(title.title) : []
+  const fromTitle = title ? tagsFromTitle(title) : []
   // Playwright's details argument is the second positional argument.
   const fromDetails = tagsFromDetails(args[1])
-  return sortedUnique([...fromTitle, ...fromDetails])
+  return {
+    all: sortedUnique([...fromTitle, ...fromDetails.tags]),
+    title: sortedUnique(fromTitle),
+    details: sortedUnique(fromDetails.tags),
+    unreadable: fromDetails.unreadable,
+  }
+}
+
+export interface ExtractedTests {
+  tests: TestDeclaration[]
+  /**
+   * Every unreadable `tag` entry in the file, on tests **and** describes.
+   * File-level because a describe is not a declaration we report, and its
+   * unreadable tags would otherwise vanish.
+   */
+  unreadableTagExpressions: number
 }
 
 /**
@@ -186,10 +277,11 @@ function ownTagsOf(node: AstNode): string[] {
  * The walk is scoped rather than flat: a `test.describe` tag has to reach the
  * tests nested inside it, which a `walk()` visitor cannot see.
  */
-export function extractTests(program: AstNode): TestDeclaration[] {
+export function extractTests(program: AstNode): ExtractedTests {
   const declarations: TestDeclaration[] = []
+  let unreadableTagExpressions = 0
 
-  const visit = (node: unknown, inherited: string[]): void => {
+  const visit = (node: unknown, inherited: OwnTags): void => {
     if (node === null || typeof node !== 'object') {
       return
     }
@@ -211,7 +303,9 @@ export function extractTests(program: AstNode): TestDeclaration[] {
     if (candidate.type === 'CallExpression') {
       const kind = classify(candidate)
       if (kind === 'describe') {
-        const nested = sortedUnique([...inherited, ...ownTagsOf(candidate)])
+        const own = ownTagsOf(candidate)
+        unreadableTagExpressions += own.unreadable
+        const nested = mergeTags(inherited, own)
         const args = (candidate.arguments as AstNode[]) ?? []
         for (const arg of args) {
           visit(arg, isFunctionNode(arg) ? nested : inherited)
@@ -222,13 +316,18 @@ export function extractTests(program: AstNode): TestDeclaration[] {
       if (kind === 'test') {
         const args = (candidate.arguments as AstNode[]) ?? []
         const title = readTitle(args[0])
-        const ownTags = ownTagsOf(candidate)
+        const own = ownTagsOf(candidate)
+        unreadableTagExpressions += own.unreadable
+        const effective = mergeTags(inherited, own)
         const loc = candidate.loc as Loc | undefined
         declarations.push({
           title: title?.title ?? '',
           dynamicTitle: title?.dynamic ?? false,
-          ownTags,
-          effectiveTags: sortedUnique([...inherited, ...ownTags]),
+          ownTags: own.all,
+          titleTags: effective.title,
+          detailTags: effective.details,
+          unreadableTags: own.unreadable,
+          effectiveTags: effective.all,
           line: loc?.start.line ?? 0,
           column: (loc?.start.column ?? 0) + 1,
         })
@@ -246,7 +345,7 @@ export function extractTests(program: AstNode): TestDeclaration[] {
     }
   }
 
-  visit(program, [])
+  visit(program, EMPTY_TAGS)
   declarations.sort((a, b) => a.line - b.line || a.column - b.column)
-  return declarations
+  return { tests: declarations, unreadableTagExpressions }
 }

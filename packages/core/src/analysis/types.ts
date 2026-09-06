@@ -43,9 +43,6 @@ export interface AnalysisWarning {
   code:
     | 'unknown-rule'
     | 'no-files-matched'
-    // `tags` only: the vocabulary is incomplete by exactly this much.
-    | 'files-not-parsed'
-    | 'dynamic-test-titles'
     | 'playwright-config-partial'
     | 'playwright-config-ignored'
     | 'test-root-missing'

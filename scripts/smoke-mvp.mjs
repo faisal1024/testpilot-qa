@@ -51,6 +51,19 @@ function withTempDir(fn) {
   }
 }
 
+/**
+ * Playwright's own `forceRegExp` (packages/playwright/src/util.ts). A bare
+ * `new RegExp(src)` would claim a case-sensitivity Playwright does not give a
+ * plain-string --grep, so the smoke test has to model the real runtime.
+ */
+function forceRegExp(pattern) {
+  const match = pattern.match(/^\/(.*)\/([gi]*)$/)
+  if (match) {
+    return new RegExp(match[1], match[2])
+  }
+  return new RegExp(pattern, 'gi')
+}
+
 let failures = 0
 function check(name, fn) {
   try {
@@ -141,10 +154,21 @@ check('run --tag compiles to a Playwright --grep', () => {
     assert(status === 0, `exit ${status}`)
     const argv = readFileSync(argsFile, 'utf8').split('\n').filter(Boolean)
     assert(argv[0] === 'test', `expected a test invocation, got ${JSON.stringify(argv)}`)
-    const grep = argv[argv.indexOf('--grep') + 1]
-    assert(new RegExp(grep).test('checkout @smoke'), 'compiled --grep does not match @smoke')
-    assert(!new RegExp(grep).test('checkout @smoketest'), 'compiled --grep leaks into @smoketest')
+    const grep = forceRegExp(argv[argv.indexOf('--grep') + 1])
+    assert(grep.test('checkout @smoke'), 'compiled --grep does not match @smoke')
+    assert(!grep.test('checkout @smoketest'), 'compiled --grep leaks into @smoketest')
+    // Playwright compiles a bare --grep string with `gi`; ours must be exact.
+    assert(!grep.test('checkout @SMOKE'), 'compiled --grep is case-insensitive')
     assert(argv.includes('--grep-invert'), 'missing --grep-invert for the excluded tag')
+  })
+})
+
+check('run rejects an empty tag value instead of running everything', () => {
+  withTempDir((dir) => {
+    // `--tag "$SUITE_TAGS"` with the variable unset is the likeliest real case.
+    const { status, stderr } = cli(['run', '--tag', '', '--cwd', dir])
+    assert(status === 2, `expected usage exit 2, got ${status}`)
+    assert(stderr.includes('would run every test'), 'did not explain the refusal')
   })
 })
 

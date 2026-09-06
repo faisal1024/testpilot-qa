@@ -111,14 +111,21 @@ Tag selection **compiles to Playwright's own flags** and nothing else:
 
 | You write | TestPilot runs |
 |---|---|
-| `--tag smoke` | `--grep "(?<!\S)@smoke(?!\S)"` |
-| `--tag smoke,regression` | `--grep "(?<!\S)@(?:smoke\|regression)(?!\S)"` |
-| `--tag '!slow'` / `--exclude-tag slow` | `--grep-invert "(?<!\S)@slow(?!\S)"` |
+| `--tag smoke` | `--grep "/(?<!\S)@smoke(?!\S)/"` |
+| `--tag smoke,regression` | `--grep "/(?<!\S)@(?:smoke\|regression)(?!\S)/"` |
+| `--tag '!slow'` / `--exclude-tag slow` | `--grep-invert "/(?<!\S)@slow(?!\S)/"` |
 
 The compiled flags are printed on stderr, so a team dropping TestPilot can paste them into their own
-CI. The boundary assertions are Playwright's own tag tokenization (`@\S+`), which is what makes
-`--tag smoke` skip `@smoketest` and `--tag team` skip `@team:auth` — the mistake hand-written
-`--grep` invites.
+CI. Two details of Playwright's matching drive that shape, both checked against its source:
+
+- **The `/…/` wrapper is load-bearing.** Playwright compiles a *bare* `--grep` string as
+  `new RegExp(pattern, 'gi')` — case-**insensitive**. A slash-delimited value is taken as an explicit
+  regex with only the flags written after it. Without the wrapper, `--tag here` would also run
+  `@HERE`, and `run` would select a different set than `tags` counts and `doctor` validates.
+- **The boundaries are deliberately stricter than Playwright.** Playwright reads title tags with
+  `/@\S+/` and would call `@smoke.example` in `user@smoke.example` a tag; `--tag` will not select it.
+  That strictness is what makes `--tag smoke` skip `@smoketest` and `--tag team` skip `@team:auth` —
+  the mistake hand-written `--grep` invites. `testpilot tags` flags any tag it cannot select.
 
 **Rules**
 - Tag names must start with a letter, digit or `_` and contain no whitespace or `@`. Anything more
@@ -126,9 +133,18 @@ CI. The boundary assertions are Playwright's own tag tokenization (`@\S+`), whic
 - A tag both included and excluded is a **usage error** (`2`), not an empty run.
 - An unknown `--suite` is a **usage error** (`2`) that lists the suites that do exist. A typo must
   never fall through to running the whole suite.
-- Combining `--tag`/`--suite` with a forwarded `--grep`/`-g`/`--grep-invert` is a **usage error**
-  (`2`): Playwright keeps only the last occurrence, so one of the two filters would be silently lost.
-- `--tag` and `--suite` compose; the excludes of both apply.
+- Combining `--tag`/`--suite` with a forwarded grep flag is a **usage error** (`2`): Playwright keeps
+  only the last occurrence, so one of the two filters would be silently lost. Every spelling is
+  refused — `--grep`, `--grep-invert`, `-g`, `-G` (the `--grep-invert` alias on 1.61+), `-gv` (the
+  alias on 1.42–1.53), `--flag=value`, and short flags with an attached value (`-g@smoke`).
+- **One `--suite` at a time** (`2` otherwise). Two suites cannot be folded into a single
+  include/exclude pair without changing what either selects: `{ fast: ['!slow'], nightly:
+  ['regression'] }` would become "regression, excluding slow", which is neither suite.
+- `--tag` and `--suite` compose, and includes are **unioned, not intersected**:
+  `--suite nightly --tag smoke` runs the nightly tests **plus** the smoke tests. The excludes of both
+  apply. For an intersection, give the suite an `all` list.
+- An **empty value** (`--tag ''`, `--tag ','`, `--suite ''`) is a **usage error** (`2`), never "no
+  filter" — `--tag "$TAGS"` with an unset CI variable must not quietly run the whole suite.
 
 **Behavior:** finds the project root (nearest `package.json`), loads `testpilot.config.ts` if
 present, resolves the Playwright config (from `config.playwrightConfig` or discovery), invokes the
@@ -279,13 +295,24 @@ including through nesting — the count reported is what `--grep` would actually
 then the totals and the untagged count; then the configured `suites`, each resolved against the real
 vocabulary.
 
+Each row also records **how the tag was written** (`title`, `details`, or both). On a real suite this
+is the difference between a vocabulary and noise: mattermost's `@abac` (122 tests) is declared with
+`{ tag: [...] }`, while `@here`, `@all` and `@channel` come from titles *about* Mattermost's
+@-mention feature. Playwright reads both as tags, so `run` treats them alike — the report should not.
+
 **Honest bounds.** The vocabulary is a static read, so the report says where it is incomplete:
 
 | Warning | Meaning |
 |---|---|
-| `dynamic-test-titles` | Titles built from a template literal — a tag inside `${...}` cannot be read. |
+| `dynamic-test-titles` | Titles built from a template literal. Text touching a `${...}` hole is not read at all, because it fuses with the hole at runtime — ``test(`@smoke${x}`)`` is the tag `@smokeX`, not `@smoke`. |
+| `unreadable-tag-expressions` | A `tag` entry that is a spread, a variable, or an interpolated template. Each is at least one tag the suite carries and this list cannot name. |
+| `no-tests-recognized` | Files were scanned but no `test()` was recognized — usually a renamed import (`import { test as setup }`), which the walk keys on by name. "No tags" would otherwise answer a question that was never asked. |
+| `unselectable-tags` | A tag whose name contains a comma. Playwright reads it as one tag; `--tag` splits on commas, so only `run -- --grep` can select it. |
 | `files-not-parsed` | Files that failed to parse contribute no tags. |
 | `no-files-matched` | Discovery matched nothing. Exits `3`/`2` like `analyze` — "no tags" must never be the answer to "we scanned nothing". |
+
+**`tests` counts `test()` declarations, not executed tests.** A `for` loop generating fifty tests is
+one declaration. The rendered output says "test declarations" for this reason.
 
 **Exit codes:** `0` on success; `2`/`3` when discovery matched no files (same rules as `analyze`).
 
@@ -297,15 +324,15 @@ testpilot tags "e2e/**/*.spec.ts"
 ```
 
 ```
-TAG            TESTS  FILES
-@regression       86     14
-@accessibility    55     10
-@smoke            12      4
+TAG              TESTS  FILES  DECLARED
+@regression         86     14  details
+@accessibility      55     10  details
+@here                1      1  title
 
-3 tag(s) across 153 test(s) in 28 file(s); 41 untagged.
+3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
 
 Suites (testpilot.config.ts):
-  nightly: @regression, excluding @flaky — 84 test(s)
+  nightly: @regression, excluding @flaky — 84 test declaration(s)
 ```
 
 ---
@@ -358,7 +385,8 @@ testpilot doctor --quiet  # no output; exit code only
 
 **Checks (MVP):** Node.js version, `package.json` presence, local Playwright install, Playwright
 config discovery, `testpilot.config.ts` validity, test-directory existence, include-pattern sanity,
-TestPilot project-structure (when scaffolded), and **AI guidance-file drift** (5B).
+TestPilot project-structure (when scaffolded), **AI guidance-file drift** (5B), and **tag suites**
+(Phase 10).
 
 **AI guidance drift (`ai-guidance`):** for the agents selected by `config.ai.agents` (default: all),
 checks each expected file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`,
@@ -367,13 +395,20 @@ checks each expected file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructio
 deterministic, never regenerates or overwrites. Drift is a **warning, never a hard failure**, so it
 does not by itself change the exit code. The structured per-file detail is in `check.details.files`.
 
+**Tag suites (`suites`):** appears only when `testpilot.config.ts` declares a non-empty `suites`
+map. A structurally broken suite (empty, or a malformed tag token) **fails**; a suite referencing a
+tag no test carries **warns** — the tag may simply not be written yet. Verifying the second half
+needs the tag vocabulary, so on a project with suites `doctor` performs the same AST pass as
+`analyze` (roughly a second on a 300-file suite); a project without suites pays nothing. If the
+vocabulary cannot be read the check says so rather than reporting every tag as valid.
+
 **Output:** an overall status (`pass`/`warn`/`fail`), each check (`id`, `title`, `category`,
 `status`, `message`, optional `remediation`, optional `details`), and deduped `nextActions`. `--json`
 envelope:
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.2",
   "command": "doctor",
   "status": "fail",
   "checks": [
@@ -388,7 +423,8 @@ envelope:
 The `ai-guidance` check runs only on a project that has a `testpilot.config.ts` (or with
 `--strict-guidance`), so `doctor` on a repository you are merely evaluating does not report missing
 guidance files it was never asked for. A `playwright-discovery` check appears only when a Playwright
-config was found and could not be used for discovery.
+config was found and could not be used for discovery, and a `suites` check only when suites are
+configured — so `checks` is variable-length and consumers must key on `id`, never on position.
 
 **Exit codes:** `0` when no checks fail (warnings are not hard problems); `3` when the config is
 invalid; `4` for environment/project setup problems (e.g. missing Playwright or `package.json`);
@@ -507,14 +543,28 @@ export default defineConfig({
 
 | | |
 |---|---|
-| Type | `Record<string, string[]>` |
+| Type | `Record<string, string[] \| { any?: string[]; all?: string[]; none?: string[] }>` |
 | Default | `{}` |
 | Used by | `testpilot run --suite <name>`, `testpilot tags`, `testpilot doctor` |
 
-Each value is a list of tag tokens: `smoke` selects, `!smoke` excludes. Suite names must be writable
-on a command line (letters, digits, `_`, `-`). An empty suite is a `doctor` **failure** — it would
-select every test. A suite naming a tag no test carries is a `doctor` **warning** (the tag may not
-be written yet) and is called out in `testpilot tags`.
+The **array form is any-of**: `['regression', '!flaky']` runs anything tagged `@regression` except
+`@flaky`. The **object form** adds all-of, which an array cannot express:
+
+```ts
+suites: {
+  nightly: ['regression', '!flaky'],
+  hardened: { all: ['regression', 'critical'], none: ['flaky'] },
+}
+```
+
+`all` compiles to one lookahead per tag in a single `--grep`. The object form is `.strict()`, so
+`{ al: [...] }` is a config error rather than a suite that silently selects everything. The array
+form is permanent sugar for `{ any: [...] }` — it will never be reinterpreted.
+
+Suite names are best kept to letters, digits, `_` and `-`; anything else works but needs shell
+quoting, which `doctor` **warns** about (never fails — the config runs correctly). An empty suite is
+a `doctor` **failure**: it would select every test. A suite naming a tag no test carries is a
+`doctor` **warning** (the tag may not be written yet) and is called out in `testpilot tags`.
 
 ---
 
@@ -615,13 +665,17 @@ deterministic and diffable.
     "taggedTests": 112,
     "untaggedTests": 41,
     "distinctTags": 3,
-    "dynamicTitles": 2
+    "dynamicTitles": 2,
+    "unreadableTagExpressions": 0
   },
-  "tags": [{ "tag": "regression", "tests": 86, "files": 14 }],
+  "tags": [
+    { "tag": "regression", "tests": 86, "files": 14, "sources": ["details"], "selectable": true }
+  ],
   "suites": [
     {
       "name": "nightly",
       "include": ["regression"],
+      "all": [],
       "exclude": ["flaky"],
       "unknownTags": [],
       "matchingTests": 84
@@ -634,7 +688,10 @@ deterministic and diffable.
 
 Tag names are stored **without** the leading `@`. `matchingTests` is `null` when the suite
 references a tag no test carries — a count over a vocabulary we know is wrong would be worse than no
-count. `warnings[].code` adds `dynamic-test-titles` and `files-not-parsed` for this command.
+count. `warnings[].code` is its **own** union for this command (`no-files-matched`,
+`test-root-missing`, `playwright-config-partial`, `dynamic-test-titles`,
+`unreadable-tag-expressions`, `no-tests-recognized`, `unselectable-tags`); `analyze`'s
+`AnalysisWarning` union is deliberately unchanged, so its `1.7` contract still holds.
 
 **SARIF (`--reporter sarif`)** is a derived view of the same findings, not a second contract: each
 distinct `ruleId` becomes a SARIF reporting descriptor (with its `helpUri`), and each finding becomes a

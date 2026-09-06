@@ -81,6 +81,8 @@ export {
   describeTagSelection,
   escapeForRegExp,
   findConflictingGrep,
+  grepValue,
+  includePattern,
   isEmptySelection,
   parseTagToken,
   splitTagList,
@@ -92,9 +94,13 @@ export {
 } from './tags/tag-selection.js'
 export {
   expandSuites,
+  isEmptySuite,
   isValidSuiteName,
   selectionInputFor,
+  type SuiteDefinition,
   type SuiteMap,
+  type SuiteTokens,
+  suiteTokens,
 } from './tags/suites.js'
 export {
   type SuiteUsage,
@@ -102,9 +108,11 @@ export {
   type TagUsage,
   type TagsReport,
   type TagsSummary,
+  type TagsWarning,
 } from './tags/report.js'
 export {
   type SuiteIssue,
+  selectionInputForSuite,
   unknownSuiteTags,
   validateSuites,
 } from './tags/validate-suites.js'

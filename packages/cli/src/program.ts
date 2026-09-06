@@ -64,7 +64,12 @@ export function buildProgram(): Command {
       [],
     )
     .option('--exclude-tag <tags>', 'Skip tests with these tags (comma-separated).', collect, [])
-    .option('--suite <name>', 'Run a named tag set from testpilot.config.ts `suites`.', collect, [])
+    .option(
+      '--suite <name>',
+      'Run a named tag set from testpilot.config.ts `suites`. One at a time.',
+      collect,
+      [],
+    )
     .allowUnknownOption()
     .allowExcessArguments()
     .addHelpText('after', GLOBAL_FLAGS_HELP)

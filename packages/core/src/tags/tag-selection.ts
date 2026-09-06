@@ -6,21 +6,36 @@
  * in `--verbose`) is what keeps generated projects ejectable — a team can drop
  * TestPilot and paste the flags into their own CI.
  *
- * The boundary assertions are Playwright's own tag tokenization. Playwright
- * finds title tags with `/@\S+/`, and appends `{ tag: [...] }` entries to the
- * title space-separated, so a tag is exactly a whitespace-delimited run
- * starting at `@`. Asserting the same boundary means `--tag team` does not
- * match `@team:auth` and `--tag smoke` does not match `@smoketest` — the
- * silent "ran the wrong subset" failure that hand-written `--grep` invites.
+ * Two details of Playwright's matching drive the compiled shape, both verified
+ * against its source rather than assumed:
+ *
+ * 1. **Case.** `forceRegExp` compiles a bare `--grep` string as
+ *    `new RegExp(pattern, 'gi')` — case-**insensitive**. A slash-delimited
+ *    value (`/…/`) is taken as an explicit regex with only the flags written
+ *    after it, so we emit that form to get case-sensitive matching. Without it
+ *    `--tag here` also runs `@HERE`, which real suites do have (mattermost
+ *    carries `@here`, `@HERE` and `@channEL` as distinct tags), and `run` would
+ *    then select a different set than `tags` counts and `doctor` validates.
+ * 2. **Boundaries.** Playwright greps against
+ *    `[...ancestorTitlesAndTags, ownTitle, ...ownTags].join(' ')`, and reads
+ *    title tags with `/@\S+/`. We assert a whitespace boundary on both sides,
+ *    which is **deliberately stricter than Playwright on the leading side**: in
+ *    `user@smoke.example` Playwright would call `@smoke.example` a tag, and we
+ *    will not select it. That is the intended trade — it is what stops
+ *    `--tag smoke` running `@smoketest` and `--tag team` running `@team:auth`,
+ *    the silent "ran the wrong subset" failure hand-written `--grep` invites.
+ *    `tags` reports which tags are unselectable for this reason.
  */
 
 /** A tag name without its leading `@` (e.g. `smoke`). */
 export type TagName = string
 
 export interface TagSelection {
-  /** Tags to run — any-of. Empty means "no include filter". */
+  /** Tags to run — **any**-of. Empty means "no any-of filter". */
   include: TagName[]
-  /** Tags to skip — none-of. Applied after {@link include}. */
+  /** Tags a test must carry **all** of. Empty means "no all-of filter". */
+  all: TagName[]
+  /** Tags to skip — none-of. Applied after {@link include} and {@link all}. */
   exclude: TagName[]
 }
 
@@ -98,9 +113,26 @@ function dedupe(values: string[]): string[] {
   return [...new Set(values)]
 }
 
+/**
+ * Rejects a flag value that contains no tag at all.
+ *
+ * `--tag ''`, `--tag ' '` and `--tag ','` are almost always an unset or
+ * misspelled CI variable. Treating them as "no filter" runs the entire suite
+ * and exits `0` — the exact silent-wrong-set failure this feature removes.
+ */
+function assertNotEmpty(raw: string, flag: string): void {
+  if (splitTagList(raw).length === 0) {
+    throw new TagSelectionError(
+      `${flag} was given an empty value, which would run every test. Write a tag name (e.g. \`${flag} smoke\`), or drop the flag.`,
+    )
+  }
+}
+
 export interface BuildTagSelectionInput {
   /** Raw `--tag` values. Each may be a comma-separated list; `!x` negates. */
   tag?: string[]
+  /** Raw all-of values (from a suite's `all`). A test must carry every one. */
+  allTag?: string[]
   /** Raw `--exclude-tag` values. Each may be a comma-separated list. */
   excludeTag?: string[]
 }
@@ -114,15 +146,28 @@ export interface BuildTagSelectionInput {
  */
 export function buildTagSelection(input: BuildTagSelectionInput): TagSelection {
   const include: TagName[] = []
+  const all: TagName[] = []
   const exclude: TagName[] = []
 
+  for (const raw of input.allTag ?? []) {
+    assertNotEmpty(raw, 'all')
+    for (const token of splitTagList(raw)) {
+      const { name, negated } = parseTagToken(token)
+      ;(negated ? exclude : all).push(name)
+    }
+  }
   for (const raw of input.tag ?? []) {
+    // `--tag ''` (an unset CI variable) must not degrade to running everything.
+    // `parseTagToken` has the right message but `splitTagList` drops the empty
+    // token before it can be reached, so the check belongs here.
+    assertNotEmpty(raw, '--tag')
     for (const token of splitTagList(raw)) {
       const { name, negated } = parseTagToken(token)
       ;(negated ? exclude : include).push(name)
     }
   }
   for (const raw of input.excludeTag ?? []) {
+    assertNotEmpty(raw, '--exclude-tag')
     for (const token of splitTagList(raw)) {
       const { name, negated } = parseTagToken(token)
       if (negated) {
@@ -135,8 +180,9 @@ export function buildTagSelection(input: BuildTagSelectionInput): TagSelection {
   }
 
   const includes = dedupe(include)
+  const alls = dedupe(all)
   const excludes = dedupe(exclude)
-  const contradictions = includes.filter((name) => excludes.includes(name))
+  const contradictions = [...includes, ...alls].filter((name) => excludes.includes(name))
   if (contradictions.length > 0) {
     throw new TagSelectionError(
       `Tag${contradictions.length > 1 ? 's' : ''} ${contradictions
@@ -147,23 +193,57 @@ export function buildTagSelection(input: BuildTagSelectionInput): TagSelection {
     )
   }
 
-  return { include: includes, exclude: excludes }
+  return { include: includes, all: alls, exclude: excludes }
 }
 
 /** True when the selection filters nothing (so `run` stays a pure pass-through). */
 export function isEmptySelection(selection: TagSelection): boolean {
-  return selection.include.length === 0 && selection.exclude.length === 0
+  return (
+    selection.include.length === 0 && selection.all.length === 0 && selection.exclude.length === 0
+  )
 }
 
 /**
  * Builds the RegExp source matching any of `names` as a whole tag.
  *
  * Alternation is wrapped so the boundary assertions apply to every branch.
+ * This is the bare source; {@link grepValue} wraps it for Playwright's CLI.
  */
 export function tagPattern(names: TagName[]): string {
   const bodies = names.map((name) => escapeForRegExp(name)).join('|')
   const group = names.length === 1 ? bodies : `(?:${bodies})`
   return `(?<!\\S)@${group}(?!\\S)`
+}
+
+/**
+ * Wraps a pattern in the slash-delimited form Playwright reads as an explicit
+ * regex with no implicit flags.
+ *
+ * A bare string would be compiled `gi`, making every tag match
+ * case-insensitively. `escapeForRegExp` already escapes `/`, and the pattern
+ * always ends with `(?!\S)`, so the delimiters can never be mis-parsed.
+ */
+export function grepValue(pattern: string): string {
+  return `/${pattern}/`
+}
+
+/**
+ * The positive half of a selection, as one RegExp source.
+ *
+ * Any-of is a plain alternation. All-of needs one lookahead per tag, because a
+ * single regex has to assert several independent substrings — the idiom
+ * Playwright's own docs use for `--grep`. `[\s\S]` rather than `.` so a
+ * multi-line title cannot defeat it.
+ */
+export function includePattern(selection: TagSelection): string | null {
+  if (selection.all.length === 0) {
+    return selection.include.length > 0 ? tagPattern(selection.include) : null
+  }
+  const parts = selection.all.map((name) => `(?=[\\s\\S]*${tagPattern([name])})`)
+  if (selection.include.length > 0) {
+    parts.unshift(`(?=[\\s\\S]*${tagPattern(selection.include)})`)
+  }
+  return parts.join('')
 }
 
 /**
@@ -175,11 +255,12 @@ export function tagPattern(names: TagName[]): string {
  */
 export function tagSelectionArgs(selection: TagSelection): string[] {
   const args: string[] = []
-  if (selection.include.length > 0) {
-    args.push('--grep', tagPattern(selection.include))
+  const include = includePattern(selection)
+  if (include) {
+    args.push('--grep', grepValue(include))
   }
   if (selection.exclude.length > 0) {
-    args.push('--grep-invert', tagPattern(selection.exclude))
+    args.push('--grep-invert', grepValue(tagPattern(selection.exclude)))
   }
   return args
 }
@@ -189,7 +270,11 @@ export function describeTagSelection(selection: TagSelection): string {
   const parts: string[] = []
   if (selection.include.length > 0) {
     parts.push(selection.include.map((name) => `@${name}`).join(' or '))
-  } else {
+  }
+  if (selection.all.length > 0) {
+    parts.push(selection.all.map((name) => `@${name}`).join(' and '))
+  }
+  if (parts.length === 0) {
     parts.push('all tests')
   }
   if (selection.exclude.length > 0) {
@@ -198,23 +283,37 @@ export function describeTagSelection(selection: TagSelection): string {
   return parts.join(', ')
 }
 
-const GREP_FLAGS = new Set(['--grep', '-g', '--grep-invert'])
+/**
+ * Every spelling Playwright accepts for a grep flag.
+ *
+ * `-G` is the `--grep-invert` alias on 1.61+, `-gv` on 1.42–~1.53, and some
+ * versions in between have none. All are listed because our args are prepended:
+ * an alias we fail to recognize means Playwright keeps the user's later flag and
+ * silently drops ours, so the excluded tests run.
+ */
+const GREP_LONG_FLAGS = new Set(['--grep', '--grep-invert'])
+const GREP_SHORT_FLAGS = ['-gv', '-G', '-g']
 
 /**
  * Finds a caller-supplied grep flag among forwarded args.
  *
  * Playwright takes the last occurrence of a repeated flag, so appending ours
- * after theirs would silently discard the user's filter (or vice versa). We
- * refuse instead.
+ * after theirs would silently discard one of the two filters. We refuse instead.
  */
 export function findConflictingGrep(forwardedArgs: string[]): string | null {
   for (const arg of forwardedArgs) {
-    if (GREP_FLAGS.has(arg)) {
+    if (GREP_LONG_FLAGS.has(arg)) {
       return arg
     }
     const eq = arg.indexOf('=')
-    if (eq > 0 && GREP_FLAGS.has(arg.slice(0, eq))) {
+    if (eq > 0 && GREP_LONG_FLAGS.has(arg.slice(0, eq))) {
       return arg.slice(0, eq)
+    }
+    // Short flags may carry an attached value (`-g@smoke`), so match by prefix.
+    // Longest first, or `-gv@x` would report `-g`.
+    const short = GREP_SHORT_FLAGS.find((flag) => arg === flag || arg.startsWith(flag))
+    if (short) {
+      return short
     }
   }
   return null

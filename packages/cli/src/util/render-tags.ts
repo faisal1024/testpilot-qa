@@ -25,9 +25,12 @@ export function renderTagsText(report: TagsReport): string {
     lines.push(`⚠ ${warning.message}`)
   }
 
+  const declarationNote =
+    summary.tests === 1 ? '1 test declaration' : `${summary.tests} test declarations`
+
   if (tags.length === 0) {
     lines.push(
-      `No tags found in ${summary.tests} test(s) across ${summary.filesAnalyzed} file(s).`,
+      `No tags found in ${declarationNote} across ${summary.filesAnalyzed} file(s).`,
       '',
       'Tag a test by putting `@smoke` in its title, or with the details argument:',
       "  test('checkout works', { tag: ['@smoke'] }, async ({ page }) => { … })",
@@ -36,15 +39,21 @@ export function renderTagsText(report: TagsReport): string {
   } else {
     const tagWidth = Math.max(3, ...tags.map((usage) => usage.tag.length + 1))
     const testsWidth = Math.max(5, ...tags.map((usage) => String(usage.tests).length))
-    lines.push(`${pad('TAG', tagWidth)}  ${padStart('TESTS', testsWidth)}  FILES`)
+    lines.push(`${pad('TAG', tagWidth)}  ${padStart('TESTS', testsWidth)}  FILES  DECLARED`)
     for (const usage of tags) {
+      // A tag written only in a title is often incidental prose Playwright
+      // happens to read as a tag (`@here`, `@channel`); one written with
+      // `{ tag: [...] }` is always deliberate. Without this column a reader
+      // cannot tell the vocabulary from the noise.
+      const declared = usage.sources.length > 0 ? usage.sources.join('+') : 'inherited'
+      const marker = usage.selectable ? '' : '  (not selectable with --tag)'
       lines.push(
-        `${pad(`@${usage.tag}`, tagWidth)}  ${padStart(String(usage.tests), testsWidth)}  ${usage.files}`,
+        `${pad(`@${usage.tag}`, tagWidth)}  ${padStart(String(usage.tests), testsWidth)}  ${String(usage.files).padEnd(5)}  ${declared}${marker}`,
       )
     }
     lines.push('')
     lines.push(
-      `${summary.distinctTags} tag(s) across ${summary.tests} test(s) in ${summary.filesAnalyzed} file(s); ${summary.untaggedTests} untagged.`,
+      `${summary.distinctTags} tag(s) across ${declarationNote} in ${summary.filesAnalyzed} file(s); ${summary.untaggedTests} untagged.`,
     )
   }
 

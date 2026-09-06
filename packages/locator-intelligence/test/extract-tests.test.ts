@@ -3,6 +3,10 @@ import { parseSource } from '../src/parser.js'
 import { extractTests } from '../src/tags/extract-tests.js'
 
 function tests(source: string) {
+  return extractTests(parseSource(source, 'a.spec.ts')).tests
+}
+
+function extracted(source: string) {
   return extractTests(parseSource(source, 'a.spec.ts'))
 }
 
@@ -80,7 +84,6 @@ describe('extractTests', () => {
     'test.skip',
     'test.fixme',
     'test.fail',
-    'test.slow',
     'test.describe.only',
     'test.describe.serial',
     'test.describe.serial.only',
@@ -158,8 +161,73 @@ describe('extractTests', () => {
     ).toEqual([])
   })
 
-  it('ignores a dynamic tag value', () => {
+  it('counts a tag expression it cannot read rather than dropping it silently', () => {
     const found = tests('test(`x`, { tag: [`@${env}`] }, async () => {})')
     expect(found[0]?.effectiveTags).toEqual([])
+    expect(found[0]?.unreadableTags).toBe(1)
+  })
+
+  it('counts a spread in the tag array', () => {
+    const found = tests("test('x', { tag: [...COMMON, '@b'] }, async () => {})")
+    expect(found[0]?.effectiveTags).toEqual(['b'])
+    expect(found[0]?.unreadableTags).toBe(1)
+  })
+
+  it('counts a variable tag list', () => {
+    const found = tests("test('x', { tag: TAGS }, async () => {})")
+    expect(found[0]?.effectiveTags).toEqual([])
+    expect(found[0]?.unreadableTags).toBe(1)
+  })
+
+  it('does not declare a test for test.slow, which has no (title, body) overload', () => {
+    // Playwright's TestType.slow is slow() / slow(condition, desc) / slow(cb, desc).
+    expect(tests("test.slow('x @t', async () => {})")).toHaveLength(0)
+  })
+
+  it('records tag provenance separately from the effective list', () => {
+    const found = tests(
+      [
+        "test.describe('grp @inherited', () => {",
+        "  test('one @fromTitle', { tag: ['@fromDetails'] }, async () => {})",
+        '})',
+      ].join('\n'),
+    )
+    // Provenance is effective, like the tag list: a describe-level tag is the
+    // most deliberate vocabulary there is and must not be invisible.
+    expect(found[0]).toMatchObject({
+      titleTags: ['fromTitle', 'inherited'],
+      detailTags: ['fromDetails'],
+      effectiveTags: ['fromDetails', 'fromTitle', 'inherited'],
+    })
+  })
+
+  it('does not read a tag fused to an interpolation', () => {
+    // `@smoke${x}` produces the tag `@smokeX` at runtime, so reporting `@smoke`
+    // would name a tag no test carries and `--tag smoke` would run nothing.
+    expect(tests('test(`@smoke${x} adjacent`, async () => {})')[0]?.effectiveTags).toEqual([])
+    expect(tests('test(`a ${x}@smoke`, async () => {})')[0]?.effectiveTags).toEqual([])
+    // A tag with whitespace on both sides is still readable.
+    expect(tests('test(`a @smoke ${x} b`, async () => {})')[0]?.effectiveTags).toEqual(['smoke'])
+  })
+})
+
+describe('unreadable tag expressions', () => {
+  it('counts an unreadable tag on a describe, which reports no declaration of its own', () => {
+    expect(
+      extracted("test.describe('g', { tag: [...COMMON] }, () => { test('x', async () => {}) })")
+        .unreadableTagExpressions,
+    ).toBe(1)
+  })
+
+  it('counts test-level and describe-level entries exactly once each', () => {
+    expect(
+      extracted(
+        [
+          "test.describe('g', { tag: [...A] }, () => {",
+          "  test('x', { tag: [...B] }, async () => {})",
+          '})',
+        ].join('\n'),
+      ).unreadableTagExpressions,
+    ).toBe(2)
   })
 })

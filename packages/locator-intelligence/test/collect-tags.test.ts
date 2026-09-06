@@ -34,8 +34,8 @@ describe('collectTags', () => {
     write('tests/b.spec.ts', "test('three @smoke @slow', async () => {})")
     const report = await collectTags({ cwd: dir, config: config() })
     expect(report.tags).toEqual([
-      { tag: 'smoke', tests: 3, files: 2 },
-      { tag: 'slow', tests: 1, files: 1 },
+      { tag: 'smoke', tests: 3, files: 2, sources: ['title'], selectable: true },
+      { tag: 'slow', tests: 1, files: 1, sources: ['title'], selectable: true },
     ])
     expect(report.summary).toMatchObject({
       tests: 3,
@@ -103,11 +103,19 @@ describe('collectTags', () => {
       {
         name: 'nightly',
         include: ['regression'],
+        all: [],
         exclude: ['flaky'],
         unknownTags: [],
         matchingTests: 1,
       },
-      { name: 'smoke', include: ['smoke'], exclude: [], unknownTags: [], matchingTests: 1 },
+      {
+        name: 'smoke',
+        include: ['smoke'],
+        all: [],
+        exclude: [],
+        unknownTags: [],
+        matchingTests: 1,
+      },
     ])
   })
 
@@ -118,6 +126,73 @@ describe('collectTags', () => {
       config: config({ suites: { nightly: ['regresion'] } }),
     })
     expect(report.suites[0]).toMatchObject({ unknownTags: ['regresion'], matchingTests: null })
+  })
+
+  it('warns when files were scanned but no test() was recognized', async () => {
+    // `import { test as setup }` — Playwright's own auth pattern. The walk keys
+    // on the name `test`, so "no tags found" would answer a question we never
+    // managed to ask.
+    write('tests/auth.setup.ts', "setup('authenticate @smoke', async () => {})")
+    write('tests/a.spec.ts', "setup('other @smoke', async () => {})")
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.summary.tests).toBe(0)
+    expect(report.warnings.map((w) => w.code)).toContain('no-tests-recognized')
+  })
+
+  it('does not cry "no tests recognized" when the files simply failed to parse', async () => {
+    write('tests/a.spec.ts', 'const = = =')
+    const report = await collectTags({ cwd: dir, config: config() })
+    const codes = report.warnings.map((w) => w.code)
+    expect(codes).toContain('files-not-parsed')
+    expect(codes).not.toContain('no-tests-recognized')
+  })
+
+  it('discloses tag expressions it could not read', async () => {
+    write('tests/a.spec.ts', "test('x @known', { tag: [...COMMON] }, async () => {})")
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.summary.unreadableTagExpressions).toBe(1)
+    expect(report.warnings.map((w) => w.code)).toContain('unreadable-tag-expressions')
+  })
+
+  it('records how each tag was written', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "test('mentions @here in the composer', async () => {})",
+        "test('checkout', { tag: ['@smoke'] }, async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({ cwd: dir, config: config() })
+    const byTag = Object.fromEntries(report.tags.map((usage) => [usage.tag, usage.sources]))
+    expect(byTag.here).toEqual(['title'])
+    expect(byTag.smoke).toEqual(['details'])
+  })
+
+  it('flags a tag --tag cannot select', async () => {
+    // Playwright reads `@a,@b` as one tag; our comma splitting cannot express it.
+    write('tests/a.spec.ts', "test('x @a,@b', async () => {})")
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.tags[0]).toMatchObject({ tag: 'a,@b', selectable: false })
+    expect(report.warnings.map((w) => w.code)).toContain('unselectable-tags')
+  })
+
+  it('resolves an all-of suite', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "test('1 @regression @critical', async () => {})",
+        "test('2 @regression', async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { hard: { any: [], all: ['regression', 'critical'], none: [] } } }),
+    })
+    expect(report.suites[0]).toMatchObject({
+      include: [],
+      all: ['regression', 'critical'],
+      matchingTests: 1,
+    })
   })
 
   it('ignores helper files, which declare no tests', async () => {

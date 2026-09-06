@@ -1,11 +1,37 @@
 import { type BuildTagSelectionInput, TagSelectionError, splitTagList } from './tag-selection.js'
 
-/** Named tag sets from `testpilot.config.ts` — `{ nightly: ['regression', '!flaky'] }`. */
-export type SuiteMap = Record<string, string[]>
+/** Named tag sets from `testpilot.config.ts`. */
+export type SuiteDefinition = string[] | { any?: string[]; all?: string[]; none?: string[] }
+export type SuiteMap = Record<string, SuiteDefinition>
+
+/** The three token lists a suite contributes, whichever form it was written in. */
+export interface SuiteTokens {
+  any: string[]
+  all: string[]
+  none: string[]
+}
+
+/** Normalizes either suite form to {@link SuiteTokens}. The array form is any-of. */
+export function suiteTokens(definition: SuiteDefinition): SuiteTokens {
+  if (Array.isArray(definition)) {
+    return { any: definition, all: [], none: [] }
+  }
+  return {
+    any: definition.any ?? [],
+    all: definition.all ?? [],
+    none: definition.none ?? [],
+  }
+}
+
+/** True when a suite selects nothing at all — it would run every test. */
+export function isEmptySuite(definition: SuiteDefinition): boolean {
+  const tokens = suiteTokens(definition)
+  return tokens.any.length === 0 && tokens.all.length === 0 && tokens.none.length === 0
+}
 
 /**
  * A suite name is written on the command line, so keep it to characters that
- * survive a shell unquoted.
+ * survive a shell unquoted. Awkward names still work — `doctor` only warns.
  */
 const SUITE_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/
 
@@ -26,14 +52,35 @@ function suggest(name: string, available: string[]): string {
 }
 
 /**
- * Expands `--suite` names into raw tag tokens.
+ * Expands `--suite` names into merged tag tokens.
  *
  * An unknown suite is an error, never an empty selection: silently running the
  * whole suite (or none of it) because of a typo is the failure this feature
  * exists to remove.
  */
-export function expandSuites(suites: SuiteMap, names: string[]): string[] {
-  const tokens: string[] = []
+export function expandSuites(suites: SuiteMap, names: string[]): SuiteTokens {
+  const merged: SuiteTokens = { any: [], all: [], none: [] }
+  for (const raw of names) {
+    // `--suite ''` yields no token at all, so the unknown-suite guard below
+    // never fires and the run silently widens to the whole suite.
+    if (splitTagList(raw).length === 0) {
+      throw new TagSelectionError(
+        '--suite was given an empty value, which would run every test. Name a suite, or drop the flag.',
+      )
+    }
+  }
+  const requested = names.flatMap((raw) => splitTagList(raw))
+  // Two suites cannot be merged into one include/exclude pair without changing
+  // what either selects: `{ fast: ['!slow'], nightly: ['regression'] }` would
+  // fold to "regression, excluding slow", which is neither suite — `fast`'s
+  // "everything" is gone and `nightly`'s @regression @slow tests are dropped.
+  // Expressing the union needs one regex per suite, which would stop the
+  // compiled flags being something a team can read and paste. Refuse instead.
+  if (requested.length > 1) {
+    throw new TagSelectionError(
+      `Only one --suite can be used at a time (got ${requested.map((name) => `"${name}"`).join(', ')}). Combining two suites would change what each one selects. Define a suite that covers both, or run them separately.`,
+    )
+  }
   for (const raw of names) {
     for (const name of splitTagList(raw)) {
       const entry = suites[name]
@@ -42,18 +89,28 @@ export function expandSuites(suites: SuiteMap, names: string[]): string[] {
           `Unknown suite "${name}". ${suggest(name, Object.keys(suites))}`,
         )
       }
-      if (entry.length === 0) {
+      if (isEmptySuite(entry)) {
         throw new TagSelectionError(
           `Suite "${name}" is empty, which would select every test. Give it at least one tag, or drop --suite.`,
         )
       }
-      tokens.push(...entry)
+      const tokens = suiteTokens(entry)
+      merged.any.push(...tokens.any)
+      merged.all.push(...tokens.all)
+      merged.none.push(...tokens.none)
     }
   }
-  return tokens
+  return merged
 }
 
-/** Merges `--suite` expansions with explicit `--tag` / `--exclude-tag` values. */
+/**
+ * Merges `--suite` expansions with explicit `--tag` / `--exclude-tag` values.
+ *
+ * Includes are **unioned**, not intersected: `--suite nightly --tag smoke` runs
+ * the nightly tests plus the smoke tests. Excludes from both sides all apply.
+ * Documented in CLI-Spec §3.1a — for an intersection, name it as a suite with
+ * `all`.
+ */
 export function selectionInputFor(options: {
   suites: SuiteMap
   suite?: string[]
@@ -62,7 +119,8 @@ export function selectionInputFor(options: {
 }): BuildTagSelectionInput {
   const fromSuites = expandSuites(options.suites, options.suite ?? [])
   return {
-    tag: [...fromSuites, ...(options.tag ?? [])],
-    excludeTag: options.excludeTag ?? [],
+    tag: [...fromSuites.any, ...(options.tag ?? [])],
+    allTag: fromSuites.all,
+    excludeTag: [...fromSuites.none, ...(options.excludeTag ?? [])],
   }
 }

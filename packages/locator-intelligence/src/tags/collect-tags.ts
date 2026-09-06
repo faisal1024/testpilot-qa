@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import {
-  type AnalysisWarning,
   type ConfigDiscovery,
   DEFAULT_DISCOVERY,
   type ParseError,
@@ -9,9 +8,11 @@ import {
   TAGS_SCHEMA_VERSION,
   type TagUsage,
   type TagsReport,
+  type TagsWarning,
   type TestPilotConfig,
   buildTagSelection,
   isDirectory,
+  selectionInputForSuite,
   unknownSuiteTags,
 } from '@testpilot/core'
 import { parseSource } from '../parser.js'
@@ -52,7 +53,7 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   })
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
 
-  const warnings: AnalysisWarning[] = []
+  const warnings: TagsWarning[] = []
   const parseErrors: ParseError[] = []
 
   // Explicit patterns bypass `testDir`; see the same guard in `analyze`.
@@ -82,10 +83,12 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
 
   const testsByTag = new Map<string, number>()
   const filesByTag = new Map<string, Set<string>>()
+  const sourcesByTag = new Map<string, Set<'title' | 'details'>>()
   const declarations: TestDeclaration[] = []
   let tests = 0
   let taggedTests = 0
   let dynamicTitles = 0
+  let unreadableTagExpressions = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
@@ -104,7 +107,9 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       continue
     }
 
-    for (const declaration of extractTests(program)) {
+    const extracted = extractTests(program)
+    unreadableTagExpressions += extracted.unreadableTagExpressions
+    for (const declaration of extracted.tests) {
       declarations.push(declaration)
       tests += 1
       if (declaration.dynamicTitle) {
@@ -118,6 +123,16 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
         const seen = filesByTag.get(tag) ?? new Set<string>()
         seen.add(relativePath)
         filesByTag.set(tag, seen)
+      }
+      // Provenance is per-declaration: an inherited tag keeps the source it was
+      // written with on the describe, which the effective list cannot express.
+      for (const [tag, source] of [
+        ...declaration.titleTags.map((tag) => [tag, 'title'] as const),
+        ...declaration.detailTags.map((tag) => [tag, 'details'] as const),
+      ]) {
+        const seen = sourcesByTag.get(tag) ?? new Set<'title' | 'details'>()
+        seen.add(source)
+        sourcesByTag.set(tag, seen)
       }
     }
   }
@@ -133,13 +148,45 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   if (dynamicTitles > 0) {
     warnings.push({
       code: 'dynamic-test-titles',
-      message: `${dynamicTitles} test(s) build their title from a template literal. Tags inside \`\${...}\` cannot be read statically, so those tests may carry tags not listed here.`,
+      message: `${dynamicTitles} test(s) build their title from a template literal. Text touching a \`\${...}\` hole is not read, so those tests may carry tags not listed here.`,
+    })
+  }
+  if (unreadableTagExpressions > 0) {
+    warnings.push({
+      code: 'unreadable-tag-expressions',
+      message: `${unreadableTagExpressions} \`tag\` entr(ies) are a spread, a variable, or an interpolated template and could not be read. Each is at least one tag this list does not name.`,
+    })
+  }
+  // Scanned real files and recognized no tests at all: almost always a renamed
+  // import (`import { test as setup }`), which the walk keys on by name. Saying
+  // "no tags found" there is an answer to a question we never managed to ask.
+  if (files.length > 0 && tests === 0 && parseErrors.length === 0) {
+    warnings.push({
+      code: 'no-tests-recognized',
+      message: `${files.length} file(s) were scanned but no \`test()\` declarations were recognized. Tests declared through a renamed import (e.g. \`import { test as setup }\`) are not seen, so this vocabulary may be empty for the wrong reason.`,
     })
   }
 
   const tags: TagUsage[] = [...testsByTag.entries()]
-    .map(([tag, count]) => ({ tag, tests: count, files: filesByTag.get(tag)?.size ?? 0 }))
+    .map(([tag, count]) => ({
+      tag,
+      tests: count,
+      files: filesByTag.get(tag)?.size ?? 0,
+      sources: [...(sourcesByTag.get(tag) ?? [])].sort(),
+      selectable: isSelectableTag(tag),
+    }))
     .sort((a, b) => b.tests - a.tests || a.tag.localeCompare(b.tag))
+
+  const unselectable = tags.filter((usage) => !usage.selectable)
+  if (unselectable.length > 0) {
+    warnings.push({
+      code: 'unselectable-tags',
+      message: `${unselectable.length} tag(s) cannot be selected with --tag because their names contain a comma (${unselectable
+        .slice(0, 3)
+        .map((usage) => `@${usage.tag}`)
+        .join(', ')}). Playwright reads them as one tag; use \`run -- --grep\` for those.`,
+    })
+  }
 
   const vocabulary = new Set(tags.map((usage) => usage.tag))
   const suites: SuiteUsage[] = Object.keys(options.config.suites)
@@ -147,10 +194,12 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
     .map((name) => {
       const entry = options.config.suites[name] ?? []
       let include: string[] = []
+      let all: string[] = []
       let exclude: string[] = []
       try {
-        const selection = buildTagSelection({ tag: entry })
+        const selection = buildTagSelection(selectionInputForSuite(entry))
         include = selection.include
+        all = selection.all
         exclude = selection.exclude
       } catch {
         // Reported by `doctor`; `tags` still lists the suite so it is visible.
@@ -163,9 +212,10 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
               (declaration) =>
                 (include.length === 0 ||
                   include.some((tag) => declaration.effectiveTags.includes(tag))) &&
+                all.every((tag) => declaration.effectiveTags.includes(tag)) &&
                 !exclude.some((tag) => declaration.effectiveTags.includes(tag)),
             ).length
-      return { name, include, exclude, unknownTags: unknown, matchingTests }
+      return { name, include, all, exclude, unknownTags: unknown, matchingTests }
     })
 
   return {
@@ -181,10 +231,16 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       untaggedTests: tests - taggedTests,
       distinctTags: tags.length,
       dynamicTitles,
+      unreadableTagExpressions,
     },
     tags,
     suites,
     warnings,
     parseErrors,
   }
+}
+
+/** `--tag` splits on commas, so a tag whose name contains one is unreachable. */
+function isSelectableTag(tag: string): boolean {
+  return !tag.includes(',')
 }

@@ -244,10 +244,28 @@ tags". Verified on the corpus: mattermost yields a real 100+ tag vocabulary (`@a
 untagged, so the plan's claim that cal.com uses `@tag` titles was wrong — its only `@`-tokens are
 content strings, and Playwright would read those as tags too.
 
-**Also fixed:** `analyze`/`fix` warned that a `testDir` was missing whenever explicit patterns were
-passed — discovery never consulted it, so the disclosure named the wrong directory.
+**Also fixed:** `analyze` warned that a `testDir` was missing whenever explicit patterns were
+passed — discovery never consulted it, so the disclosure named the wrong directory. (`fix` never
+emitted that code; it builds warnings from `discoveryWarnings()`.)
 
-- Docs: `run` in CLI-Spec §3, README "Run a subset", `docs/Configuration.md` `suites` key.
+**What review caught, and the lesson.** The first cut claimed the compiled `--grep` was exact. It was
+not: Playwright compiles a *bare* `--grep` string as `new RegExp(pattern, 'gi')`, so `--tag here`
+also ran `@HERE` — and mattermost carries `@here`, `@HERE` and `@channEL` as distinct tags, so `run`
+would have selected a different set than `tags` counted and `doctor` validated. The tests could never
+have caught it, because they compiled the pattern with a bare `new RegExp` — **a test that models the
+runtime wrong gives confidence proportional to nothing.** The fix is the slash-delimited form, and
+every test now asserts through a copy of Playwright's own `forceRegExp`.
+
+The same round found four blind spots, all the Phase 9 class in new clothing — a partial read
+answering confidently: an empty `--tag ""` running the whole suite; a renamed test import
+(`import { test as setup }`) yielding "no tags found" rather than "we recognized no tests"; unreadable
+`tag` entries dropped silently; and `doctor` narrowing a partially-parsed vocabulary into "that tag
+does not exist". **Verify claims about a dependency against its source, not from memory** — reading
+Playwright 1.63 is what settled all of these, and it also disproved a plausible warning about setup
+projects being filtered out that would otherwise have shipped as fact.
+
+- Docs: `run` and `tags` in CLI-Spec §3.1a/§3.2a, README "Run a subset", the `suites` key in
+  CLI-Spec §4 (there is no `docs/Configuration.md`; config is documented in the CLI spec).
 - Done when: a scaffolded project runs `testpilot run --tag smoke` and `--suite nightly` with no
   hand-written regex; `testpilot tags` on the corpus lists real vocabularies (mattermost and cal.com
   already use `@tag` titles) and the untagged count.

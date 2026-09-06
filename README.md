@@ -243,10 +243,15 @@ npx testpilot-qa run --tag smoke --exclude-tag flaky
 npx testpilot-qa run --tag '!slow'                # everything except @slow
 ```
 
-It stays a pass-through: `--tag smoke` compiles to `--grep "(?<!\S)@smoke(?!\S)"` and the compiled
+It stays a pass-through: `--tag smoke` compiles to `--grep "/(?<!\S)@smoke(?!\S)/"` and the compiled
 flags are printed, so you can paste them into your own CI and drop TestPilot whenever you like. Tag
 either way Playwright supports — `test('checkout @smoke', …)` or
 `test('checkout', { tag: ['@smoke'] }, …)`. Tags on a `test.describe` count for every test inside it.
+
+Selection is **exact**, which hand-written `--grep` rarely is: `--tag smoke` does not run
+`@smoketest`, `--tag team` does not run `@team:auth`, and `--tag here` does not run `@HERE` (a bare
+`--grep` string is compiled case-**insensitively** by Playwright). Multiple tags are any-of. An empty
+value or an unknown suite is an error, never a full run.
 
 **Name the sets you actually run.** In `testpilot.config.ts`:
 
@@ -255,6 +260,8 @@ export default defineConfig({
   suites: {
     smoke: ['smoke'],
     nightly: ['regression', '!flaky'],
+    // A list is any-of; use the object form when a test must carry *all* of them.
+    hardened: { all: ['regression', 'critical'], none: ['flaky'] },
   },
 })
 ```
@@ -273,16 +280,21 @@ npx testpilot-qa tags
 ```
 
 ```
-TAG            TESTS  FILES
-@regression       86     14
-@accessibility    55     10
-@smoke            12      4
+TAG              TESTS  FILES  DECLARED
+@regression         86     14  details
+@accessibility      55     10  details
+@here                1      1  title
 
-3 tag(s) across 153 test(s) in 28 file(s); 41 untagged.
+3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
 ```
 
-Static and instant — no browser, no test run. It also says where the list is incomplete (tests whose
-titles are built from template literals can hide a tag inside `${...}`).
+Static and instant — no browser, no test run. `DECLARED` separates a real vocabulary from noise:
+Playwright treats any `@word` in a title as a tag, so a test named *"turn off mentions for @here"*
+contributes `@here` whether you meant it or not. Tags written with `{ tag: [...] }` are always
+deliberate.
+
+It also says where the list is incomplete — titles built from template literals, `tag` entries it
+could not read statically, and files where no `test()` was recognized at all.
 
 ---
 

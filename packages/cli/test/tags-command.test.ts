@@ -58,7 +58,7 @@ describe('tags command', () => {
     const { stdout, stderr } = await runTags()
     expect(stdout).toContain('@regression')
     expect(stdout).toContain('@smoke')
-    expect(stdout).toContain('2 tag(s) across 3 test(s) in 1 file(s); 1 untagged.')
+    expect(stdout).toContain('2 tag(s) across 3 test declarations in 1 file(s); 1 untagged.')
     expect(stderr).toBe('')
   })
 
@@ -67,8 +67,8 @@ describe('tags command', () => {
     const report = JSON.parse(stdout)
     expect(report.command).toBe('tags')
     expect(report.tags).toEqual([
-      { tag: 'regression', tests: 2, files: 1 },
-      { tag: 'smoke', tests: 1, files: 1 },
+      { tag: 'regression', tests: 2, files: 1, sources: ['title'], selectable: true },
+      { tag: 'smoke', tests: 1, files: 1, sources: ['title'], selectable: true },
     ])
     expect(report.summary.untaggedTests).toBe(1)
   })
@@ -88,7 +88,7 @@ describe('tags command', () => {
     rmSync(join(dir, 'tests', 'a.spec.ts'))
     writeFileSync(join(dir, 'tests', 'a.spec.ts'), "test('plain', async () => {})")
     const { stdout } = await runTags()
-    expect(stdout).toContain('No tags found in 1 test(s)')
+    expect(stdout).toContain('No tags found in 1 test declaration')
     expect(stdout).toContain('testpilot run --tag smoke')
   })
 

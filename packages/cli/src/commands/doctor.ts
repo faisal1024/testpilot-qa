@@ -69,7 +69,15 @@ async function readTagVocabulary(globals: GlobalOptions): Promise<ReadonlySet<st
       scopes: resolved.scopes,
       discovery: resolved.discovery,
     })
-    if (report.summary.filesAnalyzed === 0) {
+    // "Could not determine" must never narrow into "these tags do not exist".
+    // A file that failed to parse, or a suite whose test function we did not
+    // recognize, contributes no tags — and every suite tag living only in that
+    // file would then be reported as a typo. A partial read has to widen.
+    if (
+      report.summary.filesAnalyzed === 0 ||
+      report.summary.filesWithParseErrors > 0 ||
+      report.summary.tests === 0
+    ) {
       return null
     }
     return new Set(report.tags.map((usage) => usage.tag))

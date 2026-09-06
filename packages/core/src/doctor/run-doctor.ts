@@ -29,8 +29,11 @@ import { unknownSuiteTags, validateSuites } from '../tags/validate-suites.js'
  * are omitted when the config failed to load, and `playwright-discovery` appears only
  * when a Playwright config was partially read or could not be used. `test-directory`
  * gained `details`.
+ * 1.2: `suites` — a new conditional check, present only when `testpilot.config.ts`
+ * declares a non-empty `suites` map and the config loaded. Carries `details.issues`
+ * (structural problems) or `details.unknownTags` (suite name -> tags no test carries).
  */
-export const DOCTOR_SCHEMA_VERSION = '1.1'
+export const DOCTOR_SCHEMA_VERSION = '1.2'
 
 const MIN_NODE_MAJOR = 20
 
@@ -402,13 +405,14 @@ async function checkSuites(
   }
 
   const issues = validateSuites(suites)
-  if (issues.length > 0) {
+  const blocking = issues.filter((issue) => issue.severity === 'fail')
+  if (blocking.length > 0) {
     return {
       id: 'suites',
       title: 'Tag suites',
       category: 'config',
       status: 'fail',
-      message: issues.map((issue) => issue.message).join(' '),
+      message: blocking.map((issue) => issue.message).join(' '),
       remediation: 'Fix the `suites` entries in testpilot.config.ts.',
       details: { issues },
     }
@@ -433,7 +437,8 @@ async function checkSuites(
 
   const unknownBySuite: Record<string, string[]> = {}
   for (const name of names.sort()) {
-    const unknown = unknownSuiteTags(suites[name] ?? [], known)
+    const entry = suites[name]
+    const unknown = entry ? unknownSuiteTags(entry, known) : []
     if (unknown.length > 0) {
       unknownBySuite[name] = unknown
     }
@@ -454,6 +459,17 @@ async function checkSuites(
       remediation:
         'Run `testpilot tags` to see the real vocabulary, then fix `suites` or tag the tests.',
       details: { unknownTags: unknownBySuite },
+    }
+  }
+
+  if (issues.length > 0) {
+    return {
+      id: 'suites',
+      title: 'Tag suites',
+      category: 'config',
+      status: 'warn',
+      message: issues.map((issue) => issue.message).join(' '),
+      details: { issues },
     }
   }
 

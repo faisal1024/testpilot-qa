@@ -66,9 +66,11 @@ describe.skipIf(process.platform === 'win32')('run --tag', () => {
   it('compiles --tag to a --grep Playwright accepts', async () => {
     const { forwarded } = await runRun(['--tag', 'smoke'])
     expect(forwarded[1]).toBe('--grep')
-    const pattern = new RegExp(forwarded[2] as string)
+    const pattern = forceRegExp(forwarded[2] as string)
     expect(pattern.test('checkout @smoke')).toBe(true)
     expect(pattern.test('checkout @smoketest')).toBe(false)
+    // Playwright compiles a BARE --grep string with `gi`; ours must be exact.
+    expect(pattern.test('checkout @SMOKE')).toBe(false)
   })
 
   it('compiles an exclusion to --grep-invert', async () => {
@@ -115,6 +117,24 @@ describe.skipIf(process.platform === 'win32')('run --tag', () => {
     expect(stderr).toContain('not a valid tag name')
   })
 
+  it.each([[''], [','], [' ']])('exits 2 on an empty tag value %j', async (value) => {
+    const { exitCode, stderr, forwarded } = await runRun(['--tag', value])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('would run every test')
+    expect(forwarded).toEqual([])
+  })
+
+  it('refuses a forwarded -G, the real --grep-invert alias', async () => {
+    const { exitCode, stderr } = await runRun(['--exclude-tag', 'slow', '--', '-G', '@flaky'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Cannot combine')
+  })
+
+  it('refuses a forwarded short flag with an attached value', async () => {
+    const { exitCode } = await runRun(['--tag', 'smoke', '--', '-g@slow'])
+    expect(exitCode).toBe(2)
+  })
+
   it('exits 2 on a self-cancelling selection', async () => {
     const { exitCode } = await runRun(['--tag', 'smoke', '--exclude-tag', 'smoke'])
     expect(exitCode).toBe(2)
@@ -125,8 +145,8 @@ describe.skipIf(process.platform === 'win32')('run --suite', () => {
   it('expands a configured suite', async () => {
     writeConfig("export default { suites: { nightly: ['regression', '!flaky'] } }\n")
     const { forwarded } = await runRun(['--suite', 'nightly'])
-    expect(new RegExp(forwarded[2] as string).test('x @regression')).toBe(true)
-    expect(new RegExp(forwarded[4] as string).test('x @flaky')).toBe(true)
+    expect(forceRegExp(forwarded[2] as string).test('x @regression')).toBe(true)
+    expect(forceRegExp(forwarded[4] as string).test('x @flaky')).toBe(true)
   })
 
   it('exits 2 on an unknown suite and names the real ones', async () => {
@@ -136,6 +156,31 @@ describe.skipIf(process.platform === 'win32')('run --suite', () => {
     expect(stderr).toContain('Available suites: nightly')
     // A typo must not fall through to running the whole suite.
     expect(readFileSyncSafe(argsFile())).toBeNull()
+  })
+
+  it('refuses two suites rather than folding them into one wrong selection', async () => {
+    // fast means "everything except @slow"; nightly means "@regression".
+    // Merged they would become "regression, excluding slow" — neither suite.
+    writeConfig("export default { suites: { fast: ['!slow'], nightly: ['regression'] } }\n")
+    const { exitCode, stderr, forwarded } = await runRun(['--suite', 'fast', '--suite', 'nightly'])
+    expect(exitCode).toBe(2)
+    expect(stderr).toContain('Only one --suite')
+    expect(forwarded).toEqual([])
+  })
+
+  it('exits 2 on an empty --suite value', async () => {
+    writeConfig("export default { suites: { nightly: ['regression'] } }\n")
+    const { exitCode, forwarded } = await runRun(['--suite', ''])
+    expect(exitCode).toBe(2)
+    expect(forwarded).toEqual([])
+  })
+
+  it('expands an all-of suite into lookaheads', async () => {
+    writeConfig("export default { suites: { hardened: { all: ['regression', 'critical'] } } }\n")
+    const { forwarded } = await runRun(['--suite', 'hardened'])
+    const grep = forceRegExp(forwarded[2] as string)
+    expect(grep.test('x @regression @critical')).toBe(true)
+    expect(grep.test('x @regression')).toBe(false)
   })
 
   it('composes a suite with an extra --exclude-tag', async () => {
@@ -151,4 +196,18 @@ function readFileSyncSafe(path: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Playwright's own `forceRegExp` (packages/playwright/src/util.ts), copied so
+ * these tests assert what Playwright will actually do with our `--grep` value.
+ * A bare `new RegExp(src)` claims a case-sensitivity Playwright does not give a
+ * plain string, which is exactly how the `gi` defect went unnoticed.
+ */
+function forceRegExp(pattern: string): RegExp {
+  const match = pattern.match(/^\/(.*)\/([gi]*)$/)
+  if (match) {
+    return new RegExp(match[1] as string, match[2])
+  }
+  return new RegExp(pattern, 'gi')
 }

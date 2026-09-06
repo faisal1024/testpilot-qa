@@ -5,9 +5,13 @@ import {
   describeTagSelection,
   expandSuites,
   findConflictingGrep,
+  grepValue,
+  includePattern,
+  isEmptySuite,
   parseTagToken,
   selectionInputFor,
   splitTagList,
+  suiteTokens,
   tagPattern,
   tagSelectionArgs,
   unknownSuiteTags,
@@ -53,12 +57,13 @@ describe('buildTagSelection', () => {
     const a = buildTagSelection({ tag: ['smoke,regression'] })
     const b = buildTagSelection({ tag: ['smoke', 'regression'] })
     expect(a).toEqual(b)
-    expect(a).toEqual({ include: ['smoke', 'regression'], exclude: [] })
+    expect(a).toEqual({ include: ['smoke', 'regression'], all: [], exclude: [] })
   })
 
   it('routes negated tags to exclude', () => {
     expect(buildTagSelection({ tag: ['smoke', '!slow'] })).toEqual({
       include: ['smoke'],
+      all: [],
       exclude: ['slow'],
     })
   })
@@ -66,6 +71,7 @@ describe('buildTagSelection', () => {
   it('merges --exclude-tag with negated --tag', () => {
     expect(buildTagSelection({ tag: ['!a'], excludeTag: ['b'] })).toEqual({
       include: [],
+      all: [],
       exclude: ['a', 'b'],
     })
   })
@@ -82,15 +88,52 @@ describe('buildTagSelection', () => {
   it('rejects a double negative on --exclude-tag', () => {
     expect(() => buildTagSelection({ excludeTag: ['!slow'] })).toThrow(/double negative/)
   })
+
+  it.each(['', ' ', ',', ' , '])(
+    'rejects an empty flag value %j rather than running every test',
+    (value) => {
+      // The likeliest real invocation: `--tag "$SUITE_TAGS"` with the variable unset.
+      expect(() => buildTagSelection({ tag: [value] })).toThrow(/would run every test/)
+      expect(() => buildTagSelection({ excludeTag: [value] })).toThrow(/would run every test/)
+    },
+  )
+
+  it('still allows omitting the flags entirely', () => {
+    expect(buildTagSelection({})).toEqual({ include: [], all: [], exclude: [] })
+  })
 })
 
-describe('tagPattern', () => {
-  const matches = (names: string[], title: string) => new RegExp(tagPattern(names)).test(title)
+describe('tagPattern / grepValue', () => {
+  const matches = (names: string[], title: string) =>
+    forceRegExp(grepValue(tagPattern(names))).test(title)
 
   it('matches a whole tag', () => {
-    expect(matches(['smoke'], 'checkout works @smoke')).toBe(true)
+    expect(matches(['smoke'], grepTitle('checkout works', '@smoke'))).toBe(true)
     expect(matches(['smoke'], '@smoke at the start')).toBe(true)
-    expect(matches(['smoke'], 'chromium › a.spec.ts › group @smoke › case')).toBe(true)
+    expect(matches(['smoke'], 'chromium \u203a a.spec.ts \u203a group @smoke \u203a case')).toBe(
+      true,
+    )
+  })
+
+  it('is case-sensitive', () => {
+    // Playwright compiles a BARE --grep string with `gi`. Real suites carry
+    // both @here and @HERE (mattermost), so a case-insensitive match would run
+    // a different set than `tags` counts and `doctor` validates.
+    expect(matches(['here'], 'x @here')).toBe(true)
+    expect(matches(['here'], 'x @HERE')).toBe(false)
+    expect(matches(['channel'], 'x @channEL')).toBe(false)
+  })
+
+  it('emits the slash-delimited form so no implicit flags are applied', () => {
+    const value = grepValue(tagPattern(['smoke']))
+    expect(value.startsWith('/')).toBe(true)
+    expect(value.endsWith('/')).toBe(true)
+    expect(forceRegExp(value).flags).toBe('')
+  })
+
+  it('survives the wrapper when a tag contains a slash', () => {
+    expect(matches(['a/b'], 'x @a/b')).toBe(true)
+    expect(matches(['a/b'], 'x @a-b')).toBe(false)
   })
 
   it('does not match a longer tag with the same prefix', () => {
@@ -102,7 +145,14 @@ describe('tagPattern', () => {
   })
 
   it('does not match an @ inside a word', () => {
+    // Deliberately stricter than Playwright: it would call @smoke.example a tag.
     expect(matches(['smoke'], 'notifies user@smoke.example')).toBe(false)
+    expect(matches(['smoke.example'], 'notifies user@smoke.example')).toBe(false)
+  })
+
+  it('matches a tag supplied through the details argument', () => {
+    // Playwright appends `{ tag: [...] }` entries to the grep title, space-separated.
+    expect(matches(['smoke'], grepTitle('billing', 'checkout works', '@smoke'))).toBe(true)
   })
 
   it('escapes regex metacharacters in the tag body', () => {
@@ -118,29 +168,135 @@ describe('tagPattern', () => {
 
 describe('tagSelectionArgs', () => {
   it('emits nothing for an empty selection', () => {
-    expect(tagSelectionArgs({ include: [], exclude: [] })).toEqual([])
+    expect(tagSelectionArgs({ include: [], all: [], exclude: [] })).toEqual([])
   })
 
   it('emits --grep for includes and --grep-invert for excludes', () => {
-    const args = tagSelectionArgs({ include: ['smoke'], exclude: ['slow'] })
+    const args = tagSelectionArgs({ include: ['smoke'], all: [], exclude: ['slow'] })
     expect(args[0]).toBe('--grep')
     expect(args[2]).toBe('--grep-invert')
-    expect(new RegExp(args[1] as string).test('x @smoke')).toBe(true)
-    expect(new RegExp(args[3] as string).test('x @slow')).toBe(true)
+    expect(forceRegExp(args[1] as string).test('x @smoke')).toBe(true)
+    expect(forceRegExp(args[3] as string).test('x @slow')).toBe(true)
+    // Both sides must be case-sensitive, not just the include side.
+    expect(forceRegExp(args[1] as string).test('x @SMOKE')).toBe(false)
+    expect(forceRegExp(args[3] as string).test('x @SLOW')).toBe(false)
+  })
+})
+
+describe('all-of selection', () => {
+  const matchesArgs = (selection: Parameters<typeof tagSelectionArgs>[0], title: string) => {
+    const args = tagSelectionArgs(selection)
+    const grep = args[args.indexOf('--grep') + 1]
+    return forceRegExp(grep as string).test(title)
+  }
+
+  it('requires every all-of tag', () => {
+    const selection = { include: [], all: ['regression', 'critical'], exclude: [] }
+    expect(matchesArgs(selection, grepTitle('x', '@regression', '@critical'))).toBe(true)
+    expect(matchesArgs(selection, grepTitle('x', '@critical', '@regression'))).toBe(true)
+    expect(matchesArgs(selection, grepTitle('x', '@regression'))).toBe(false)
+    expect(matchesArgs(selection, grepTitle('x', '@critical'))).toBe(false)
+  })
+
+  it('keeps whole-tag boundaries inside the lookaheads', () => {
+    const selection = { include: [], all: ['smoke'], exclude: [] }
+    expect(matchesArgs(selection, 'x @smoketest')).toBe(false)
+    expect(matchesArgs(selection, 'x @SMOKE')).toBe(false)
+  })
+
+  it('combines any-of with all-of', () => {
+    const selection = { include: ['ui', 'api'], all: ['regression'], exclude: [] }
+    expect(matchesArgs(selection, grepTitle('x', '@ui', '@regression'))).toBe(true)
+    expect(matchesArgs(selection, grepTitle('x', '@api', '@regression'))).toBe(true)
+    expect(matchesArgs(selection, grepTitle('x', '@ui'))).toBe(false)
+    expect(matchesArgs(selection, grepTitle('x', '@db', '@regression'))).toBe(false)
+  })
+
+  it('uses the plain alternation when there is no all-of half', () => {
+    expect(includePattern({ include: ['a'], all: [], exclude: [] })).toBe(tagPattern(['a']))
+    expect(includePattern({ include: [], all: [], exclude: ['x'] })).toBeNull()
+  })
+
+  it('treats a negated token inside `all` as an exclusion', () => {
+    expect(buildTagSelection({ allTag: ['regression', '!flaky'] })).toEqual({
+      include: [],
+      all: ['regression'],
+      exclude: ['flaky'],
+    })
+  })
+
+  it('rejects a tag that is both required and excluded', () => {
+    expect(() => buildTagSelection({ allTag: ['a'], excludeTag: ['a'] })).toThrow(/both included/)
+  })
+})
+
+describe('suite object form', () => {
+  it('normalizes the array form to any-of', () => {
+    expect(suiteTokens(['a', '!b'])).toEqual({ any: ['a', '!b'], all: [], none: [] })
+  })
+
+  it('reads any/all/none', () => {
+    expect(suiteTokens({ any: ['a'], all: ['b'], none: ['c'] })).toEqual({
+      any: ['a'],
+      all: ['b'],
+      none: ['c'],
+    })
+  })
+
+  it('treats a partially-specified object as empty where unset', () => {
+    expect(suiteTokens({ all: ['b'] })).toEqual({ any: [], all: ['b'], none: [] })
+  })
+
+  it('detects an empty suite in either form', () => {
+    expect(isEmptySuite([])).toBe(true)
+    expect(isEmptySuite({})).toBe(true)
+    expect(isEmptySuite({ any: [], all: [], none: [] })).toBe(true)
+    expect(isEmptySuite({ all: ['a'] })).toBe(false)
+  })
+
+  it('expands an object suite through --suite', () => {
+    const selection = buildTagSelection(
+      selectionInputFor({
+        suites: { nightly: { all: ['regression', 'critical'], none: ['flaky'] } },
+        suite: ['nightly'],
+      }),
+    )
+    expect(selection).toEqual({
+      include: [],
+      all: ['regression', 'critical'],
+      exclude: ['flaky'],
+    })
+  })
+
+  it('unions includes across --suite and --tag rather than intersecting', () => {
+    // Documented in CLI-Spec 3.1a; an intersection is expressed with `all`.
+    const selection = buildTagSelection(
+      selectionInputFor({
+        suites: { nightly: ['regression'] },
+        suite: ['nightly'],
+        tag: ['smoke'],
+      }),
+    )
+    expect(selection.include).toEqual(['regression', 'smoke'])
   })
 })
 
 describe('describeTagSelection', () => {
   it('reads as prose', () => {
-    expect(describeTagSelection({ include: ['a', 'b'], exclude: ['c'] })).toBe(
+    expect(describeTagSelection({ include: ['a', 'b'], all: [], exclude: ['c'] })).toBe(
       '@a or @b, excluding @c',
     )
-    expect(describeTagSelection({ include: [], exclude: ['c'] })).toBe('all tests, excluding @c')
+    expect(describeTagSelection({ include: [], all: [], exclude: ['c'] })).toBe(
+      'all tests, excluding @c',
+    )
   })
 })
 
 describe('findConflictingGrep', () => {
-  it.each([['--grep'], ['-g'], ['--grep-invert']])('detects %s', (flag) => {
+  // -G is Playwright's --grep-invert alias on 1.61+, -gv on 1.42-~1.53. An alias
+  // we miss means Playwright keeps the user's flag and silently drops ours,
+  // because our args are prepended.
+  it.each([['--grep'], ['-g'], ['--grep-invert'], ['-G'], ['-gv']])('detects %s', (flag) => {
     expect(findConflictingGrep(['--headed', flag, 'x'])).toBe(flag)
   })
 
@@ -148,8 +304,14 @@ describe('findConflictingGrep', () => {
     expect(findConflictingGrep(['--grep=foo'])).toBe('--grep')
   })
 
+  it('detects a short flag with an attached value', () => {
+    expect(findConflictingGrep(['-g@smoke'])).toBe('-g')
+    expect(findConflictingGrep(['-gv@flaky'])).toBe('-gv')
+  })
+
   it('ignores unrelated args', () => {
     expect(findConflictingGrep(['--headed', '--workers=2', 'a.spec.ts'])).toBeNull()
+    expect(findConflictingGrep(['--global-timeout=1000'])).toBeNull()
   })
 })
 
@@ -157,7 +319,11 @@ describe('expandSuites', () => {
   const suites = { nightly: ['regression', '!flaky'], smoke: ['smoke'] }
 
   it('expands to raw tokens', () => {
-    expect(expandSuites(suites, ['nightly'])).toEqual(['regression', '!flaky'])
+    expect(expandSuites(suites, ['nightly'])).toEqual({
+      any: ['regression', '!flaky'],
+      all: [],
+      none: [],
+    })
   })
 
   it('errors on an unknown suite and lists the real ones', () => {
@@ -169,7 +335,18 @@ describe('expandSuites', () => {
   })
 
   it('errors on an empty suite rather than selecting everything', () => {
-    expect(() => expandSuites({ all: [] }, ['all'])).toThrow(/would select every test/)
+    expect(() => expandSuites({ everything: [] }, ['everything'])).toThrow(
+      /would select every test/,
+    )
+  })
+
+  it.each([[''], [' '], [',']])('rejects an empty --suite value %j', (value) => {
+    expect(() => expandSuites(suites, [value])).toThrow(/would run every test/)
+  })
+
+  it('refuses more than one suite rather than folding them', () => {
+    expect(() => expandSuites(suites, ['nightly', 'smoke'])).toThrow(/Only one --suite/)
+    expect(() => expandSuites(suites, ['nightly,smoke'])).toThrow(/Only one --suite/)
   })
 
   it('says how to define suites when none exist', () => {
@@ -186,7 +363,7 @@ describe('selectionInputFor', () => {
         excludeTag: ['slow'],
       }),
     )
-    expect(selection).toEqual({ include: ['regression'], exclude: ['flaky', 'slow'] })
+    expect(selection).toEqual({ include: ['regression'], all: [], exclude: ['flaky', 'slow'] })
   })
 })
 
@@ -196,11 +373,14 @@ describe('validateSuites', () => {
   })
 
   it('flags an empty suite', () => {
-    expect(validateSuites({ all: [] })[0]?.message).toMatch(/would run every test/)
+    expect(validateSuites({ everything: [] })[0]?.message).toMatch(/would run every test/)
   })
 
   it('flags an unusable suite name', () => {
-    expect(validateSuites({ 'a b': ['x'] })[0]?.message).toMatch(/cannot be written/)
+    expect(validateSuites({ 'a b': ['x'] })[0]).toMatchObject({
+      severity: 'warn',
+      message: expect.stringMatching(/needs quoting/),
+    })
   })
 
   it('flags a malformed tag token', () => {
@@ -227,3 +407,23 @@ describe('unknownSuiteTags', () => {
     expect(unknownSuiteTags(['has space'], new Set())).toEqual([])
   })
 })
+
+/**
+ * Playwright's own `forceRegExp` (packages/playwright/src/util.ts), copied so
+ * these tests assert what Playwright will actually do with our `--grep` value.
+ *
+ * The `gi` fallback is the whole point: asserting with a bare `new RegExp`
+ * silently claims a case-sensitivity Playwright does not give a plain string.
+ */
+function forceRegExp(pattern: string): RegExp {
+  const match = pattern.match(/^\/(.*)\/([gi]*)$/)
+  if (match) {
+    return new RegExp(match[1] as string, match[2])
+  }
+  return new RegExp(pattern, 'gi')
+}
+
+/** How Playwright builds the string it greps: titles then details-argument tags. */
+function grepTitle(...parts: string[]): string {
+  return parts.join(' ')
+}

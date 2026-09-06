@@ -167,7 +167,7 @@ describe('runDoctor', () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
 
-    expect(report.schemaVersion).toBe('1.1')
+    expect(report.schemaVersion).toBe('1.2')
     expect(report.command).toBe('doctor')
     expect(report.status).toBe('pass')
     expect(report.checks.every((check) => check.status === 'pass')).toBe(true)

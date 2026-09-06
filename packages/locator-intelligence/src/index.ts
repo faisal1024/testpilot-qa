@@ -31,7 +31,7 @@ export {
   resolveTestFiles,
 } from './resolve-files.js'
 export { type CollectTagsOptions, collectTags } from './tags/collect-tags.js'
-export { type TestDeclaration, extractTests } from './tags/extract-tests.js'
+export { type ExtractedTests, type TestDeclaration, extractTests } from './tags/extract-tests.js'
 export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'
 export { computeScore, gradeFor, type ScoringWeights } from './score.js'
 export {

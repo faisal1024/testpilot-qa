@@ -19,6 +19,27 @@ export const scoringSchema = z
   })
   .default({})
 
+/**
+ * A named tag set. `['a', '!b']` is sugar for `{ any: ['a'], none: ['b'] }`.
+ *
+ * `.strict()` on the object form so `{ al: [...] }` is a config error rather
+ * than a suite that silently selects everything.
+ */
+export const suiteSchema = z.union([
+  z.array(z.string()),
+  z
+    .object({
+      /** Run tests carrying any of these. */
+      any: z.array(z.string()).default([]),
+      /** Run tests carrying every one of these. */
+      all: z.array(z.string()).default([]),
+      /** Skip tests carrying any of these. */
+      none: z.array(z.string()).default([]),
+    })
+    .strict(),
+])
+export type SuiteDefinition = z.infer<typeof suiteSchema>
+
 export const aiSchema = z
   .object({
     // All supported agents by default — generated projects include every guidance file.
@@ -68,11 +89,14 @@ export const configSchema = z
      */
     includeHelpers: z.array(z.string()).default([]),
     /**
-     * Named tag sets for `testpilot run --suite <name>`. Values are tag tokens:
-     * `smoke` includes, `!flaky` excludes. Empty by default — a project without
-     * tags gets no behaviour it did not ask for.
+     * Named tag sets for `testpilot run --suite <name>`. Empty by default — a
+     * project without tags gets no behaviour it did not ask for.
+     *
+     * The array form is any-of: `['regression', '!flaky']`. The object form
+     * exists so all-of is expressible without a later breaking reinterpretation
+     * of the array form: `{ all: ['regression', 'critical'], none: ['flaky'] }`.
      */
-    suites: z.record(z.array(z.string())).default({}),
+    suites: z.record(suiteSchema).default({}),
     rules: z.record(severitySchema).default({}),
     scoring: scoringSchema,
     ai: aiSchema,

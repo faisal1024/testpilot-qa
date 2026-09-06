@@ -1,4 +1,4 @@
-import type { AnalysisWarning, ParseError } from '../analysis/types.js'
+import type { ParseError } from '../analysis/types.js'
 import type { ConfigDiscovery } from '../config/discovery.js'
 
 /**
@@ -16,12 +16,27 @@ export interface TagUsage {
   tests: number
   /** Files containing at least one test with this tag. */
   files: number
+  /**
+   * How the tag was written. A deliberate vocabulary is almost always
+   * `details` (`{ tag: ['@smoke'] }`); `title` alone is often incidental text
+   * Playwright happens to read as a tag — on mattermost, `@here`, `@all` and
+   * `@channel` come from titles *about* Mattermost's @-mention feature.
+   * Without this the two are indistinguishable in the report.
+   */
+  sources: Array<'title' | 'details'>
+  /**
+   * True when `--tag` can select this tag. False when its name contains a
+   * comma, which the CLI splits on; `run -- --grep` is the escape hatch.
+   */
+  selectable: boolean
 }
 
 export interface SuiteUsage {
   name: string
-  /** Tags the suite selects. */
+  /** Tags the suite selects — any-of. */
   include: string[]
+  /** Tags a test must carry all of. */
+  all: string[]
   /** Tags the suite excludes. */
   exclude: string[]
   /** Referenced tags that no test carries — a typo, or a tag not written yet. */
@@ -41,11 +56,39 @@ export interface TagsSummary {
   /** Distinct tags in the vocabulary. */
   distinctTags: number
   /**
-   * Tests whose title is a template literal with interpolations. Their static
-   * parts are scanned, but a tag inside `${}` cannot be seen — so this count is
-   * the honest bound on how complete the vocabulary is.
+   * Tests whose title is a template literal with interpolations. Text touching
+   * an interpolation is not scanned at all (it fuses with the hole at runtime),
+   * so this count is the honest bound on how complete the vocabulary is.
    */
   dynamicTitles: number
+  /**
+   * `{ tag: ... }` entries that could not be read statically — a spread, a
+   * variable, or an interpolated template. Each is at least one tag the suite
+   * carries and this report cannot name.
+   */
+  unreadableTagExpressions: number
+}
+
+/**
+ * Warning codes for `tags`.
+ *
+ * Deliberately its own union rather than an extension of `AnalysisWarning`:
+ * `files-not-parsed` and `dynamic-test-titles` are meaningless for `analyze`,
+ * and widening the shared type would change the `analyze` 1.7 contract (and
+ * break a consumer's exhaustive `switch`) for a command that never emits them.
+ */
+export interface TagsWarning {
+  code:
+    | 'no-files-matched'
+    | 'test-root-missing'
+    | 'playwright-config-partial'
+    // The vocabulary is incomplete by exactly this much.
+    | 'files-not-parsed'
+    | 'dynamic-test-titles'
+    | 'unreadable-tag-expressions'
+    | 'no-tests-recognized'
+    | 'unselectable-tags'
+  message: string
 }
 
 export interface TagsReport {
@@ -59,6 +102,6 @@ export interface TagsReport {
   tags: TagUsage[]
   /** Suites from `testpilot.config.ts`, alphabetical. Empty when none configured. */
   suites: SuiteUsage[]
-  warnings: AnalysisWarning[]
+  warnings: TagsWarning[]
   parseErrors: ParseError[]
 }
