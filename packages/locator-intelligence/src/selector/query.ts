@@ -111,6 +111,30 @@ export function attributeTokens(parsed: ParsedSelector): AttributeSelector[] | n
 }
 
 /**
+ * Attribute selectors written at the top level of the selector — **not** those
+ * inside a pseudo-class argument.
+ *
+ * The distinction decides whether an attribute describes the element being
+ * selected. In `div:not([data-testid="banner"])` the test id names an element
+ * the selector deliberately *excludes*; in `li:has([data-testid="badge"])` it
+ * names a descendant. A rule that suggested "scope by that test id" for either
+ * would be advice about the wrong element, in the second case inverted.
+ */
+export function topLevelAttributeTokens(parsed: ParsedSelector): AttributeSelector[] | null {
+  const selectors = cssSelectors(parsed)
+  if (selectors === null) {
+    return null
+  }
+  const found: AttributeSelector[] = []
+  for (const selector of selectors) {
+    for (const compound of selector.compounds) {
+      found.push(...compound.attributes)
+    }
+  }
+  return found
+}
+
+/**
  * The last compound of the last CSS selector — the element a `locator()` call
  * actually targets. `null` when the selector could not be read, or when the
  * final `>>` part is not CSS (so the target is some other engine's business).

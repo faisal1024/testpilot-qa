@@ -1,7 +1,9 @@
 import type { AnalysisReport, Finding, ScoreBreakdown } from '@testpilot/core'
 
 function scoreLine(label: string, breakdown: ScoreBreakdown): string {
-  return `  ${label.padEnd(16)}${String(breakdown.score).padStart(3)}  ${breakdown.grade}`
+  return breakdown.score === null
+    ? `  ${label.padEnd(16)}  —`
+    : `  ${label.padEnd(16)}${String(breakdown.score).padStart(3)}  ${breakdown.grade}`
 }
 
 function findingLine(finding: Finding): string {

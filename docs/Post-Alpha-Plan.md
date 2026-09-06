@@ -309,22 +309,40 @@ false-positive rate < 5% per rule.
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
 
-  **Measured on the corpus.** 1973 findings became 1829: `prefer-get-by-test-id` 503,
-  `prefer-semantic-locator` 1326. The 144 suppressed are accounted for exactly — 84 composed with a
-  `has`/`hasText` option, 27 carrying `role=` or `aria-*`, 21 chained off a `getBy*()` parent, 12
-  composed with `:has()`/`:has-text()`, **0** unreadable. The attribution was reconciled against the
-  benchmark's own per-repo table before it was written down: a probe over the same discovery and the
-  shipped rule objects reproduced 1973 → 1829 with nothing unexplained. Its first run reported
-  **zero** call sites, because it used `defaultConfig` instead of the discovery the CLI performs —
-  the reconciliation check is what caught it, and is the reason this paragraph exists rather than a
-  plausible wrong one.
+  **Measured on the corpus.** 1973 findings became 1674: `prefer-get-by-test-id` 512,
+  `prefer-semantic-locator` 1162. Reasons the 299 no longer fire, counted **independently — a call
+  site can appear in more than one row, so these do not partition**: 252 composed with a
+  `has`/`hasText` option, 37 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12
+  composed with `:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable. An
+  earlier draft published a first-match classification (84/27/21/12) as though it were a partition;
+  it was not, and the second reviewer's independent count is what caught it.
 
-  Scores rose: cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→75, Ghost 99 unchanged.
-  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1326
-  findings from `warn` to `info` plus those 144 removals, and not a denominator change.
+  The probe that produced this ran over the same discovery and the shipped rule objects, and had to
+  reproduce the benchmark's own totals before any of it was written down. Its first run reported
+  **zero** call sites, because it used `defaultConfig` instead of the discovery the CLI performs —
+  the reconciliation check is what caught that, and is the reason this paragraph exists rather than
+  a plausible wrong one.
+
+  Scores rose: cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged.
+  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1162
+  findings from `warn` to `info` plus those removals, and not a denominator change.
 
   **No false-positive rate is claimed.** The phase target is stated as a percentage, and measuring it
   needs a labelled sample this phase did not build. What is measured is the above.
+
+  **Two things 11b's own wording promised and did not deliver**, recorded rather than quietly
+  dropped: `prefer-get-by-test-id` is *not* auto-fixable yet — `fix` still only rewrites `text=` —
+  which is Phase 13's subject and is why the rule now hands `selector/test-id.ts` the
+  direct/scope/same-element decision instead of burying it in a message string; and the deprecated
+  id produces an **`analyze`** warning, not a `doctor` one, because `doctor` does not validate rule
+  ids at all.
+
+  **A boundary that is drawn on the wrong axis, deliberately.** `locator('text=Save')` *is*
+  mechanically fixable today — `fix` rewrites it to `getByText('Save')` — yet it lands in the `info`
+  rule, because 11b's text puts `text=` there. The stated cut is "mechanical fix → `warn`", so the
+  two disagree. Left as the plan wrote it rather than redesigned under review; revisit in Phase 13,
+  when the fixer's actual coverage is the right organizing principle.
+
 - **11c — `no-css-class-selector`. ✅ Complete.** fires only on a real class token in the selector (tokenizer);
   never on `#id`, attribute values, or escaped dots. `#id` selectors are not this rule's business.
 - **11d — `no-deep-css-chain`. ✅ Complete.** depth per selector in a list; threshold documented and configurable.
@@ -366,8 +384,9 @@ different program, and its answer is about that program.
   change; 11g adds the counting). Guard the other direction too: a suite with **zero inspected**
   call sites gets no score (`null`, reported as "not enough evidence"), never `100 (A)` — the same
   rule as zero files.
-- Every rule page in `docs/rules/` gains a "Does not fire on" section (generated from a new
-  `notFlagged` example list in `explanations.ts`, so the docs and the tests share fixtures).
+- Every rule page in `docs/rules/` gains a "Does not fire on" section. ✅ Complete — all ten,
+  generated from the `notFlagged` list in `explanations.ts`, and every entry is executed against its
+  own rule through the real extractor (`not-flagged.test.ts`), test-declaration rules included.
 
 ### Phase 12 — A score you can gate on (`alpha.4`)
 

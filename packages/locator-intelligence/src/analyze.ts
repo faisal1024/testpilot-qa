@@ -68,6 +68,18 @@ function resolveRules(config: TestPilotConfig): {
   // the first id that stopped existing.
   const known = (id: string): boolean => builtinRuleIds.has(id) || DEPRECATED_RULE_IDS.includes(id)
   for (const id of Object.keys(config.ruleOptions ?? {})) {
+    // A retired id in `ruleOptions` gets its own warning rather than the
+    // `known()` pass used for `rules`: there is no successor to inherit an
+    // option, so it really is dropped, and saying nothing would be the silence
+    // this whole mechanism exists to avoid.
+    if (DEPRECATED_RULE_IDS.includes(id)) {
+      warnings.push({
+        code: 'deprecated-rule-id',
+        ruleId: id,
+        message: `Rule "${id}" was split, and its ruleOptions are not carried over to the rules that replaced it — set them under the new id. Options for "${id}" were ignored.`,
+      })
+      continue
+    }
     if (!known(id)) {
       warnings.push({
         code: 'unknown-rule',
@@ -397,16 +409,27 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 }
 
 /**
- * Blanks the headline score and grade, keeping `callSites` and the sub-scores
- * so a consumer can still see the shape of what was counted.
+ * Blanks the headline score and grade **and every sub-score**, keeping
+ * `callSites` so a consumer can still see how much went unread.
  *
- * The sub-scores are left as computed rather than blanked too: they are
- * dimension penalties over the same empty evidence, all 100, and a reader who
- * sees the headline `null` beside them is being told the same thing twice. What
- * they must not see is a number in the field they gate on.
+ * Blanking only the headline left four confident `100 A` dimension bars beside
+ * "not enough evidence" — in the JSON, the table, and four full-width green
+ * bars in the shared HTML report. A consumer gating on
+ * `subScores.resilience.score` would have read a perfect grade over exactly the
+ * absent evidence the headline `null` exists to disclose.
  */
 function withoutGrade(score: QualityScore): QualityScore {
-  return { ...score, score: null, grade: null }
+  const blank = { score: null, grade: null }
+  return {
+    ...score,
+    ...blank,
+    subScores: {
+      resilience: blank,
+      accessibility: blank,
+      maintainability: blank,
+      flakiness: blank,
+    },
+  }
 }
 
 /** A count nobody can check is a number to be trusted; name enough of it to dispute. */
@@ -521,7 +544,11 @@ function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | unde
     const configured = config.ruleOptions?.['no-deep-css-chain']?.maxChainDepth
     return configured === undefined ? undefined : { maxChainDepth: configured }
   }
-  if (ruleId === 'prefer-get-by-test-id') {
+  // Both rules, from the one key. `prefer-semantic-locator` hands test ids off
+  // to `prefer-get-by-test-id`; if only one of them read the configured list,
+  // a project that sets it gets either two findings on one call site or none
+  // at all, depending on which attribute the selector used.
+  if (ruleId === 'prefer-get-by-test-id' || ruleId === 'prefer-semantic-locator') {
     const configured = config.ruleOptions?.['prefer-get-by-test-id']?.testIdAttributes
     return configured === undefined ? undefined : { testIdAttributes: configured }
   }

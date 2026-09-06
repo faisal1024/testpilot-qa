@@ -403,18 +403,38 @@ describe('analyze — Tier 1 rule set', () => {
           'const id = "save"',
           'page.locator(`[data-testid=${id}]`)', // interpolated
           'page.locator(sel)', // a variable
-          "page.locator('[unterminated=\"a')", // the tokenizer abstains
+          // NOT counted: the string was read, and the rules that do not need a
+          // tokenized selector still ran on it.
+          "page.locator('//button >> ')",
           "page.locator('.btn')", // readable
           'page.getByRole("button").nth(2)', // takes no selector: fully inspected
         ].join('\n'),
       )
       const report = await analyze({ cwd: dir, config: config() })
       expect(report.score.callSites).toBe(6)
-      expect(report.summary.uninspectedCallSites).toBe(3)
-      // Half the call sites, so the reader is told before they read the grade.
+      expect(report.summary.uninspectedCallSites).toBe(2)
+      // A third of the call sites, so the reader is told before the grade.
       const note = report.warnings.find((w) => w.code === 'uninspected-call-sites')
-      expect(note?.message).toContain('3 of 6')
+      expect(note?.message).toContain('2 of 6')
       expect(report.score.score).not.toBeNull()
+      // The unparseable xpath is still judged, so "nothing was inspected" would
+      // be false — it must not appear beside this error finding.
+      expect(report.findings.map((f) => f.ruleId)).toContain('no-xpath')
+    })
+
+    it('warns above ten percent, not at it', async () => {
+      // "exceed 10%" in the docs, so 1 of 10 is silent and 2 of 10 is not.
+      const line = 'page.locator(s)\n'
+      const readable = "page.locator('.btn')\n"
+      writeFixture('tests/at.spec.ts', `const s = 'x'\n${line}${readable.repeat(9)}`)
+      const at = await analyze({ cwd: dir, config: config() })
+      expect(at.summary.uninspectedCallSites).toBe(1)
+      expect(at.warnings.map((w) => w.code)).not.toContain('uninspected-call-sites')
+      rmSync(join(dir, 'tests/at.spec.ts'))
+      writeFixture('tests/over.spec.ts', `const s = 'x'\n${line.repeat(2)}${readable.repeat(8)}`)
+      const over = await analyze({ cwd: dir, config: config() })
+      expect(over.summary.uninspectedCallSites).toBe(2)
+      expect(over.warnings.map((w) => w.code)).toContain('uninspected-call-sites')
     })
 
     it('gives no score at all when nothing could be inspected', async () => {
@@ -428,6 +448,9 @@ describe('analyze — Tier 1 rule set', () => {
       // Not 100 (A). There were locators and not one of them was read.
       expect(report.score.score).toBeNull()
       expect(report.score.grade).toBeNull()
+      // And no confident 100 A dimension bars beside "not enough evidence".
+      expect(report.score.subScores.resilience).toEqual({ score: null, grade: null })
+      expect(report.score.subScores.flakiness).toEqual({ score: null, grade: null })
     })
 
     it('still scores 100 for a suite with no call sites at all', async () => {

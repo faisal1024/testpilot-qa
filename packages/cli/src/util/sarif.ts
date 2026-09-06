@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   type AnalysisReport,
+  type AnalysisWarning,
   type Finding,
   type FindingSeverity,
   findingKey,
@@ -189,7 +190,15 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   }
 }
 
-const NOTIFICATION_DESCRIPTORS = [
+/**
+ * Typed as a total map over the warning codes so the compiler, not a reviewer,
+ * catches a new code whose descriptor was never declared. Three were already
+ * missing and emitted references that resolved to nothing.
+ */
+const NOTIFICATION_DESCRIPTORS: Array<{
+  id: AnalysisWarning['code']
+  shortDescription: { text: string }
+}> = [
   { id: 'unknown-rule', shortDescription: { text: 'A configured rule id is not recognized.' } },
   { id: 'no-files-matched', shortDescription: { text: 'No test files matched.' } },
   {
@@ -209,7 +218,26 @@ const NOTIFICATION_DESCRIPTORS = [
     id: 'helpers-not-recognized',
     shortDescription: { text: 'Helper files matched but show no sign of using Playwright.' },
   },
+  {
+    id: 'deprecated-rule-id',
+    shortDescription: { text: 'A configured rule id was split; its setting was carried over.' },
+  },
+  {
+    id: 'test-tag-coverage',
+    shortDescription: { text: 'How many test declarations carry a selectable tag.' },
+  },
+  {
+    id: 'uninspected-call-sites',
+    shortDescription: { text: 'Locator call-sites whose selector could not be read statically.' },
+  },
 ]
+
+// Every code has a descriptor. A missing one is a dangling reference in the
+// SARIF a security tab renders, which fails silently.
+const _exhaustive: Record<AnalysisWarning['code'], true> = Object.fromEntries(
+  NOTIFICATION_DESCRIPTORS.map((descriptor) => [descriptor.id, true]),
+) as Record<AnalysisWarning['code'], true>
+void _exhaustive
 
 function driver(rules: SarifReportingDescriptor[]): SarifDriver {
   return {

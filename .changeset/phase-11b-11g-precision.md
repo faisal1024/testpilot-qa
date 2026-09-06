@@ -1,6 +1,5 @@
 ---
 '@testpilot/locator-intelligence': minor
-'@testpilot/reporters': minor
 '@testpilot/core': minor
 'testpilot-qa': minor
 ---
@@ -11,36 +10,61 @@ Phase 11b + 11g — the noisiest rule splits, and the report says what it could 
 reported on a five-repo corpus, at `warn`, whether the selector was `[data-testid="save"]` (a
 mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
 
-- **`prefer-get-by-test-id`** (`warn`) — a test id addressed through a raw CSS attribute selector.
-  It names the exact replacement (`getByTestId('save')`), or asks for a scope when the test id is
-  on an ancestor rather than the target. The attribute list defaults to `data-testid`,
-  `data-test-id`, `data-test` and is configurable:
-  `ruleOptions: { 'prefer-get-by-test-id': { testIdAttributes: ['data-qa'] } }`.
-- **`prefer-semantic-locator`** (`info`) — a selector with no role, label or ARIA handle. It stays
-  quiet on `[role=]` and `[aria-*]`, on `has`/`hasText` composition in either spelling, on a
-  `locator()` narrowing a `getBy*()` parent, and on test ids.
+- **`prefer-get-by-test-id`** (`warn`, 512 corpus findings) — a test id addressed through a raw CSS
+  attribute selector. What it says depends on where the test id sits, because the three cases do not
+  have the same fix: on the target alone → `Use getByTestId('save')` (427); on an ancestor →
+  `Scope with getByTestId('list')` and chain the rest (29); on the target **alongside other
+  conditions** → use `getByTestId()` for the test id and say plainly that the rest constrains the
+  same element and cannot become a chained `locator()`, which would search inside it (46). It also
+  covers Playwright's own `data-testid=` selector engine (10). The attribute list defaults to
+  `data-testid`, `data-test-id`, `data-test` and is configurable:
+  `ruleOptions: { 'prefer-get-by-test-id': { testIdAttributes: ['data-qa'] } }` — read by **both**
+  new rules, so a configured list cannot make one of them fire twice and the other not at all.
+  It stays silent where `getByTestId()` has no equivalent: a bare `[data-testid]` presence check, a
+  test id inside `:not()`/`:has()` (where it names an element the selector excludes, or a
+  descendant), and a selector list, which has more than one target.
+- **`prefer-semantic-locator`** (`info`, 1162 corpus findings) — a selector with no role, label or
+  ARIA handle. It stays quiet on `[role=]`/`[aria-*]`, on content composition in **either**
+  spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
+  `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
+  `.filter()`/`.first()`/`.last()`/`.nth()` — and on test ids.
 
-**A config or baseline written against the old id keeps working**: `prefer-user-facing-locator`
-maps to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It
-is no longer also reported as an unknown rule — the report used to say "unknown — ignored" and
-"taking its setting" about the same line.
+**A config or baseline written against the old id keeps working**: `prefer-user-facing-locator` maps
+to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It is no
+longer *also* reported as an unknown rule — the report used to say "unknown — ignored" and "taking
+its setting" about the same line.
 
-Measured on the corpus: **1973 findings became 1829**, and every one of the 144 removals is
-attributed — 84 composed with a `has`/`hasText` option, 27 carrying `role=`/`aria-*`, 21 chained
-off a `getBy*()` parent, 12 composed with `:has()`/`:has-text()`, 0 unreadable. Scores rise
-(cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→75, Ghost unchanged) from re-grading
-1326 findings `warn`→`info` plus those removals; `callSites` is identical on all five repos.
+Measured on the corpus: **1973 findings became 1674**. Reasons the 299 no longer fire, counted
+independently — **a call site can appear in more than one row**, so these do not partition:
+252 composed with a `has`/`hasText` option (168 of them via `.filter()`, which the rules could not
+previously see), 37 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
+`:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable.
+
+Scores rise (cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged)
+from re-grading 1162 findings `warn`→`info` plus those removals; `callSites` is identical on all
+five repos, so the rise is not a denominator change. Note this also **downgrades** an existing
+double-report: 458 corpus call sites carry both a class-selector `error` and this nudge, which cost
+7 points together and now costs 5.5. Deduplicating them is Phase 12's "one call site, one penalty",
+not a rule reaching into another rule.
 
 **Uninspectable call sites are now counted and disclosed (11g).** A selector built with `${}`, held
-in a variable, or written in syntax the parser declines to guess at is a call site no rule can read
-— and it still counts toward the score's denominator.
+in a variable, or written as `as string` is a call site no rule can read — and it still counts
+toward the score's denominator.
 
-- `summary.uninspectedCallSites` counts them.
-- A run where they exceed 10% of call sites emits an `uninspected-call-sites` warning.
-- When **every** call site is uninspectable, `score.score` and `score.grade` are `null`, printed as
-  "not enough evidence" — never `100 (A)` over locators nobody read. `--min-score` fails on a
-  `null` score.
+- `summary.uninspectedCallSites` counts them. On the corpus: **317 of 8501 call sites (3.7%)** —
+  cal.com 40/1326, immich 20/352, Ghost 2/95, documenso 147/3774, mattermost 108/2954.
+- A run where they exceed 10% of call sites emits an `uninspected-call-sites` warning. **It fires on
+  none of the five corpus repos**, so the threshold has no corpus evidence behind it — only the
+  counts do.
+- When **every** call site is uninspectable, `score.score`, `score.grade` and every sub-score are
+  `null`, printed as "not enough evidence" — never `100 (A)` over locators nobody read.
+  `--min-score` fails on a `null` score. A partly unreadable suite still gets a number; taking those
+  call sites out of the denominator is Phase 12.
+- Deliberately **not** counted: a selector the tokenizer declined to parse. Its text was read and
+  the rules that do not need the parse still ran — `page.locator('//button >> ')` is reported by
+  `no-xpath` — so counting it printed "not enough evidence" directly above an `error` finding.
 
-Analysis schema **1.11**: `summary.uninspectedCallSites` added; `QualityScore.score` and
-`.grade` are now `number | null` / `Grade | null`. Consumers that read the score must handle
-`null`; it occurs only when there is at least one call site and not one of them could be read.
+Analysis schema **1.11**, and the first `analyze` bump that is **not purely additive**:
+`summary.uninspectedCallSites` is added, but `score.score`/`score.grade` (headline **and** every
+sub-score) become `number | null`. A consumer written as `if (score.score < 80) fail()` passes on
+`null`. See `docs/CLI-Spec.md` for the shape and the check.

@@ -40,6 +40,11 @@ const EXPLANATIONS: RuleExplanation[] = [
       'Prefer getByRole / getByLabel / getByText / getByTestId.',
       'Reach for XPath only for the rare case CSS and user-facing locators genuinely cannot express.',
     ],
+    notFlagged: [
+      `page.locator('..')                  // parent traversal — see avoid-parent-traversal`,
+      `page.locator('[href="//cdn.x"]')    // a slash inside a quoted attribute value`,
+      `page.getByRole('button')            // not a selector string at all`,
+    ],
   }),
   fromRule(noCssClassSelector, {
     title: 'Avoid CSS class selectors',
@@ -71,6 +76,11 @@ const EXPLANATIONS: RuleExplanation[] = [
     guidance: [
       'Target the element by something it owns — its name, label, or text.',
       'If you must work within a list, scope by a stable attribute rather than an index.',
+    ],
+    notFlagged: [
+      `page.getByRole('row').nth(1)   // positional API access — see avoid-positional-access`,
+      `page.locator('li:nth-of-type(2)') // a type-based sibling filter, not a positional index`,
+      `page.locator('[data-nth-child]')  // an attribute that merely contains the word`,
     ],
   }),
   fromRule(noDeepCssChain, {
@@ -149,6 +159,10 @@ await expect(page.getByRole('alert')).toHaveText('Saved')`,
       'Use web-first assertions like expect(locator).toBeVisible() / toHaveText().',
       'Wait for a specific condition (e.g. waitForResponse) instead of a fixed delay.',
     ],
+    notFlagged: [
+      `await expect(page.getByText('Saved')).toBeVisible()  // a web-first assertion, which waits`,
+      `await page.getByRole('button').click()               // auto-waiting is built in`,
+    ],
   }),
   fromRule(avoidPositionalAccess, {
     title: 'Prefer identity over position',
@@ -201,6 +215,10 @@ test('checkout works', { tag: ['@smoke'] }, async ({ page }) => { … })`,
       'A tag on a `test.describe` counts for every test inside it, which is usually the cheapest way to cover a group.',
       "Enable with `rules: { 'require-test-tag': 'info' }`; it is `off` by default.",
       'Findings from this rule are counted but not scored — the Locator Quality Score measures locators, over a denominator of call sites.',
+    ],
+    notFlagged: [
+      `test('checkout works @smoke', async ({ page }) => {})`,
+      `test('checkout works', { tag: ['@smoke'] }, async ({ page }) => {})`,
     ],
   }),
 ]

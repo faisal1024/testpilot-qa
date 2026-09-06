@@ -29,6 +29,14 @@ await page.getByRole('button', { name: 'Submit' }).click()
 - Prefer getByRole / getByLabel / getByText / getByTestId.
 - Reach for XPath only for the rare case CSS and user-facing locators genuinely cannot express.
 
+## Does not fire on
+
+```ts
+page.locator('..')                  // parent traversal — see avoid-parent-traversal
+page.locator('[href="//cdn.x"]')    // a slash inside a quoted attribute value
+page.getByRole('button')            // not a selector string at all
+```
+
 ## In the CLI
 
 - `testpilot explain no-xpath` prints this page in the terminal.

@@ -467,15 +467,22 @@ Written down because a tool that hides these is worse than one that doesn't have
   `--baseline` is the honest gate today: it fails on *new* findings and grandfathers what you have.
 - **Selectors built with `${}` are counted but never inspected.** An interpolated selector still
   counts as a call site — the score's denominator — while no rule can read it. A suite that
-  interpolates heavily can therefore score `100 (A)` over locators the tool never looked at. Fixed in
-  Phase 11.
+  interpolates heavily can therefore score well over locators the tool never looked at.
+  **Partly addressed:** the report now counts them (`summary.uninspectedCallSites`) and warns when
+  they pass 10% of call sites, and a suite where *every* call site is unreadable gets no score at
+  all rather than `100 (A)`. But at 90% unreadable you still get a confident number — taking them
+  out of the denominator is Phase 12. On the five-repo survey they are 317 of 8501 call sites
+  (3.7%), and no repo crosses the 10% line.
 - **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
   The other two are the same pattern, but counting them changes the score's denominator, so they
   arrive with the scoring work in Phase 12.
-- **Your score will change when you upgrade to the next alpha.** `.nth()` dropped from `error` to `warn`
-  and `locator('..')` from `error` to `info`, which raises most scores by a few points (measured on
-  five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — one you had tuned
-  tightly is now looser than you meant. In the other direction, `no-nth-child` now also covers
+- **Your score will change substantially when you upgrade to the next alpha.** Three re-gradings
+  stack: `.nth()` `error`→`warn`, `locator('..')` `error`→`info`, and the general "prefer
+  user-facing locators" nudge `warn`→`info` (as `prefer-semantic-locator`). Measured end-to-end on
+  five real suites, alpha.0 → next alpha: **cal.com 69→82, immich 89→96, Ghost 98→99,
+  documenso 89→94, mattermost 66→76** — up to **+13 points**, on suites whose locators did not
+  change. **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
+  much looser than you meant. In the other direction, `no-nth-child` now also covers
   `:nth-last-child()`, so a suite using it gains one new `error` finding.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).

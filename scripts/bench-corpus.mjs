@@ -182,6 +182,7 @@ function measure(repo, dir) {
     // Derived from `score`; recorded for readability, never compared.
     grade: report.score?.grade ?? null,
     callSites: report.score?.callSites ?? 0,
+    uninspectedCallSites: report.summary?.uninspectedCallSites ?? 0,
     byRule: Object.fromEntries(Object.entries(byRule).sort(([a], [b]) => a.localeCompare(b))),
     warnings: Object.fromEntries(Object.entries(warnings).sort(([a], [b]) => a.localeCompare(b))),
     discovery: {

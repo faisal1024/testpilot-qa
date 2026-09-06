@@ -29,6 +29,14 @@ await page.getByRole('link', { name: 'Settings' }).click()
 - Target the element by something it owns — its name, label, or text.
 - If you must work within a list, scope by a stable attribute rather than an index.
 
+## Does not fire on
+
+```ts
+page.getByRole('row').nth(1)   // positional API access — see avoid-positional-access
+page.locator('li:nth-of-type(2)') // a type-based sibling filter, not a positional index
+page.locator('[data-nth-child]')  // an attribute that merely contains the word
+```
+
 ## In the CLI
 
 - `testpilot explain no-nth-child` prints this page in the terminal.

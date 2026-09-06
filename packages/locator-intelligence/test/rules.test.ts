@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { extractLocators } from '../src/extractor.js'
 import type { LocatorContext } from '../src/locator-context.js'
+import { parseSource } from '../src/parser.js'
 import { avoidParentTraversal } from '../src/rules/avoid-parent-traversal.js'
 import { avoidPositionalAccess } from '../src/rules/avoid-positional-access.js'
 import { noCssClassSelector } from '../src/rules/no-css-class-selector.js'
@@ -99,24 +101,27 @@ describe('prefer-get-by-test-id', () => {
     expect(violation?.suggestion).toContain('getByTestId("save")')
   })
 
-  it('asks for a scope, not a replacement, when the test id is on an ancestor', () => {
-    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
-    // The target is the anchor. Telling the reader to write `getByTestId('list')`
-    // full stop would be advice about a different element.
-    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
+  it('does not offer a chained locator() for conditions on the same element', () => {
+    // `getByTestId('row').locator('button')` queries the SUBTREE of the test id.
+    // `button[data-testid="row"]` is one element. The old message said "keep the
+    // rest of the selector on the chained locator()", which changes what the
+    // test acts on — 48 of the 503 corpus findings took that branch.
+    const violation = preferGetByTestId.evaluate(css('button[data-testid="row"]'))
+    expect(violation?.message).toContain('on the same element')
+    expect(violation?.suggestion).toContain('Use getByTestId("row")')
+    expect(violation?.suggestion).toContain('cannot move to a chained locator()')
   })
 
-  it('asks for a scope when the target carries more than the test id', () => {
-    // `getByTestId('row')` alone would match the row, not the button inside it.
-    expect(preferGetByTestId.evaluate(css('button[data-testid="row"]'))?.suggestion).toContain(
-      'Scope with',
-    )
+  it('offers a scope only when the test id is genuinely an ancestor', () => {
+    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
+    expect(violation?.message).toContain('ancestor')
+    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
   })
 
   it('names the attribute without inventing an argument for a non-equality match', () => {
     const violation = preferGetByTestId.evaluate(css('[data-testid^="row-"]'))
     expect(violation).not.toBeNull()
-    expect(violation?.suggestion).not.toContain('getByTestId("')
+    expect(violation?.suggestion).not.toContain('getByTestId("row-')
   })
 
   it('reads the configured attribute list, and only it', () => {
@@ -130,8 +135,47 @@ describe('prefer-get-by-test-id', () => {
     ).toBeNull()
   })
 
-  it('finds a test id nested in :has()', () => {
-    expect(preferGetByTestId.evaluate(css('li:has([data-test="badge"])'))).not.toBeNull()
+  it('says nothing about a test id inside :not() or :has()', () => {
+    // `div:not([data-testid=banner])` selects elements that are NOT that test
+    // id: "scope with getByTestId('banner')" is the inverse of the selector.
+    // `li:has([data-test=badge])` targets the li *containing* the badge, so a
+    // scope-and-chain rewrite points the other way down the tree. Both used to
+    // print a confident suggestion.
+    expect(preferGetByTestId.evaluate(css('div:not([data-testid="banner"])'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('li:has([data-test="badge"])'))).toBeNull()
+  })
+
+  it('says nothing when the selector is a list, because there is no one target', () => {
+    // Matches a OR b; naming the first arm silently drops the second.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"], [data-testid="b"]'))).toBeNull()
+  })
+
+  it('does not offer getByTestId() for a case-insensitive match', () => {
+    // `getByTestId('save')` is exact and case-sensitive; `[data-testid="save" i]`
+    // also matches `SAVE`. The old code printed it as a direct replacement.
+    const violation = preferGetByTestId.evaluate(css('[data-testid="save" i]'))
+    expect(violation?.suggestion).not.toContain('getByTestId("save")')
+    expect(violation?.suggestion).toContain('RegExp')
+  })
+
+  it('says nothing about a bare presence check', () => {
+    // `getByTestId()` has no "has any test id" form.
+    expect(preferGetByTestId.evaluate(css('[data-testid]'))).toBeNull()
+  })
+
+  it('treats *[data-testid=x] as the same selector as [data-testid=x]', () => {
+    expect(preferGetByTestId.evaluate(css('*[data-testid="save"]'))?.suggestion).toBe(
+      'Use getByTestId("save") instead.',
+    )
+  })
+
+  it("owns Playwright's own data-testid= selector engine", () => {
+    // Routed to prefer-semantic-locator before, which said the opposite:
+    // "no semantic handle" about a selector with an exact getByTestId() form.
+    const selector = 'data-testid=save'
+    const context = ctx({ selector, selectorEngine: 'css', parsed: tokenizeSelector(selector) })
+    expect(preferGetByTestId.evaluate(context)?.suggestion).toContain('getByTestId("save")')
+    expect(preferSemanticLocator.evaluate(context)).toBeNull()
   })
 
   it('abstains on an unreadable selector rather than guessing', () => {
@@ -141,9 +185,7 @@ describe('prefer-get-by-test-id', () => {
   it('ignores getByTestId itself, dynamic selectors and xpath', () => {
     expect(preferGetByTestId.evaluate(ctx({ apiCall: 'getByTestId', selector: 'save' }))).toBeNull()
     expect(preferGetByTestId.evaluate(ctx({ isDynamic: true }))).toBeNull()
-    expect(
-      preferGetByTestId.evaluate(ctx({ selector: '//*[@data-testid]', selectorEngine: 'xpath' })),
-    ).toBeNull()
+    expect(preferGetByTestId.evaluate(xpath('//*[@data-testid]'))).toBeNull()
   })
 
   it('is warn severity — it is the case with a mechanical fix', () => {
@@ -198,6 +240,50 @@ describe('prefer-semantic-locator', () => {
     ).not.toBeNull()
   })
 
+  it('sees through .filter()/.first()/.nth() to the parent that carries the semantics', () => {
+    // Built through the real extractor, not by hand: a hand-built `parentApi`
+    // pins the rule and leaves `receiverApi` free to break underneath it.
+    for (const chain of [
+      "page.getByRole('row').filter({ hasText: 'x' }).locator('td')",
+      "page.getByRole('row').first().locator('td')",
+      "page.getByRole('row').nth(1).locator('td')",
+    ]) {
+      const child = extractLocators(chain, parseSource(chain, 'a.ts')).find(
+        (context) => context.selector === 'td',
+      )
+      expect(child, chain).toBeDefined()
+      expect(preferSemanticLocator.evaluate(child as LocatorContext), chain).toBeNull()
+    }
+  })
+
+  it('treats .filter({ hasText }) as the composition it is', () => {
+    // The same Playwright feature as `locator('.row', { hasText })`, and the
+    // more idiomatic spelling. Firing on one and not the other would be an
+    // answer about syntax.
+    const source = "page.locator('.row').filter({ hasText: 'Save' })"
+    const row = extractLocators(source, parseSource(source, 'a.ts')).find(
+      (context) => context.selector === '.row',
+    )
+    expect(row).toBeDefined()
+    expect(preferSemanticLocator.evaluate(row as LocatorContext)).toBeNull()
+  })
+
+  it('abstains on :text() for the same reason as :has-text()', () => {
+    expect(preferSemanticLocator.evaluate(css('li:text("Save")'))).toBeNull()
+    expect(preferSemanticLocator.evaluate(css('li:text-is("Save")'))).toBeNull()
+  })
+
+  it('reads the same configured test-id list as prefer-get-by-test-id', () => {
+    // Hand off on a broader notion than the other rule accepts and a call site
+    // falls between them, reported by neither.
+    const options = { testIdAttributes: ['data-qa'] }
+    expect(preferSemanticLocator.evaluate(css('[data-qa="save"]'), options)).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-qa="save"]'), options)).not.toBeNull()
+    // ...and the default attribute is no longer silently owned by nobody.
+    expect(preferSemanticLocator.evaluate(css('[data-testid="save"]'), options)).not.toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="save"]'), options)).toBeNull()
+  })
+
   it('leaves test ids to prefer-get-by-test-id, so one call site gets one line', () => {
     expect(preferSemanticLocator.evaluate(css('[data-testid="save"]'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
@@ -208,9 +294,7 @@ describe('prefer-semantic-locator', () => {
   })
 
   it('ignores xpath, dynamic, and non-locator APIs', () => {
-    expect(
-      preferSemanticLocator.evaluate(ctx({ selector: '//a', selectorEngine: 'xpath' })),
-    ).toBeNull()
+    expect(preferSemanticLocator.evaluate(xpath('//a'))).toBeNull()
     expect(preferSemanticLocator.evaluate(ctx({ isDynamic: true }))).toBeNull()
     expect(
       preferSemanticLocator.evaluate(ctx({ apiCall: 'getByRole', selector: 'button' })),

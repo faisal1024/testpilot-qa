@@ -272,6 +272,7 @@ describe('bench comparison', () => {
       'findings',
       'score',
       'callSites',
+      'uninspectedCallSites',
       'exitCode',
     ])
   })

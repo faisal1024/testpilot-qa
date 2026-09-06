@@ -4,6 +4,7 @@ import { ruleExplanations } from '../src/explanations.js'
 import { extractLocators } from '../src/extractor.js'
 import { parseSource } from '../src/parser.js'
 import { getRule } from '../src/rules/index.js'
+import { extractTests } from '../src/tags/extract-tests.js'
 
 /**
  * Every "Does not fire on" example in the docs is executed against its own
@@ -51,8 +52,23 @@ describe('docs "Does not fire on" examples', () => {
       for (const example of explanation.notFlagged ?? []) {
         it(`stays quiet on ${example.split(/\s{2,}\/\//)[0]?.trim()}`, () => {
           expect(rule, explanation.id).toBeDefined()
-          if (!rule || rule.kind === 'test') {
+          if (!rule) {
             throw new Error('unreachable')
+          }
+          // A rule over `test()` declarations needs the other extractor. The
+          // plan asks every rule page for this section, so the harness has to
+          // cover both kinds or one rule's promises stay unexecuted.
+          if (rule.kind === 'test') {
+            const program = parseSource(example, 'example.ts')
+            const declarations = extractTests(program).tests
+            expect(declarations.length, `no test declaration in: ${example}`).toBeGreaterThan(0)
+            for (const declaration of declarations) {
+              expect(
+                rule.evaluate(declaration, { playwrightConfigDeclaresTags: false }),
+                example,
+              ).toBeNull()
+            }
+            return
           }
           const contexts = contextsFor(example)
           expect(contexts.length, `no call site found in: ${example}`).toBeGreaterThan(0)

@@ -1,4 +1,4 @@
-import { attributeTokens, targetCompound } from '../selector/query.js'
+import { testIdReplacement } from '../selector/test-id.js'
 import type { Rule, RuleOptions } from './types.js'
 
 /**
@@ -15,24 +15,26 @@ export const DEFAULT_TEST_ID_ATTRIBUTES: readonly string[] = [
   'data-test',
 ]
 
-function configuredAttributes(options: RuleOptions | undefined): readonly string[] {
+/** The configured test-id attribute names, or the defaults. */
+export function testIdAttributesFrom(options: RuleOptions | undefined): readonly string[] {
   const configured = options?.testIdAttributes
   return configured && configured.length > 0 ? configured : DEFAULT_TEST_ID_ATTRIBUTES
 }
 
 /**
  * Flags `locator('[data-testid="x"]')` — a test id addressed through a raw CSS
- * attribute selector, when `getByTestId('x')` says the same thing.
+ * attribute selector, when `getByTestId()` says the same thing.
  *
  * Split out of `prefer-user-facing-locator` in Phase 11b because it is the one
- * case with a concrete, mechanical answer: the rule can print the exact
- * replacement instead of the category-level "prefer user-facing locators" that
- * made the old rule 65% of every finding the tool reported.
+ * case with a concrete answer: the rule can print the replacement instead of
+ * the category-level "prefer user-facing locators" that made the old rule 65%
+ * of every finding the tool reported.
  *
- * The message distinguishes two shapes, because they do not have the same fix:
- * a selector whose *target* carries the test id converts directly, while
- * `[data-testid=list] > li a` targets the anchor and needs the test id to
- * become a scope (`getByTestId('list').locator('li a')`).
+ * Naming a replacement is the strongest claim this package makes, so *where*
+ * the test id sits decides what may be said — see {@link testIdReplacement}.
+ * The distinction is not cosmetic: `getByTestId('row').locator('button')`
+ * queries the **subtree**, so offering it for `button[data-testid="row"]`
+ * (which selects one element) changes which element the test acts on.
  */
 export const preferGetByTestId: Rule = {
   id: 'prefer-get-by-test-id',
@@ -44,51 +46,44 @@ export const preferGetByTestId: Rule = {
     if (context.isDynamic || context.apiCall !== 'locator' || !context.parsed) {
       return null
     }
-    const attributes = attributeTokens(context.parsed)
-    if (attributes === null) {
-      return null
-    }
-    const names = configuredAttributes(options)
-    const match = attributes.find((attribute) => names.includes(attribute.name))
-    if (!match) {
-      return null
-    }
-    // The value, when it is a plain equality match — `[data-testid^="row-"]`
-    // is a prefix query `getByTestId` cannot express, so the rule names the
-    // attribute without inventing an argument for it.
-    const exact = match.operator === '=' ? match.value : undefined
-    const target = targetCompound(context.parsed)
-    const onTarget = target?.attributes.some((attribute) => attribute === match) === true
-    if (onTarget && target !== null && isOnlyHandle(target)) {
+    const names = testIdAttributesFrom(options)
+    // Playwright's own `data-testid=save` engine: already a test id, still not
+    // `getByTestId()`, and invisible to the CSS attribute scan below.
+    const [only] = context.parsed.parts
+    if (only?.engine === 'test-id' && context.parsed.parts.length === 1) {
       return {
-        message: `The test id [${match.name}] is addressed through a raw CSS selector.`,
-        suggestion:
-          exact === undefined
-            ? 'Use getByTestId() instead of a CSS attribute selector.'
-            : `Use getByTestId(${JSON.stringify(exact)}) instead.`,
+        message: `The ${only.engineName ?? 'data-testid'}= selector engine addresses a test id.`,
+        suggestion: `Use getByTestId(${JSON.stringify(only.body)}) instead.`,
       }
     }
+    const replacement = testIdReplacement(context.parsed, names)
+    if (replacement === null) {
+      return null
+    }
+    const { attribute, exactValue } = replacement
+    const named =
+      exactValue === undefined ? 'getByTestId()' : `getByTestId(${JSON.stringify(exactValue)})`
+    const inexact =
+      exactValue === undefined
+        ? ' getByTestId() also accepts a RegExp for a partial or case-insensitive match.'
+        : ''
+    if (replacement.kind === 'direct') {
+      return {
+        message: `The test id [${attribute}] is addressed through a raw CSS selector.`,
+        suggestion: `Use ${named} instead.${inexact}`,
+      }
+    }
+    if (replacement.kind === 'scope') {
+      return {
+        message: `The test id [${attribute}] is on an ancestor of the element this selector targets.`,
+        suggestion: `Scope with ${named} and keep the rest of the selector on a chained locator().${inexact}`,
+      }
+    }
+    // same-element: the remaining conditions are on the target itself, so they
+    // cannot become a chained `locator()` — that would search inside it.
     return {
-      message: `The test id [${match.name}] is addressed through a raw CSS selector, alongside other conditions.`,
-      suggestion:
-        exact === undefined
-          ? 'Scope with getByTestId() and keep the rest of the selector on the chained locator().'
-          : `Scope with getByTestId(${JSON.stringify(exact)}) and keep the rest of the selector on the chained locator().`,
+      message: `The test id [${attribute}] is addressed through a raw CSS selector, alongside other conditions on the same element.`,
+      suggestion: `Use ${named} for the test id. The rest of this selector constrains the same element, so it cannot move to a chained locator() — narrow with filter() or and(), or rely on the test id alone if it is unique.${inexact}`,
     }
   },
-}
-
-/**
- * True when the test id is the whole of what selects this element — no tag, no
- * class, no id, no other attribute, no pseudo. Only then is `getByTestId()` an
- * exact restatement rather than a loosening of the locator.
- */
-function isOnlyHandle(target: NonNullable<ReturnType<typeof targetCompound>>): boolean {
-  return (
-    target.tag === undefined &&
-    target.id === undefined &&
-    target.classes.length === 0 &&
-    target.pseudos.length === 0 &&
-    target.attributes.length === 1
-  )
 }

@@ -1,6 +1,6 @@
 import type { LocatorApi } from '../locator-context.js'
-import { attributeTokens, hasPseudo } from '../selector/query.js'
-import { DEFAULT_TEST_ID_ATTRIBUTES } from './prefer-get-by-test-id.js'
+import { attributeTokens, hasPseudo, topLevelAttributeTokens } from '../selector/query.js'
+import { testIdAttributesFrom } from './prefer-get-by-test-id.js'
 import type { Rule } from './types.js'
 
 /** `getBy*` methods — a parent locator that is already user-facing. */
@@ -15,12 +15,21 @@ const USER_FACING_APIS: ReadonlySet<LocatorApi> = new Set<LocatorApi>([
 ])
 
 /**
- * Pseudo-classes that make a selector a *scope refined by content* rather than
- * a handle in its own right — the selector-syntax spelling of the `has` /
- * `hasText` options. Abstaining on one and not the other would give two
+ * Pseudo-classes that give the selector a handle this rule is asking for — a
+ * nested locator or the element's visible text — rather than pure structure.
+ *
+ * `:has()`/`:has-text()` are the selector-syntax spelling of the `has` /
+ * `hasText` options, and `:text()`/`:text-is()`/`:text-matches()` are text
+ * matching. Abstaining on one spelling and firing on another would give two
  * different answers for the same Playwright feature written two ways.
  */
-const COMPOSITION_PSEUDOS: ReadonlySet<string> = new Set(['has', 'has-text'])
+const CONTENT_PSEUDOS: ReadonlySet<string> = new Set([
+  'has',
+  'has-text',
+  'text',
+  'text-is',
+  'text-matches',
+])
 
 /**
  * Flags a raw `locator()` selector with no semantic handle — a bare tag, class,
@@ -44,7 +53,7 @@ export const preferSemanticLocator: Rule = {
   defaultSeverity: 'info',
   docsUrl:
     'https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/prefer-semantic-locator.md',
-  evaluate(context) {
+  evaluate(context, options) {
     if (context.isDynamic || context.apiCall !== 'locator' || !context.parsed) {
       return null
     }
@@ -56,12 +65,20 @@ export const preferSemanticLocator: Rule = {
     if (context.parentApi !== undefined && USER_FACING_APIS.has(context.parentApi)) {
       return null
     }
-    // `locator('.row', { hasText: 'Save' })` — the selector is a scope and the
-    // content match is the handle.
-    if (context.options !== undefined) {
+    // `locator('.row', { hasText: 'Save' })` and `.filter({ hasText })` — the
+    // selector is a scope and the content match is the handle. All four keys,
+    // named rather than "any options at all", so this stays in step with
+    // CONTENT_PSEUDOS instead of drifting from it.
+    const composition = context.options
+    if (
+      composition?.has === true ||
+      composition?.hasNot === true ||
+      composition?.hasText === true ||
+      composition?.hasNotText === true
+    ) {
       return null
     }
-    const composed = hasPseudo(context.parsed, COMPOSITION_PSEUDOS)
+    const composed = hasPseudo(context.parsed, CONTENT_PSEUDOS)
     if (composed === null || composed) {
       return null
     }
@@ -72,15 +89,22 @@ export const preferSemanticLocator: Rule = {
     // A test id is a handle, just not a semantic one — `prefer-get-by-test-id`
     // owns that case and has an exact replacement to offer. Reporting both on
     // one call site would be two lines for one decision.
-    if (attributes.some((attribute) => DEFAULT_TEST_ID_ATTRIBUTES.includes(attribute.name))) {
+    //
+    // Read at the top level and with the *same* configured attribute list the
+    // other rule uses: hand off on a broader notion than it accepts and a call
+    // site falls between them, reported by neither.
+    const topLevel = topLevelAttributeTokens(context.parsed)
+    const testIds = testIdAttributesFrom(options)
+    if (topLevel === null || topLevel.some((attribute) => testIds.includes(attribute.name))) {
       return null
     }
     if (attributes.some(isSemantic)) {
       return null
     }
     // `role=button[name="Save"]` through the `role=` engine is already the
-    // thing this rule asks for, spelled as a selector.
-    if (context.parsed.parts.some((part) => part.engine === 'role')) {
+    // thing this rule asks for, spelled as a selector; `data-testid=save` is
+    // the other rule's business.
+    if (context.parsed.parts.some((part) => part.engine === 'role' || part.engine === 'test-id')) {
       return null
     }
     return {

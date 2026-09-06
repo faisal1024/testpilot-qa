@@ -103,8 +103,9 @@ export type Grade = 'A' | 'B' | 'C' | 'D' | 'F'
 
 /** A 0–100 score with its letter grade. */
 export interface ScoreBreakdown {
-  score: number
-  grade: Grade
+  /** `null` in the same case as {@link QualityScore.score}: no evidence to grade. */
+  score: number | null
+  grade: Grade | null
 }
 
 /** The dimensions a headline score decomposes into. */
@@ -178,7 +179,15 @@ export interface AnalysisReport {
  * 1.7 `inHelper` on findings + `summary.helperFiles`;
  * 1.8 `discovery.playwrightConfigDeclaresTags`;
  * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`;
- * 1.10 `baseline.matchedByPreviousId`.
+ * 1.10 `baseline.matchedByPreviousId`;
+ * 1.11 `summary.uninspectedCallSites` + `score.score`/`grade` (headline and every sub-score)
+ * become nullable.
+ *
+ * **1.11 is the first 1.x bump that is not purely additive**: it narrows an
+ * existing field. A consumer doing `if (report.score.score < 80) fail()` passes
+ * on `null` — a false green in the one field this project exists to protect —
+ * so check for `null` explicitly. It occurs only when there is at least one
+ * locator call-site and not one of them had a statically readable selector.
  */
 export const ANALYSIS_SCHEMA_VERSION = '1.11'
 

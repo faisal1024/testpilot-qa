@@ -217,11 +217,14 @@ testpilot analyze [globs...] [options]
 > 100 until such rules exist). **Score model:** `penalty = Σ severity weight`,
 > `maxPenalty = analyzed call-sites × error weight`, `score = clamp(round(100 × (1 − penalty/maxPenalty)), 0, 100)`;
 > weights come from `config.scoring.weights`. **Zero call-sites → 100/A** (no detectable debt).
+> **Every call-site unreadable → `score` and `grade` are `null`** (1.11), headline and sub-scores
+> alike — see below.
 > Parse errors are reported but **do not** affect the score yet. See **[Scoring.md](Scoring.md)** for the
 > full model with worked examples (pinned by a test).
 >
 > **`--min-score <n>`** gates CI: if the score is below `n`, the command exits **1** with a clear
-> message; otherwise (and whenever no threshold is set) it exits **0**. **Precedence:** the
+> message; otherwise (and whenever no threshold is set) it exits **0**. A **`null` score fails** any
+> threshold (1.11): the gate asked for evidence of locator quality and there is none. **Precedence:** the
 > `--min-score` flag wins; otherwise `config.scoring.minScore`; otherwise no gating. `--json` still
 > prints the full report (including `score`) even when the gate fails. Still Tier 1 / static — not
 > DOM-aware.
@@ -589,11 +592,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.10`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.11`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.10",
+  "schemaVersion": "1.11",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -613,6 +616,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "findings": 9,
     "unscoredFindings": 0,
     "unscoredRuleIds": [],
+    "uninspectedCallSites": 0,
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
   },
   "score": {
@@ -673,12 +677,32 @@ to: the config file's directory (or the project root when there is no config fil
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
 ignore it.
-`warnings[].code` is `unknown-rule`, `no-files-matched` (1.4), or — new in **1.6** —
-`playwright-config-partial` / `playwright-config-ignored`, so a discovery problem reaches the table,
+`warnings[].code` is `unknown-rule`, `no-files-matched` (1.4), `playwright-config-partial` /
+`playwright-config-ignored` / `test-root-missing` (**1.6**), `helpers-not-analyzed` /
+`helpers-not-recognized` (**1.7**), `test-tag-coverage` (**1.8**), `deprecated-rule-id` (**1.10**),
+or `uninspected-call-sites` (**1.11**), so a discovery problem reaches the table,
 the HTML report, and SARIF (as `invocations[].toolExecutionNotifications`), not just stderr. On a **zero-file run** the `--json`
 and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
 no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
 still have something to read; the table and HTML reporters print only the error.
+
+**1.11 is the first `analyze` schema bump that is not purely additive.** `score.score` and
+`score.grade` — and the same two fields on every entry of `score.subScores` — are now
+`number | null` / `Grade | null`. They are `null` when there is at least one locator call-site and
+**not one of them** had a statically readable selector (every selector is an interpolated template
+literal, a variable, an `as string`). Zero call-sites is a different case and still scores `100`/`A`.
+
+A consumer written as `if (report.score.score < 80) fail()` **passes** on `null` — a false green in
+the field this tool exists to protect. Check explicitly:
+
+```json
+{ "score": { "score": null, "grade": null, "callSites": 12,
+             "subScores": { "resilience": { "score": null, "grade": null } } } }
+```
+
+`summary.uninspectedCallSites` (1.11) counts those call-sites whatever the score, and a run where
+they exceed 10% of `score.callSites` adds an `uninspected-call-sites` warning. They still count
+toward the score's denominator today; removing them from it is a Phase 12 change.
 
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
 against the saved baseline. `matchedByPreviousId` (1.10) is present **only when non-zero**, and counts findings that matched

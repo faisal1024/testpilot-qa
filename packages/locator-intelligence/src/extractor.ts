@@ -97,6 +97,31 @@ export function inferEngine(selector: string | undefined): SelectorEngine | unde
  */
 export function extractLocators(code: string, program: AstNode): LocatorContext[] {
   const contexts: LocatorContext[] = []
+  // `.filter({ hasText })` composes the call it is chained off, but the finding
+  // lands on that call, one node up the chain — so the composition has to be
+  // collected before the call sites are built. `locator('.row', { hasText })`
+  // and `locator('.row').filter({ hasText })` are the same Playwright feature,
+  // and a rule that abstained on one and fired on the other would be answering
+  // a question about spelling.
+  const composedRanges = new Map<string, NonNullable<LocatorContext['options']>>()
+  walk(program, (node) => {
+    if (node.type !== 'CallExpression') {
+      return
+    }
+    const callee = node.callee as AstNode | undefined
+    if (!callee || callee.type !== 'MemberExpression') {
+      return
+    }
+    if (propertyNode(callee)?.name !== 'filter') {
+      return
+    }
+    const receiver = callee.object as (AstNode & Partial<WithLoc>) | undefined
+    const options = readLocatorOptions((node.arguments as AstNode[])?.[0])
+    if (receiver?.range && options) {
+      const key = `${receiver.range[0]}:${receiver.range[1]}`
+      composedRanges.set(key, { ...composedRanges.get(key), ...options })
+    }
+  })
 
   walk(program, (node) => {
     if (node.type !== 'CallExpression') {
@@ -132,9 +157,11 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
         ? tokenizeSelector(value)
         : undefined
     const parentApi = receiverApi(callee.object as AstNode | undefined)
-    const options = readLocatorOptions(args[1])
-
     const call = node as unknown as WithLoc
+    const composed = composedRanges.get(`${call.range[0]}:${call.range[1]}`)
+    const own = readLocatorOptions(args[1])
+    const options = own || composed ? { ...own, ...composed } : undefined
+
     contexts.push({
       apiCall,
       selector: value,
@@ -152,20 +179,37 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
   return contexts
 }
 
+/**
+ * Methods that refine an existing locator without changing where it came from.
+ * `getByRole('row').filter({ hasText: 'x' }).locator('td')` is still a
+ * `locator()` narrowing a `getByRole()` parent, and a rule that stopped at the
+ * immediate receiver would read it as an unparented raw selector — which is
+ * exactly the false positive `parentApi` exists to prevent.
+ */
+const REFINING_METHODS: ReadonlySet<string> = new Set(['filter', 'first', 'last', 'nth'])
+
 /** The recognized locator method a call is chained off, if any. */
 function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
-  if (!receiver || receiver.type !== 'CallExpression') {
-    return undefined
+  let current = receiver
+  // Bounded by the expression's own nesting; a chain is finite.
+  while (current && current.type === 'CallExpression') {
+    const callee = current.callee as AstNode | undefined
+    if (!callee || callee.type !== 'MemberExpression') {
+      return undefined
+    }
+    const name = propertyNode(callee)?.name as string | undefined
+    if (name === undefined) {
+      return undefined
+    }
+    // Refining first: `nth`/`first`/`last` are recognized locator APIs *and*
+    // refinements. Answering "nth" here would hide the `getByRole()` two links
+    // up, which is the whole question `parentApi` is asked.
+    if (!REFINING_METHODS.has(name)) {
+      return LOCATOR_METHODS.has(name as LocatorApi) ? (name as LocatorApi) : undefined
+    }
+    current = callee.object as AstNode | undefined
   }
-  const callee = receiver.callee as AstNode | undefined
-  if (!callee || callee.type !== 'MemberExpression') {
-    return undefined
-  }
-  const property = propertyNode(callee)
-  const name = property?.name as string | undefined
-  return name !== undefined && LOCATOR_METHODS.has(name as LocatorApi)
-    ? (name as LocatorApi)
-    : undefined
+  return undefined
 }
 
 /**
@@ -199,27 +243,34 @@ function readLocatorOptions(arg: AstNode | undefined): LocatorContext['options']
 }
 
 /**
- * True when a call site takes a selector the analyzer could not read — an
- * interpolated template literal, a variable, an `as string`, or a selector the
- * tokenizer refused to guess at.
+ * True when a call site takes a selector whose *text* the analyzer never had —
+ * an interpolated template literal, a variable, an `as string`. Nothing can
+ * read those, so no rule ran on them at all.
+ *
+ * Deliberately **not** "the tokenizer abstained". A selector the tokenizer
+ * declines to parse was still read as a string, and the rules that do not need
+ * the parse still ran on it: `page.locator('//button >> ')` fails to tokenize
+ * and is reported by `no-xpath` all the same. Counting it here produced a
+ * report that printed "not enough evidence" directly above an `error` finding
+ * and a `Resilience 0 F` — two opposite claims about the same run.
  *
  * Lives here rather than in `analyze` because it has to agree with what the
- * extractor decided: `isDynamic` and `parsed` are set in one place, and a
- * second definition of "readable" is a second answer waiting to disagree.
- * Call sites that take no selector at all (`.nth(2)`, `waitForTimeout(500)`)
- * are fully inspected by their own rules and are never counted here.
+ * extractor decided: `isDynamic` is set in one place, and a second definition
+ * of "readable" is a second answer waiting to disagree. Call sites that take no
+ * selector at all (`.nth(2)`, `waitForTimeout(500)`, `getByRole(...)`) are
+ * inspected by their own rules and are never counted here.
+ *
+ * `frameLocator('.frame')` is a known overstatement: it takes a selector, so a
+ * readable one counts as inspected, yet every selector rule gates on
+ * `apiCall === 'locator'` and none of them reads it. Widening the rules is the
+ * fix, not narrowing the count — an exception here would hide the gap.
  */
 export function isUninspected(context: LocatorContext): boolean {
   if (!SELECTOR_ARG_APIS.has(context.apiCall as LocatorApi)) {
     return false
   }
-  if (context.isDynamic) {
-    return true
-  }
-  // A selector-taking call with no string argument at all — `locator()` with a
-  // Locator argument, say. Nothing was read, so nothing was inspected.
-  if (context.parsed === undefined) {
-    return true
-  }
-  return context.parsed.unparsed.length > 0
+  // `selector` is set whenever a static string was found; `isDynamic` when one
+  // was expected and could not be. A call with neither passed no selector at
+  // all — `locator()` with a Locator argument, say — and nothing was read.
+  return context.isDynamic || context.selector === undefined
 }

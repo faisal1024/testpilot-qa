@@ -63,8 +63,13 @@ function scoreCard(score: AnalysisReport['score'], summary: AnalysisReport['summ
   ]
   const rows = subs
     .map(([label, s]) => {
-      const bar = `<span class="bar"><span class="bar-fill ${gradeClass(s.grade)}" style="width:${clampPct(s.score)}%"></span></span>`
-      const value = `<span class="sub-score">${s.score} <span class="badge ${gradeClass(s.grade)}">${esc(s.grade)}</span></span>`
+      // A null sub-score renders as an empty bar and a dash, never a full green
+      // one: the grade is absent, and "absent" must not look like "perfect".
+      const bar = `<span class="bar"><span class="bar-fill ${gradeClass(s.grade ?? '')}" style="width:${clampPct(s.score ?? 0)}%"></span></span>`
+      const value =
+        s.score === null
+          ? '<span class="sub-score">&mdash;</span>'
+          : `<span class="sub-score">${s.score} <span class="badge ${gradeClass(s.grade ?? '')}">${esc(s.grade ?? '')}</span></span>`
       return `<li><span class="sub-label">${esc(label)}</span>${bar}${value}</li>`
     })
     .join('')
