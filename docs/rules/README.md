@@ -15,7 +15,7 @@ rules are static (Tier 1): they read your test source and never touch a browser 
 | [`no-nth-child`](no-nth-child.md) | locator | error | A CSS :nth-child() or :nth-last-child() selector depends on sibling order and breaks when items move. |
 | [`no-xpath`](no-xpath.md) | locator | error | XPath selectors couple tests to the DOM tree and break when structure changes. |
 | [`prefer-get-by-test-id`](prefer-get-by-test-id.md) | locator | warn | A test id addressed through a raw CSS attribute selector has an exact getByTestId() equivalent. |
-| [`prefer-semantic-locator`](prefer-semantic-locator.md) | locator | info | A raw tag, class, #id or text= selector says nothing about what the element is to a user. |
+| [`prefer-semantic-locator`](prefer-semantic-locator.md) | locator | info | A raw tag, class or #id selector says nothing about what the element is to a user; a text= string says only what it reads. |
 | [`require-test-tag`](require-test-tag.md) | maintainability | off (`info` when enabled) | A test with no tag cannot be selected by any tag-based run, so it silently misses every suite. |
 
 How findings turn into the 0–100 Locator Quality Score is documented in [Scoring.md](../Scoring.md).

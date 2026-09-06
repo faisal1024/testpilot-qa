@@ -138,7 +138,7 @@ const EXPLANATIONS: RuleExplanation[] = [
   fromRule(preferSemanticLocator, {
     title: 'Prefer a semantic locator',
     summary:
-      'A raw tag, class, #id or text= selector says nothing about what the element is to a user.',
+      'A raw tag, class or #id selector says nothing about what the element is to a user; a text= string says only what it reads.',
     whyItMatters:
       'Playwright recommends locating elements the way users and assistive technology perceive them — by role, label, placeholder, or text. Those locators survive refactors and double as lightweight accessibility checks. A selector built from structure alone breaks whenever the markup moves, for reasons unrelated to the feature under test. Tier 1 is static, so this rule cannot name the replacement — it is a nudge to look, which is why it ships at `info` and not `warn`.',
     badExample: `await page.locator('#login-form div.actions > button').click()`,

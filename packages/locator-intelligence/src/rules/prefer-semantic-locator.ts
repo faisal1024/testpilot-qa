@@ -70,6 +70,11 @@ export const preferSemanticLocator: Rule = {
     // selector is a scope and the content match is the handle. All four keys,
     // named rather than "any options at all", so this stays in step with
     // CONTENT_PSEUDOS instead of drifting from it.
+    // An options bag we could not read may carry any of the four keys — the
+    // same third state `prefer-get-by-test-id` honours.
+    if (context.ownOptions === 'unknown') {
+      return null
+    }
     const composition = context.options
     if (
       composition?.has === true ||
@@ -91,7 +96,8 @@ export const preferSemanticLocator: Rule = {
     // hand off on the mere *presence* of a test-id attribute and a selector it
     // abstains on — `[data-testid=a], input[type=text]` — is reported by
     // neither. Exactly what it takes, and nothing more.
-    if (testIdReplacement(context.parsed, testIdAttributesFrom(options)) !== null) {
+    const testIds = testIdAttributesFrom(options)
+    if (testIdReplacement(context.parsed, testIds) !== null) {
       return null
     }
     // Top level, like the handoff: an ARIA attribute inside `:not()` describes
@@ -111,11 +117,17 @@ export const preferSemanticLocator: Rule = {
     if (context.parsed.parts.some((part) => part.engine === 'role' || part.engine === 'test-id')) {
       return null
     }
+    // A selector that already carries a test id gets a different sentence:
+    // telling `[data-viewer-content] [data-testid="ocr-box"]` to "add a
+    // data-testid" is advice it has already taken. Ten corpus call sites land
+    // here — nine of them the ones Phase 11b moved to this rule.
+    const hasTestId = attributes.some((attribute) => testIds.includes(attribute.name))
     return {
       message:
         'This locator() selector has no semantic handle — no role, label, or ARIA attribute.',
-      suggestion:
-        'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText(); add a data-testid and use getByTestId() when there is no semantic handle to use.',
+      suggestion: hasTestId
+        ? 'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText() where the element has one; otherwise this test id is the right handle — see prefer-get-by-test-id for expressing it as getByTestId().'
+        : 'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText(); add a data-testid and use getByTestId() when there is no semantic handle to use.',
     }
   },
 }

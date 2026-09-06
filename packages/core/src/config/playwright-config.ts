@@ -143,6 +143,17 @@ function propertyValue(object: Node, name: string): Node | null {
   return null
 }
 
+/** True when any key is computed, so we cannot know which key it is. */
+function hasComputedKey(object: Node): boolean {
+  for (const raw of (object.properties as unknown[]) ?? []) {
+    const property = asNode(raw)
+    if (property?.type === 'Property' && property.computed === true) {
+      return true
+    }
+  }
+  return false
+}
+
 /** True when the object mixes in another object, whose keys we cannot see. */
 function hasSpread(object: Node): boolean {
   return ((object.properties as unknown[]) ?? []).some(
@@ -430,6 +441,10 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     let own: string | 'unresolved' | null = spread ? 'unresolved' : null
     if (use?.type === 'ObjectExpression') {
       if (hasSpread(use)) own = 'unresolved'
+      // A computed key can *be* `testIdAttribute`. `readOwnOptions` in the
+      // extractor already treats one as unknown; matching that here keeps one
+      // convention across the PR instead of two.
+      if (hasComputedKey(use)) own = 'unresolved'
       const attribute = propertyValue(use, 'testIdAttribute')
       if (attribute) own = staticString(attribute) ?? 'unresolved'
     } else if (use) {
@@ -577,6 +592,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const attributeCandidates = new Set<string | 'unresolved' | null>(
     effective.length > 0 ? effective : [configTestIdAttribute],
   )
+  // A region we could not read can carry `use` whole — `defineConfig(base, {…})`
+  // with an imported base, a second `defineConfig()` argument, a layer that
+  // would not parse. `mayDeclareTags` already widens on exactly these markers;
+  // not consulting them here let the report assert Playwright's default in the
+  // same run that says "it uses a config layer that could not be read".
+  if (unresolved.some((key) => PROSE_MARKERS.has(key))) {
+    attributeCandidates.add('unresolved')
+  }
   const testIdAttribute: string | null | 'unresolved' =
     attributeCandidates.size === 1
       ? ([...attributeCandidates][0] as string | null | 'unresolved')

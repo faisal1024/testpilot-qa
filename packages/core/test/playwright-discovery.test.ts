@@ -374,6 +374,26 @@ describe('use.testIdAttribute — what getByTestId() will actually query', () =>
     ).toBe('data-qa')
   })
 
+  it('is unresolved when a layer that could not be read might carry it', () => {
+    // `mayDeclareTags` already widens on these markers; not consulting them
+    // here let the report assert Playwright's default in the same run that
+    // says "it uses a config layer that could not be read".
+    expect(
+      attributeOf(
+        "import base from './base'\nexport default defineConfig(base, { testDir: './e2e' })\n",
+      ),
+    ).toBe('unresolved')
+    expect(attributeOf("export default defineConfig({ testDir: './e2e' }, extra)\n")).toBe(
+      'unresolved',
+    )
+  })
+
+  it('is unresolved when a computed key could be testIdAttribute', () => {
+    expect(attributeOf("export default { testDir: './e2e', use: { [KEY]: 'data-qa' } }\n")).toBe(
+      'unresolved',
+    )
+  })
+
   it('is unresolved when it is set but cannot be read', () => {
     expect(
       attributeOf("export default { testDir: './e2e', use: { testIdAttribute: NAME } }\n"),
