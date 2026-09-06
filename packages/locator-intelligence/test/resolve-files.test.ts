@@ -177,6 +177,47 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
       expect([...found.helpers].map((f) => relative(dir, f))).toEqual(['helpers/po.ts'])
     })
 
+    it('admits page objects that never import @playwright/test', async () => {
+      // The gate must be "contains something the extractor extracts", on any receiver.
+      // Requiring the handle to be called `page` rejected every one of these — real
+      // page-object shapes — while admitting a Vitest fixture.
+      write('e2e/a.spec.ts')
+      const shapes = {
+        'helpers/underscore.js':
+          'export class P { constructor(p){ this._page = p } open(){ return this._page.locator(".nav > li.home") } }\n',
+        'helpers/component.js':
+          'export class C { constructor(r){ this.root = r } row(i){ return this.root.locator("tr").nth(i) } }\n',
+        'helpers/admin.js': 'export const admin = (adminPage) => adminPage.locator("div.admin")\n',
+        'helpers/vitest-fixture.ts':
+          "import { expect } from 'vitest'\nexport const seed = () => expect(1).toBe(1)\n",
+      }
+      for (const [path, body] of Object.entries(shapes)) {
+        const full = write(path)
+        writeFileSync(full, body)
+      }
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/helpers/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f)).sort()).toEqual([
+        join('helpers', 'admin.js'),
+        join('helpers', 'component.js'),
+        join('helpers', 'underscore.js'),
+      ])
+      // Assertion libraries are not Playwright: admitting one inflates the score's
+      // denominator with files that can never produce a finding.
+      expect(found.helperCandidatesRejected).toBe(1)
+    })
+
     it('never scans helpers when the suite itself was not found', async () => {
       // Otherwise a wrong testDir stops being a hard failure and starts scoring the
       // helper layer alone — turning a red gate green.

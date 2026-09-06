@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, realpathSync } from 'node:fs'
+import { resolve, sep } from 'node:path'
 import {
   type DiscoveryScope,
   type RegexPattern,
@@ -15,9 +15,28 @@ const toPosix = (path: string): string => path.split('\\').join('/')
  * Evidence that a file is part of the Playwright suite rather than application code
  * that happens to sit in a directory with a suggestive name. Read once, cheaply, and
  * only for helper candidates.
+ *
+ * The bar is exactly "contains something the extractor would extract". Anything looser
+ * admits files that cannot produce a finding but still inflate the score's denominator
+ * (an earlier version accepted `expect(`, which is Jest's and Vitest's too). Anything
+ * tied to a receiver name is worse: page objects hold the handle as `this._page`,
+ * `this.root`, `scope` or `adminPage` at least as often as `page`, and the extractor
+ * matches by method name on any receiver — so a gate that insisted on `page.` rejected
+ * real page objects while admitting non-Playwright code.
  */
 const PLAYWRIGHT_SIGNAL =
-  /from\s+['"]@playwright\/test['"]|require\(['"]@playwright\/test['"]\)|\bLocator\b|\bpage\s*\.\s*(locator|getBy\w+|waitFor\w+)|\bexpect\s*\(/
+  /from\s+['"]@playwright\/test['"]|require\(['"]@playwright\/test['"]\)|\bLocator\b|\.\s*(locator|frameLocator|getBy(Role|Text|Label|Placeholder|AltText|Title|TestId))\s*\(/
+
+/** Keeps a symlinked helper directory from taking analysis (and `fix --write`) outside. */
+function withinRoot(file: string, root: string): boolean {
+  try {
+    const real = realpathSync(file)
+    const base = realpathSync(root)
+    return real === base || real.startsWith(`${base}${sep}`)
+  } catch {
+    return false
+  }
+}
 
 function usesPlaywright(file: string): boolean {
   try {
@@ -127,6 +146,12 @@ export interface ResolvedFiles {
   files: string[]
   /** Absolute paths within `files` that came from `helperGlobs`. */
   helpers: Set<string>
+  /**
+   * Files that matched `helperGlobs` but were not admitted — they carry no sign of
+   * using Playwright. Reported, because a helper layer matched and then silently
+   * discarded is indistinguishable from one that does not exist.
+   */
+  helperCandidatesRejected: number
 }
 
 export async function resolveTestFiles(options: ResolveFilesOptions): Promise<string[]> {
@@ -155,7 +180,11 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       ...(await run(cwd, literal, [])),
       ...(await run(cwd, expanded, config.exclude)),
     ]
-    return { files: [...new Set(matched)].sort(), helpers: new Set() }
+    return {
+      files: [...new Set(matched)].sort(),
+      helpers: new Set(),
+      helperCandidatesRejected: 0,
+    }
   }
 
   const scopes: FileScope[] = options.scopes?.length
@@ -216,6 +245,7 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
   // a hard failure and start scoring the helper layer alone — turning the red gate #71
   // exists for back into a green one.
   const helpers = new Set<string>()
+  let helperCandidatesRejected = 0
   const helperScope = scopes.find((scope) => scope.helperGlobs.length > 0)
   if (helperScope && testFiles.size > 0) {
     const isHelper = picomatch(helperScope.helperGlobs, { dot: true })
@@ -229,11 +259,16 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       // Membership as a test always wins: a spec that happens to live under
       // `fixtures/` is still a test, and demoting its findings would hide them.
       if (testFiles.has(file) || !isHelper(toPosix(file))) continue
+      // A symlink can point anywhere; `fix --write` follows it. The helper scan
+      // widened the root from `testDir` to the whole project, so this is the one
+      // remaining route out of the checkout.
+      if (!withinRoot(file, helperScope.helperRoot)) continue
       // Directory names alone are not evidence: `pages/` is Next.js's routes and
       // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
       if (usesPlaywright(file)) helpers.add(file)
+      else helperCandidatesRejected += 1
     }
   }
 
-  return { files: [...testFiles, ...helpers].sort(), helpers }
+  return { files: [...testFiles, ...helpers].sort(), helpers, helperCandidatesRejected }
 }

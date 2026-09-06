@@ -162,9 +162,16 @@ function measure(repo, dir) {
     fromRoot = probe && contained(probe.rootDir, dir) ? (probe.summary?.filesAnalyzed ?? 0) : null
   }
 
+  // The helper layer is where most suites keep their locators, and the gate that
+  // admits a file is content-based — exactly the kind of change unit tests cannot see.
+  const helpers = analyze(cwd, ['--with-helpers']).report?.summary ?? null
+
   return {
     name: repo.name,
     exitCode,
+    withHelpers: helpers
+      ? { filesAnalyzed: helpers.filesAnalyzed, helperFiles: helpers.helperFiles ?? 0 }
+      : null,
     filesAnalyzed: report.summary?.filesAnalyzed ?? 0,
     parseErrors: report.summary?.filesWithParseErrors ?? 0,
     findings: report.summary?.findings ?? 0,

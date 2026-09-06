@@ -149,6 +149,8 @@ function isHttpUrl(url: string): boolean {
 }
 
 function findingRow(finding: Finding): string {
+  // The helper section above claims these are marked; mark them.
+  const scope = finding.inHelper ? '<span class="badge-helper">helper</span> ' : ''
   const sev = finding.severity
   const rule = isHttpUrl(finding.docsUrl)
     ? `<a href="${esc(finding.docsUrl)}" rel="noreferrer noopener">${esc(finding.ruleId)}</a>`
@@ -158,7 +160,7 @@ function findingRow(finding: Finding): string {
     : ''
   return [
     '<div class="finding">',
-    `<div class="finding-head"><span class="badge sev-${esc(sev)}">${esc(sev)}</span>`,
+    `<div class="finding-head"><span class="badge sev-${esc(sev)}">${esc(sev)}</span>${scope}`,
     `<span class="rule">${rule}</span>`,
     `<span class="loc">${esc(finding.file)}:${finding.line}:${finding.column}</span></div>`,
     `<p class="message">${esc(finding.message)}</p>`,
@@ -219,6 +221,7 @@ border:1px solid var(--line);border-radius:12px;padding:20px}
 .message{margin:8px 0}.snippet{background:#0b0d11;border:1px solid var(--line);border-radius:8px;
 padding:10px 12px;overflow:auto;margin:8px 0 0}.snippet code{color:#e6edf3}
 .suggestion{color:var(--muted);margin:8px 0 0}.suggestion::before{content:"→ "}
+.badge-helper{background:#e5e7eb;color:#374151;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:6px}
 .clean{color:var(--a)}.warnings li,.parse-errors li{margin:4px 0}
 footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
 `.trim()

@@ -91,7 +91,7 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const { files, helpers } = await resolveFiles({
+  const { files, helpers, helperCandidatesRejected } = await resolveFiles({
     cwd: options.cwd,
     patterns: options.patterns,
     config: options.config,
@@ -106,6 +106,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
+  if (helpers.size === 0 && helperCandidatesRejected > 0) {
+    warnings.push({
+      code: 'helpers-not-recognized',
+      message: `${helperCandidatesRejected} file(s) matched the helper patterns but show no sign of using Playwright, so none were analyzed. Name your page-object locations in \`includeHelpers\` if this is wrong.`,
+    })
+  }
   if (options.discovery?.playwrightConfigPartial) {
     const { path, reason } = options.discovery.playwrightConfigPartial
     warnings.push({

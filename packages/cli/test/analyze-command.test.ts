@@ -331,6 +331,18 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(stdout).toContain('page object/helper file(s)')
   })
 
+  it('says so when helper directories matched but nothing in them uses Playwright', async () => {
+    // Silence here is indistinguishable from "you have no page objects", which is how
+    // a gate that rejected every real page-object shape went unnoticed.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(join(dir, 'helpers', 'date.js'), 'export const f = (d) => d.toISOString()\n')
+    const { stdout } = await runAnalyze(['--with-helpers', '--json'])
+    const report = JSON.parse(stdout)
+    expect(report.warnings.map((w: { code: string }) => w.code)).toContain('helpers-not-recognized')
+  })
+
   it('says --with-helpers is ignored rather than silently ignoring it', async () => {
     const { stderr } = await runAnalyze(['--with-helpers', 'tests/**/*.spec.ts'])
     expect(stderr).toContain('--with-helpers is ignored')

@@ -25,9 +25,12 @@ quality.
 - **Off by default.** A score that quietly included files Playwright never runs would not be
   comparable to one that didn't.
 - **A directory name is only a hint.** `pages/` is Next.js's and Nuxt's route directory, `helpers/` is
-  Ember's — so a candidate must also *use* Playwright before it is analyzed. Without that gate,
-  `fix --write` would rewrite application source; on cal.com it would have reached seven Next.js route
-  files.
+  Ember's — so a candidate must also contain something the analyzer would extract before it is
+  analyzed. Without that gate, `fix --write` would rewrite application source; on cal.com it would have
+  reached seven Next.js route files. The gate is deliberately not keyed on a receiver named `page`
+  (page objects use `this._page`, `this.root`, `adminPage`) and deliberately excludes `expect(`, which
+  is Jest's and Vitest's too. When helper directories match but nothing in them uses Playwright, the
+  run says so rather than reporting an empty helper layer as an absent one.
 - **Helpers never rescue a failed run.** If the test scan matched nothing, the run still fails, rather
   than scoring the helper layer alone and turning a wrong `testDir` into a green gate.
 - Findings are marked `[helper]` in the table and HTML, and carry a SARIF `properties.inHelper`, so a

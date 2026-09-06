@@ -102,6 +102,8 @@ describe('fix --with-helpers', () => {
     // `--with-helpers` is a command option, so it follows `fix`.
     const on = JSON.parse((await runFix(['--with-helpers'], ['--json'])).stdout)
     expect(on.files.map((file: { file: string }) => file.file)).toEqual(['e2e/helpers/po.ts'])
+    // The write path must say which files Playwright does not run, not just analyze.
+    expect(on.files[0].inHelper).toBe(true)
   })
 })
 

@@ -46,6 +46,7 @@ export interface AnalysisWarning {
     | 'playwright-config-partial'
     | 'playwright-config-ignored'
     | 'test-root-missing'
+    | 'helpers-not-recognized'
   message: string
   ruleId?: string
 }

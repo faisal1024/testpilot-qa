@@ -458,8 +458,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
       "column": 14,
       "snippet": "page.locator('.btn-primary')",
       "suggestion": "Prefer getByRole() or getByTestId() over class-based selectors.",
-      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md",
-      "inHelper": false
+      "docsUrl": "https://github.com/faisal1024/testpilot-qa/blob/main/docs/rules/no-css-class-selector.md"
     }
   ],
   "warnings": [
@@ -476,7 +475,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 (`playwrightConfigPath`) or the one that was found and could not be used
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
-can represent, so every message that names a test directory renders these. `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
+can represent, so every message that names a test directory renders these. `inHelper` (1.7) is present only on findings from the helper layer — absent, not `false`, otherwise.
+`rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
@@ -544,7 +544,9 @@ Playwright's `testMatch` selects the files it *runs*. Real suites keep most of t
 somewhere else — Ghost's page objects hold 114 of its 116 findings — so `analyze`/`fix` accept
 `--with-helpers`, or a `includeHelpers` list in `testpilot.config.ts` (naming them is itself the
 opt-in). Defaults when the flag is used: `pages`, `page-objects`, `pageobjects`, `pom`, `fixtures`,
-`helpers`, `support`.
+`helpers`, `support`. `lib/` and `utils/` are deliberately absent — broad enough that scanning them
+costs more than it returns; a suite that keeps page objects there (mattermost uses `lib/src/ui/`)
+should name its own `includeHelpers` list.
 
 These files are scanned from the **config's directory**, not from `testDir` — helpers sit beside the
 test root far more often than inside it. Findings carry `inHelper: true`, are counted in
@@ -555,9 +557,15 @@ does" — a page object centralizing a selector is doing its job — so the two 
 Safeguards, because this is the one path that reads files Playwright does not:
 
 - A directory name is only a hint. `pages/` is Next.js's and Nuxt's route directory and `helpers/` is
-  Ember's, so a candidate must **also use Playwright** (import `@playwright/test`, or reference
-  `page.locator`/`getBy*`/`Locator`) before it is analyzed. Without that gate, `fix --write` would
-  rewrite application source.
+  Ember's, so a candidate must **also contain something the analyzer would extract** — an
+  `@playwright/test` import, a `Locator` reference, or a `.locator(`/`.frameLocator(`/`.getByRole(`-style
+  call on *any* receiver. Page objects hold the handle as `this._page`, `this.root` or `adminPage` at
+  least as often as `page`, so the gate cannot key on a receiver name; and it deliberately excludes
+  `expect(`, which is Jest's and Vitest's too and can never produce a finding. Without this gate,
+  `fix --write` would rewrite application source.
+- When helper directories match but nothing in them uses Playwright, the run says so
+  (`helpers-not-recognized`) rather than reporting an empty helper layer as an absent one.
+- Symlinked helper directories cannot take analysis — or `fix --write` — outside the project.
 - **Helpers never rescue a failed run.** If the test scan matched nothing, the run still fails —
   scoring the helper layer alone would turn a wrong `testDir` from a red gate into a green one.
 - A file the suite already selected as a test stays a test, even when it sits under `helpers/`.

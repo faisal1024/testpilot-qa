@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  DEFAULT_HELPER_PATTERNS,
   type LoadConfigResult,
   loadConfig,
   readPlaywrightTestSettings,
@@ -533,6 +534,20 @@ describe('resolveDiscovery', () => {
     expect(on.scopes[0]?.helperGlobs).toContain('**/page-objects/**')
     expect(on.scopes[0]?.helperRoot).toBe(dir)
     expect(on.scopes[0]?.root).toBe(join(dir, 'e2e/tests'))
+  })
+
+  it('pins the default helper patterns, so removing one is a deliberate act', () => {
+    // `pages/` was removed once for safety and restored once the content gate made
+    // directory names non-load-bearing; both moves were invisible to the suite.
+    expect(DEFAULT_HELPER_PATTERNS).toEqual([
+      '**/pages/**',
+      '**/page-objects/**',
+      '**/pageobjects/**',
+      '**/pom/**',
+      '**/fixtures/**',
+      '**/helpers/**',
+      '**/support/**',
+    ])
   })
 
   it("uses the project's own helper patterns when it names them", async () => {
