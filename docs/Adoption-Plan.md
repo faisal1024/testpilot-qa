@@ -6,10 +6,12 @@
 > calibration docs), and 8A (safe mechanical fix preview: `testpilot fix`).
 > **✅ The public alpha shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag
 > (CI-published with provenance, 2026-09-05).
-> **Next active focus: post-alpha hardening** — the deferred runtime/toolchain dependency majors
-> (`@biomejs/biome` 2.x, `zod` 4.x, `commander` 15, `typescript` 6/7, a Node 22 + pnpm 10+ toolchain
-> bump, then `@changesets/cli` 3.x and `changesets/action` v2), each in its own PR with a full local gate. No new feature milestone is in
-> progress.
+> **Next active focus: [`docs/Post-Alpha-Plan.md`](Post-Alpha-Plan.md)** — signal quality, measured
+> against a five-repo corpus of real OSS Playwright suites. An empirical run of the published alpha
+> found `analyze` silently reporting `100 (A)` on two of five repos it never opened, and that the
+> most-fired rule is roughly half false positives. That plan (Phases 9–15) supersedes the framing
+> below, which defined post-alpha work as dependency majors — those are now background work, one PR
+> at a time, never ahead of user-visible fixes.
 > Purpose: sequence the next work so TestPilot becomes useful in real Playwright projects before
 > investing in higher-risk AI, DOM-aware, or auto-fix features.
 >
@@ -270,7 +272,9 @@ After Milestone 5B:
 7. **8A — Safe fix preview (merged):** `testpilot fix` — dry-run mechanical locator rewrites.
 8. **Public alpha (shipped):** published `testpilot-qa@0.1.0-alpha.0` on 2026-09-05 — CI release with
    provenance, `alpha` dist-tag, git tag + GitHub pre-release.
-9. **Post-alpha hardening (active):** deferred dependency majors, each in its own PR with a full gate.
+9. **Post-alpha (active): [`docs/Post-Alpha-Plan.md`](Post-Alpha-Plan.md)** — Phase 9 trust the gate,
+   10 run tests by tag, 11 signal precision, 12 a score you can gate on, 13 `fix` that earns its
+   place, 14 front door, 15 DOM-aware validation. Dependency majors continue as background work.
 
 This sequence should produce a tool people can try publicly, then a tool teams can adopt in CI.
 
