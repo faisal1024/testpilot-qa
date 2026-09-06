@@ -74,9 +74,15 @@ export const preferGetByTestId: Rule = {
       }
     }
     if (replacement.kind === 'scope') {
+      // `ul[data-testid=x] > li a`: scoping with getByTestId() alone drops the
+      // `ul`, which is a widening, not the behaviour-preserving rewrite the
+      // simple case gets.
+      const widening = replacement.scopeHasOtherConditions
+        ? ' Note the ancestor carries conditions beyond the test id, which getByTestId() does not express.'
+        : ''
       return {
         message: `The test id [${attribute}] is on an ancestor of the element this selector targets.`,
-        suggestion: `Scope with ${named} and keep the rest of the selector on a chained locator().${inexact}`,
+        suggestion: `Scope with ${named} and keep the rest of the selector — combinator included — on a chained locator().${widening}${inexact}`,
       }
     }
     // same-element: the remaining conditions are on the target itself, so they

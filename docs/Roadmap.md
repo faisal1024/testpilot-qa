@@ -70,7 +70,7 @@ The credible core: scaffold a great project, detect the worst locators reliably,
 
 ### Phase 3 — Locator Intelligence Tier 1  *(Milestones 3A–3C — delivered)*
 - AST-based locator extraction; `LocatorContext` model; rules engine. *(3A)*
-- **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`. *(3B)*
+- **Six static rules:** `no-xpath`, `no-nth-child`, `no-css-class-selector`, `no-deep-css-chain`, `prefer-user-facing-locator`, `no-hard-wait`. *(3B)* — a record of what 3B shipped; the set is nine as of Phase 11, and `prefer-user-facing-locator` no longer exists (see [the rule index](rules/README.md)).
 - `table` + `json` output; unknown-rule warnings; parse-error reporting. *(3B)*
 - **Locator Quality Score** + sub-scores (Resilience, Accessibility, Maintainability, Flakiness), letter grades, and **`--min-score` CI gating**. *(3C)*
 - **Constraint:** no fake concrete suggestions — category-level guidance only ("prefer `getByRole`/`getByLabel`/`getByTestId` where possible"), never `getByRole('button', { name: 'Save' })` without DOM context.

@@ -479,9 +479,10 @@ Written down because a tool that hides these is worse than one that doesn't have
 - **Your score will change substantially when you upgrade to the next alpha.** Three re-gradings
   stack: `.nth()` `error`→`warn`, `locator('..')` `error`→`info`, and the general "prefer
   user-facing locators" nudge `warn`→`info` (as `prefer-semantic-locator`). Measured end-to-end on
-  five real suites, alpha.0 → next alpha: **cal.com 69→82, immich 89→96, Ghost 98→99,
-  documenso 89→94, mattermost 66→76** — up to **+13 points**, on suites whose locators did not
-  change. **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
+  five real suites, from the **earliest recorded corpus baseline** to now: **cal.com 68→82,
+  immich 89→96, Ghost 98→99, documenso 89→94, mattermost 66→76** — up to **+14 points**, on suites
+  whose locators did not change. (That is the honest reference point: the benchmark did not exist
+  when `0.1.0-alpha.0` was tagged, so there is no measurement at that tag to compare against.) **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
   much looser than you meant. In the other direction, `no-nth-child` now also covers
   `:nth-last-child()`, so a suite using it gains one new `error` finding.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.

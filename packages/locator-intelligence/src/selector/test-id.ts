@@ -21,6 +21,13 @@ export interface TestIdReplacement {
   attribute: string
   /** The value, only when `getByTestId(value)` is the identical match. */
   exactValue?: string
+  /**
+   * `scope` only: the ancestor carries more than the test id (a tag, a class,
+   * a pseudo). `getByTestId(value)` does not express those, so the rewrite is
+   * a widening and the message has to say so — `ul[data-testid=x] > li a`
+   * appears four times in the corpus.
+   */
+  scopeHasOtherConditions?: boolean
 }
 
 /** `>` and a descendant space are the only combinators that make a scope. */
@@ -51,7 +58,10 @@ const SCOPING_COMBINATORS = new Set(['descendant', 'child'])
  *   has no form for;
  * - any relevant part is a selector **list**, which has more than one target or
  *   more than one scope;
- * - the test id reaches the target through anything but descendant/child steps.
+ * - the test id reaches the target through anything but descendant/child steps;
+ * - a `>>` part **precedes** the one holding the test id. Every earlier part is
+ *   an ancestor scope, so `'#login-modal >> [data-testid=save]'` is not
+ *   `getByTestId('save')` — that searches the whole document.
  */
 export function testIdReplacement(
   parsed: ParsedSelector,
@@ -77,6 +87,10 @@ export function testIdReplacement(
   // `same-element` answer can come from.
   const found = findIn(arm.compounds, names)
   if (found) {
+    // An earlier `>>` part is an ancestor this rule would silently drop.
+    if (parsed.parts.length > 1) {
+      return null
+    }
     if (found.index === arm.compounds.length - 1) {
       return {
         kind: isOnlyHandle(target) ? 'direct' : 'same-element',
@@ -89,24 +103,34 @@ export function testIdReplacement(
     if (!steps.every((step) => SCOPING_COMBINATORS.has(step))) {
       return null
     }
-    return { kind: 'scope', attribute: found.match.name, exactValue: exactValueOf(found.match) }
+    return {
+      kind: 'scope',
+      attribute: found.match.name,
+      exactValue: exactValueOf(found.match),
+      scopeHasOtherConditions: !isOnlyHandle(arm.compounds[found.index] as CompoundSelector),
+    }
   }
 
   // Otherwise an earlier `>>` part, which chains as a scope. The match has to
   // be on that part's own target — `[data-testid=a] + div >> button` scopes
   // from the div, and the test id is that div's sibling.
-  for (const part of parsed.parts.slice(0, -1)) {
-    if (part.engine !== 'css') {
-      continue
-    }
-    const earlier = singleArm(part)
+  // Only the *first* part: anything before the one holding the test id is a
+  // further ancestor that `getByTestId()` would drop.
+  const first = parsed.parts[0]
+  if (parsed.parts.length > 1 && first?.engine === 'css') {
+    const earlier = singleArm(first)
     if (!earlier) {
       return null
     }
     const tail = earlier.compounds.at(-1)
     const match = tail && matchIn(tail, names)
-    if (match) {
-      return { kind: 'scope', attribute: match.name, exactValue: exactValueOf(match) }
+    if (match && earlier.compounds.length === 1) {
+      return {
+        kind: 'scope',
+        attribute: match.name,
+        exactValue: exactValueOf(match),
+        scopeHasOtherConditions: !isOnlyHandle(tail),
+      }
     }
   }
   return null

@@ -131,6 +131,27 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-testid="row"] + div button'))).toBeNull()
   })
 
+  it('says nothing when a >> part precedes the test id', () => {
+    // Every earlier part is an ancestor scope. `getByTestId('save')` searches
+    // the whole document, so naming it drops `#login-modal` silently. This is
+    // the sibling/list defect in a third shape, found by a fourth review.
+    expect(preferGetByTestId.evaluate(css('#login-modal >> [data-testid="save"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('#main >> button[data-testid="save"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('#a >> [data-testid="b"] >> button'))).toBeNull()
+  })
+
+  it('says the ancestor carries more than the test id, when it does', () => {
+    // `getByTestId('event-types')` alone drops the `ul` — a widening, not the
+    // behaviour-preserving rewrite the simple case gets. 4 corpus findings.
+    const plain = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
+    expect(plain?.suggestion).not.toContain('beyond the test id')
+    const tagged = preferGetByTestId.evaluate(css('ul[data-testid="list"] > li a'))
+    expect(tagged?.suggestion).toContain('beyond the test id')
+    expect(preferGetByTestId.evaluate(css('[data-testid="c"].active a'))?.suggestion).toContain(
+      'beyond the test id',
+    )
+  })
+
   it('says nothing when an earlier part is a list, not only the final one', () => {
     expect(
       preferGetByTestId.evaluate(css('[data-testid="a"], [data-testid="b"] >> button')),
