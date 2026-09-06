@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { generateAgentFiles } from '@testpilot/ai'
+import { GUIDANCE_VERSION, generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type DoctorReport, runDoctor } from '../src/index.js'
 
@@ -51,6 +51,15 @@ describe('runDoctor', () => {
     mkdirSync(join(dir, 'packages', 'web'), { recursive: true })
     writeFileSync(join(dir, 'packages', 'web', 'package.json'), '{"name":"web"}\n')
     const report = await runDoctor({ cwd: join(dir, 'packages', 'web'), nodeVersion: NODE_OK })
+    expect(checkById(report, 'test-directory')?.status).toBe('pass')
+  })
+
+  it('anchors testDir at the project root when there is no config file', async () => {
+    // Same fallback the CLI uses for `analyze`, so doctor predicts what analyze will do.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'tests'))
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const report = await runDoctor({ cwd: join(dir, 'src', 'deep'), nodeVersion: NODE_OK })
     expect(checkById(report, 'test-directory')?.status).toBe('pass')
   })
 
@@ -167,7 +176,10 @@ describe('runDoctor', () => {
 
     it('warns when a marker version is stale', async () => {
       writeHealthyProject()
-      writeFileSync(claudePath(), readFileSync(claudePath(), 'utf8').replace(' v1 ', ' v0 '))
+      writeFileSync(
+        claudePath(),
+        readFileSync(claudePath(), 'utf8').replace(` v${GUIDANCE_VERSION} `, ' v0 '),
+      )
       const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
       expect(aiCheck(report)?.status).toBe('warn')
       expect(aiCheck(report)?.message).toContain('stale')

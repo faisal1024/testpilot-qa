@@ -330,10 +330,9 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   }
 
   const playwrightConfigPath = findPlaywrightConfig(projectRoot, config.playwrightConfig)
-  // Resolve testDir the same way `analyze` does — against the config file's
-  // directory — so `doctor` and `analyze` never disagree about where the suite is.
-  // Without a config file, fall back to the discovered project root (not the
-  // invocation cwd) so running from a subdirectory doesn't falsely report it missing.
+  // Resolve testDir exactly as `analyze`/`fix` do (see resolveRootDir in the CLI):
+  // the config file's directory, else the project root. `doctor` must predict what
+  // `analyze` will do, so these two fallbacks have to stay in step.
   const testDirExists = isDirectory(join(configDir ?? projectRoot, config.testDir))
 
   const checks: DoctorCheck[] = [

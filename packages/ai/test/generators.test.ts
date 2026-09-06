@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_FILE_PATHS, SUPPORTED_AGENTS, generateAgentFiles } from '../src/generators.js'
-import { isGuidancePristine, parseGuidanceMarker } from '../src/marker.js'
+import { GUIDANCE_VERSION, isGuidancePristine, parseGuidanceMarker } from '../src/marker.js'
 
 describe('generateAgentFiles', () => {
   it('emits one file per supported agent, at the expected paths, in canonical order', () => {
@@ -19,7 +19,7 @@ describe('generateAgentFiles', () => {
     for (const file of files) {
       const marker = parseGuidanceMarker(file.content)
       expect(marker, file.path).not.toBeNull()
-      expect(marker?.version).toBe(1)
+      expect(marker?.version).toBe(GUIDANCE_VERSION)
       expect(isGuidancePristine(file.content), file.path).toBe(true)
       hashes.add(marker?.hash ?? '')
     }

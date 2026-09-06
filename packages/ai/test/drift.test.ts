@@ -7,6 +7,7 @@ import {
   selectedAgents,
 } from '../src/drift.js'
 import { generateAgentFiles } from '../src/generators.js'
+import { GUIDANCE_VERSION } from '../src/marker.js'
 
 const claudeContent = generateAgentFiles(['claude'])[0]?.content ?? ''
 
@@ -15,8 +16,8 @@ describe('classifyGuidanceFile', () => {
     const status = classifyGuidanceFile('claude', claudeContent)
     expect(status.state).toBe('current')
     expect(status.path).toBe('CLAUDE.md')
-    expect(status.markerVersion).toBe(1)
-    expect(status.expectedVersion).toBe(1)
+    expect(status.markerVersion).toBe(GUIDANCE_VERSION)
+    expect(status.expectedVersion).toBe(GUIDANCE_VERSION)
   })
 
   it('reports a missing file', () => {
@@ -33,11 +34,11 @@ describe('classifyGuidanceFile', () => {
   it('reports an edited file', () => {
     const status = classifyGuidanceFile('claude', `${claudeContent}\nhand edit\n`)
     expect(status.state).toBe('edited')
-    expect(status.markerVersion).toBe(1)
+    expect(status.markerVersion).toBe(GUIDANCE_VERSION)
   })
 
   it('reports a stale marker version', () => {
-    const stale = claudeContent.replace(' v1 ', ' v0 ')
+    const stale = claudeContent.replace(` v${GUIDANCE_VERSION} `, ' v0 ')
     const status = classifyGuidanceFile('claude', stale)
     expect(status.state).toBe('stale')
     expect(status.markerVersion).toBe(0)

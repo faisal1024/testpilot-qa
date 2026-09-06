@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildProgram } from '../src/program.js'
 
@@ -133,6 +133,22 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.findings.map((f: { ruleId: string }) => f.ruleId)).toContain('no-hard-wait')
   })
 
+  it('analyzes an explicitly named file inside an excluded directory', async () => {
+    mkdirSync(join(dir, 'dist', 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'dist', 'e2e', 'a.spec.js'), "page.locator('//button')\n")
+    const { stdout, exitCode } = await runAnalyze(['--json', 'dist/e2e/a.spec.js'])
+    expect(exitCode).toBeUndefined()
+    expect(JSON.parse(stdout).summary.filesAnalyzed).toBe(1)
+  })
+
+  it('anchors at the project root when there is no config file (matching doctor)', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
+    const { stdout, exitCode } = await runAnalyze(['--json', '--cwd', join(dir, 'src', 'deep')])
+    expect(exitCode).toBeUndefined()
+    expect(JSON.parse(stdout).summary.filesAnalyzed).toBe(1)
+  })
+
   it('finds the suite via the config file directory when run from a sub-directory', async () => {
     writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")
     mkdirSync(join(dir, 'src', 'deep'), { recursive: true })
@@ -142,6 +158,17 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings[0].file).toBe('tests/a.spec.ts')
     expect(report.rootDir).toBe(dir)
+  })
+
+  it('reports an absolute rootDir even when --cwd is relative', async () => {
+    const previous = process.cwd()
+    process.chdir(dir)
+    try {
+      const { stdout } = await runAnalyze(['--json', '--cwd', '.'])
+      expect(isAbsolute(JSON.parse(stdout).rootDir)).toBe(true)
+    } finally {
+      process.chdir(previous)
+    }
   })
 
   it('keeps SARIF URIs relative to --cwd (the Action contract) when the config lives elsewhere', async () => {

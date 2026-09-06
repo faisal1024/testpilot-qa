@@ -1,4 +1,4 @@
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { type Finding, buildBaseline, compareToBaseline } from '@testpilot/core'
 import { analyze } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
@@ -11,7 +11,7 @@ import { toHtml } from '../util/html-report.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
-import { resolveConfigOrExit } from '../util/resolve-config.js'
+import { resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
 import { toSarif } from '../util/sarif.js'
 
 type ReporterFormat = 'table' | 'json' | 'sarif' | 'html'
@@ -58,7 +58,7 @@ export async function analyzeCommand(
     cwd: globals.cwd,
     config,
     patterns: patterns.length > 0 ? patterns : undefined,
-    configDir: filepath ? dirname(filepath) : undefined,
+    rootDir: resolveRootDir(globals.cwd, filepath),
   })
   const noFilesMatched = report.summary.filesAnalyzed === 0
   if (globals.verbose && !globals.quiet) {

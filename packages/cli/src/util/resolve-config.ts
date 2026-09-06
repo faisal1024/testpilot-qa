@@ -1,4 +1,5 @@
-import { ConfigError, type LoadConfigResult, loadConfig } from '@testpilot/core'
+import { dirname } from 'node:path'
+import { ConfigError, type LoadConfigResult, findProjectRoot, loadConfig } from '@testpilot/core'
 import { ExitCode } from './exit-codes.js'
 import type { GlobalOptions } from './global-options.js'
 
@@ -23,4 +24,13 @@ export async function resolveConfigOrExit(globals: GlobalOptions): Promise<LoadC
     }
     throw error
   }
+}
+
+/**
+ * Directory that config-driven discovery and reported paths are anchored at: the
+ * loaded config file's directory, else the project root (nearest `package.json`).
+ * `doctor` checks the same base, so it always predicts what `analyze` will do.
+ */
+export function resolveRootDir(cwd: string, filepath: string | null): string {
+  return filepath ? dirname(filepath) : findProjectRoot(cwd)
 }

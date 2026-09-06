@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { relative } from 'node:path'
+import { relative, resolve } from 'node:path'
 import {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
@@ -24,11 +24,11 @@ export interface AnalyzeOptions {
   /** Explicit globs (CLI positional args). Falls back to `config.include`. */
   patterns?: string[]
   /**
-   * Directory of the loaded config file. Config-driven discovery (`testDir` +
-   * `include`) and reported file paths resolve against it, so a monorepo run
-   * from a sub-directory still sees the suite. Defaults to `cwd`.
+   * Directory that config-driven discovery (`testDir` + `include`) and reported
+   * file paths are anchored at — the loaded config file's directory, or the
+   * project root when there is no config file. Defaults to `cwd`.
    */
-  configDir?: string
+  rootDir?: string
 }
 
 interface EnabledRule {
@@ -88,10 +88,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     options.cwd,
     options.patterns,
     options.config,
-    options.configDir,
+    options.rootDir,
   )
   // Paths are reported relative to the same base discovery used (see discoveryBase).
-  const reportBase = discoveryBase(options.cwd, options.patterns, options.configDir)
+  // Always absolute: `rootDir` is part of the report contract and consumers
+  // re-resolve reported paths from it in a process with a different cwd.
+  const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
   const { rules, warnings } = resolveRules(options.config)
   if (files.length === 0) {
     // A run that matched nothing must never look like a clean pass — a
@@ -100,7 +102,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       code: 'no-files-matched',
       message: usingPatterns
         ? `No test files matched ${options.patterns?.join(', ')}.`
-        : `No test files matched include ${JSON.stringify(options.config.include)} under testDir "${options.config.testDir}".`,
+        : `No test files matched include ${JSON.stringify(options.config.include)} (exclude ${JSON.stringify(options.config.exclude)}) under testDir "${options.config.testDir}".`,
     })
   }
 

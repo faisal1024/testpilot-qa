@@ -384,7 +384,9 @@ import { defineConfig } from 'testpilot-qa'
 export default defineConfig({
   testDir: 'tests',
   include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']
-  exclude: ['**/node_modules/**', '**/dist/**'], // default also ignores build/, coverage/, test-results/, playwright-report/
+  // default: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/test-results/**', '**/playwright-report/**']
+  // Setting this REPLACES the defaults — repeat the ones you still want.
+  exclude: ['**/node_modules/**', '**/dist/**'],
   scoring: { minScore: 80, weights: { error: 5, warn: 2, info: 0.5 } },
   rules: {
     // MVP rule set (see Locator-Intelligence-Design §5)
@@ -452,7 +454,10 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 ```
 
 `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
-to: the config file's directory for config-driven discovery, `--cwd` for explicit patterns.
+to: the config file's directory (or the project root when there is no config file) for config-driven
+discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
+findings, score, and baseline identities are not — so snapshot comparisons across machines should
+ignore it.
 `warnings[].code` is `unknown-rule` or `no-files-matched` (1.4). On a **zero-file run** the `--json`
 and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
 no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
@@ -499,10 +504,14 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
 printing what was searched (a **directory** argument that matches nothing is a `3` too — it is
 expanded with the config's `include`). The default `include` is
-`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']` and the default `exclude` skips
-`node_modules`, `dist`, `build`, `coverage`, `test-results`, and `playwright-report`; `testDir` is resolved
-relative to the directory of the loaded `testpilot.config.ts` (falling back to `--cwd` when there is
-no config file), so running from a sub-directory of a monorepo still finds the suite.
+`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']`, and the default `exclude` skips
+`node_modules`, `dist`, `build`, `coverage`, `test-results`, and `playwright-report`. `exclude` applies
+wherever `include` chose the files (config-driven discovery and directory arguments); a glob or path
+you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still works.
+
+`testDir` is resolved relative to the directory of the loaded `testpilot.config.ts` — or, when there is
+no config file, the **project root** (nearest `package.json`), which is the same base `doctor` checks —
+so running from a sub-directory of a monorepo still finds the suite.
 
 ---
 

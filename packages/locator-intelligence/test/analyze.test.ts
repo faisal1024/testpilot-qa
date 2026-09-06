@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { type TestPilotConfig, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { analyze } from '../src/analyze.js'
@@ -93,6 +93,35 @@ describe('analyze — Tier 1 rule set', () => {
     expect(custom.summary.filesAnalyzed).toBe(3)
   })
 
+  it('honors an explicitly named path or glob even inside an excluded directory', async () => {
+    writeFixture('dist/e2e/a.spec.js', "page.locator('//button')\n")
+    // `exclude` keeps discovery out of build output; it must not overrule an explicit ask.
+    const byPath = await analyze({ cwd: dir, config: config(), patterns: ['dist/e2e/a.spec.js'] })
+    expect(byPath.summary.filesAnalyzed).toBe(1)
+    const byGlob = await analyze({ cwd: dir, config: config(), patterns: ['dist/**/*.spec.js'] })
+    expect(byGlob.summary.filesAnalyzed).toBe(1)
+  })
+
+  it('applies exclude to a directory argument (which is expanded with include)', async () => {
+    writeFixture('e2e/a.spec.ts', "page.locator('//button')\n")
+    writeFixture('e2e/dist/a.spec.js', "page.locator('//button')\n")
+    const report = await analyze({ cwd: dir, config: config(), patterns: ['e2e'] })
+    expect(report.summary.filesAnalyzed).toBe(1)
+  })
+
+  it('reports an absolute rootDir even when cwd is relative', async () => {
+    writeFixture('tests/a.spec.ts', "page.locator('//button')\n")
+    const previous = process.cwd()
+    process.chdir(dir)
+    try {
+      const report = await analyze({ cwd: '.', config: config() })
+      expect(isAbsolute(report.rootDir)).toBe(true)
+      expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
+    } finally {
+      process.chdir(previous)
+    }
+  })
+
   it('warns (no-files-matched) instead of scoring 100/A when nothing matches', async () => {
     writeFixture('tests/only.spec.rb', 'not a playwright test')
     const report = await analyze({ cwd: dir, config: config() })
@@ -107,14 +136,14 @@ describe('analyze — Tier 1 rule set', () => {
     ])
   })
 
-  it('resolves testDir against configDir and reports paths relative to it', async () => {
+  it('resolves testDir against rootDir and reports paths relative to it', async () => {
     // Monorepo layout: config lives in packages/web, the command runs from packages/web/src.
     writeFixture('packages/web/tests/a.spec.ts', "page.locator('//button')\n")
     mkdirSync(join(dir, 'packages/web/src'), { recursive: true })
     const report = await analyze({
       cwd: join(dir, 'packages/web/src'),
       config: config(),
-      configDir: join(dir, 'packages/web'),
+      rootDir: join(dir, 'packages/web'),
     })
     expect(report.summary.filesAnalyzed).toBe(1)
     expect(report.findings[0]?.file).toBe('tests/a.spec.ts')
