@@ -22,8 +22,10 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   new rules, so a configured list cannot make one of them fire twice and the other not at all.
   It stays silent where `getByTestId()` has no equivalent: a bare `[data-testid]` presence check, a
   test id inside `:not()`/`:has()` (where it names an element the selector excludes, or a
-  descendant), and a selector list, which has more than one target.
-- **`prefer-semantic-locator`** (`info`, 1162 corpus findings) — a selector with no role, label or
+  descendant), a selector list (more than one target), and a test id reached through a `+`/`~`
+  sibling step — `[data-testid="row"] + button` puts it on a sibling, and calling that an ancestor
+  would be a false statement about the DOM.
+- **`prefer-semantic-locator`** (`info`, 1165 corpus findings) — a selector with no role, label or
   ARIA handle. It stays quiet on `[role=]`/`[aria-*]`, on content composition in **either**
   spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
   `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
@@ -34,14 +36,14 @@ to both successors and carries its severity to them, with a `deprecated-rule-id`
 longer *also* reported as an unknown rule — the report used to say "unknown — ignored" and "taking
 its setting" about the same line.
 
-Measured on the corpus: **1973 findings became 1674**. Reasons the 299 no longer fire, counted
+Measured on the corpus: **1973 findings became 1677**. Reasons the 296 no longer fire, counted
 independently — **a call site can appear in more than one row**, so these do not partition:
-252 composed with a `has`/`hasText` option (168 of them via `.filter()`, which the rules could not
-previously see), 37 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-`:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable.
+252 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
+previously see), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
+`:has()`/`:has-text()`, 0 unreadable.
 
 Scores rise (cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged)
-from re-grading 1162 findings `warn`→`info` plus those removals; `callSites` is identical on all
+from re-grading 1165 findings `warn`→`info` plus those removals; `callSites` is identical on all
 five repos, so the rise is not a denominator change. Note this also **downgrades** an existing
 double-report: 458 corpus call sites carry both a class-selector `error` and this nudge, which cost
 7 points together and now costs 5.5. Deduplicating them is Phase 12's "one call site, one penalty",

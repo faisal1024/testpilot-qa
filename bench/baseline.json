@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11b + 11g, after two review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 512: 427 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1162). 1973 findings -> 1674. Reasons the 299 no longer fire, counted INDEPENDENTLY -- a call site can appear in more than one row, so these do not partition: 252 has/hasText composition (168 of them via .filter(), newly visible), 37 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 1 test id with no getByTestId() form, 0 unreadable. An earlier record here published a first-match classification (84/27/21/12) as a partition; it was not, and an independent recount is what caught it. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites to this record so Phase 12 has a pinned 'before' when it removes them from the denominator: 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
+  "reason": "Phase 11b + 11g, after three review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 512: 427 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1165). 1973 findings -> 1677. Reasons the 296 no longer fire, counted INDEPENDENTLY -- a call site can appear in more than one row, so these do not partition: 252 has/hasText composition (167 of them via .filter()), 35 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 0 unreadable. Two corrections to earlier records here, both found by independent recount and left visible rather than replaced silently: an earlier reason published a first-match classification (84/27/21/12) as though it were a partition, and a later one said 168 .filter() cases where every way of counting gives 167. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites so Phase 12 has a pinned 'before' when it removes them from the denominator: 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -145,7 +145,7 @@
       },
       "filesAnalyzed": 298,
       "parseErrors": 0,
-      "findings": 1321,
+      "findings": 1324,
       "score": 76,
       "grade": "C",
       "callSites": 2954,
@@ -157,7 +157,7 @@
         "no-hard-wait": 172,
         "no-xpath": 2,
         "prefer-get-by-test-id": 90,
-        "prefer-semantic-locator": 593
+        "prefer-semantic-locator": 596
       },
       "warnings": {
         "helpers-not-analyzed": 1

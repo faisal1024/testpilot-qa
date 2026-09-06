@@ -86,6 +86,22 @@ function resolveRules(config: TestPilotConfig): {
         ruleId: id,
         message: `Unknown rule "${id}" in ruleOptions — ignored.`,
       })
+      continue
+    }
+    // A real rule id that takes no options is the same silent drop one level
+    // in. `prefer-semantic-locator` reads the test-id list but is not where it
+    // is set, and setting it there is the natural mistake — so say so rather
+    // than accept the key and ignore it.
+    if (!RULES_WITH_OPTIONS.has(id)) {
+      warnings.push({
+        code: 'unknown-rule',
+        ruleId: id,
+        message: `Rule "${id}" has no configurable options — the ruleOptions entry for it was ignored.${
+          id === 'prefer-semantic-locator'
+            ? ' It reads `testIdAttributes`, but that is set under "prefer-get-by-test-id".'
+            : ''
+        }`,
+      })
     }
   }
   for (const id of Object.keys(config.rules)) {
@@ -118,6 +134,16 @@ function resolveRules(config: TestPilotConfig): {
   }
   return { rules, testRules, warnings }
 }
+
+/**
+ * Rule ids `optionsFor` actually reads settings for. Any other id in
+ * `ruleOptions` is accepted by the schema (deliberately non-strict, so a rename
+ * cannot hard-break a config) and then ignored — which needs saying.
+ */
+const RULES_WITH_OPTIONS: ReadonlySet<string> = new Set([
+  'no-deep-css-chain',
+  'prefer-get-by-test-id',
+])
 
 function toPosix(path: string): string {
   return path.split('\\').join('/')

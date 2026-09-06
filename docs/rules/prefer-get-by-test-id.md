@@ -34,9 +34,14 @@ await page.getByTestId('save-button').click()
 ## Does not fire on
 
 ```ts
-page.getByTestId('save-button')      // already the recommended form
-page.locator('[data-qa="save"]')     // data-qa is not a test id unless you configure it
-page.locator('[aria-label="Save"]')  // not a test id at all
+page.getByTestId('save-button')        // already the recommended form
+page.locator('[data-qa="save"]')       // not a test id unless you configure it
+page.locator('[aria-label="Save"]')    // not a test id at all
+page.locator('[data-testid]')          // presence: getByTestId() has no such form
+page.locator('div:not([data-testid="x"])') // names an element the selector EXCLUDES
+page.locator('li:has([data-testid="x"])')  // names a descendant, not the target
+page.locator('[data-testid="a"], [data-testid="b"]') // a list has no one target
+page.locator('[data-testid="row"] + button') // a sibling, not an ancestor
 ```
 
 ## In the CLI

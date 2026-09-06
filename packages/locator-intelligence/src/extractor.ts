@@ -115,7 +115,12 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
     if (propertyNode(callee)?.name !== 'filter') {
       return
     }
-    const receiver = callee.object as (AstNode & Partial<WithLoc>) | undefined
+    // Through refinements and TS wrappers: `.first().filter({ hasText })`
+    // composes the `locator()` below it, and `(x as Locator).filter(…)` has a
+    // range the extracted call never carries.
+    const receiver = refinedBase(callee.object as AstNode | undefined) as
+      | (AstNode & Partial<WithLoc>)
+      | undefined
     const options = readLocatorOptions((node.arguments as AstNode[])?.[0])
     if (receiver?.range && options) {
       const key = `${receiver.range[0]}:${receiver.range[1]}`
@@ -188,9 +193,33 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
  */
 const REFINING_METHODS: ReadonlySet<string> = new Set(['filter', 'first', 'last', 'nth'])
 
-/** The recognized locator method a call is chained off, if any. */
-function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
-  let current = receiver
+/** `x as Locator`, `x!`, `(x)` — wrappers whose range is not the call's. */
+function unwrap(node: AstNode | undefined): AstNode | undefined {
+  let current = node
+  while (
+    current &&
+    (current.type === 'TSAsExpression' ||
+      current.type === 'TSNonNullExpression' ||
+      current.type === 'TSSatisfiesExpression')
+  ) {
+    current = current.expression as AstNode | undefined
+  }
+  return current
+}
+
+/**
+ * The recognized locator call a chain rests on, stepping over refinements.
+ *
+ * One walk, used for both questions asked of a chain — which API produced the
+ * locator (`parentApi`), and which call a trailing `.filter()` composes. They
+ * were written separately and disagreed: `receiverApi` walked `.first()` while
+ * the filter pre-pass keyed on the immediate receiver, so
+ * `locator('.row').first().filter({ hasText })` lost the composition that
+ * `locator('.row').filter({ hasText })` kept — an answer about spelling, which
+ * is exactly what this is here to prevent.
+ */
+function refinedBase(receiver: AstNode | undefined): AstNode | undefined {
+  let current = unwrap(receiver)
   // Bounded by the expression's own nesting; a chain is finite.
   while (current && current.type === 'CallExpression') {
     const callee = current.callee as AstNode | undefined
@@ -205,11 +234,21 @@ function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
     // refinements. Answering "nth" here would hide the `getByRole()` two links
     // up, which is the whole question `parentApi` is asked.
     if (!REFINING_METHODS.has(name)) {
-      return LOCATOR_METHODS.has(name as LocatorApi) ? (name as LocatorApi) : undefined
+      return LOCATOR_METHODS.has(name as LocatorApi) ? current : undefined
     }
-    current = callee.object as AstNode | undefined
+    current = unwrap(callee.object as AstNode | undefined)
   }
   return undefined
+}
+
+/** The recognized locator method a call is chained off, if any. */
+function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
+  const base = refinedBase(receiver)
+  const callee = base?.callee as AstNode | undefined
+  const name = callee ? (propertyNode(callee)?.name as string | undefined) : undefined
+  return name !== undefined && LOCATOR_METHODS.has(name as LocatorApi)
+    ? (name as LocatorApi)
+    : undefined
 }
 
 /**

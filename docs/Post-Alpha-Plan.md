@@ -309,13 +309,14 @@ false-positive rate < 5% per rule.
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
 
-  **Measured on the corpus.** 1973 findings became 1674: `prefer-get-by-test-id` 512,
-  `prefer-semantic-locator` 1162. Reasons the 299 no longer fire, counted **independently — a call
-  site can appear in more than one row, so these do not partition**: 252 composed with a
-  `has`/`hasText` option, 37 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12
-  composed with `:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable. An
-  earlier draft published a first-match classification (84/27/21/12) as though it were a partition;
-  it was not, and the second reviewer's independent count is what caught it.
+  **Measured on the corpus.** 1973 findings became 1677: `prefer-get-by-test-id` 512 (427 direct,
+  29 scope, 46 same-element, 10 through the `data-testid=` engine), `prefer-semantic-locator` 1165.
+  Reasons the 296 no longer fire, counted **independently — a call site can appear in more than one
+  row, so these do not partition**: 252 composed with a `has`/`hasText` option (167 of them through
+  `.filter()`), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
+  `:has()`/`:has-text()`, 0 unreadable. An earlier draft published a first-match classification
+  (84/27/21/12) as though it were a partition; it was not, and a reviewer's independent recount is
+  what caught it. A later draft said 168 `.filter()` cases where every way of counting gives 167.
 
   The probe that produced this ran over the same discovery and the shipped rule objects, and had to
   reproduce the benchmark's own totals before any of it was written down. Its first run reported
@@ -324,7 +325,7 @@ false-positive rate < 5% per rule.
   a plausible wrong one.
 
   Scores rose: cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged.
-  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1162
+  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1165
   findings from `warn` to `info` plus those removals, and not a denominator change.
 
   **No false-positive rate is claimed.** The phase target is stated as a percentage, and measuring it
@@ -446,7 +447,7 @@ Measured on the pinned corpus by `pnpm bench` after each phase:
 | Metric | alpha.0 (today) | Target after Phase 12 |
 |---|---|---|
 | Repos where default discovery finds the suite | 3 / 5 (alpha.0) — #71 should make it 5 / 5; bench confirms | 5 / 5 |
-| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% — **still unmeasured after 11b**: no labelled sample exists. What 11b measured is 1973 → 1829 findings with all 144 removals attributed |
+| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% — **still unmeasured after 11b**: no labelled sample exists. What 11b measured is 1973 → 1677 findings, with the reasons the 296 no longer fire counted independently |
 | Hard false positives, `no-css-class-selector` | ~7% | < 2% |
 | Same selectors, `locator('[data-testid]')` vs `getByTestId()` score gap | 40 pts | ≤ 5 pts |
 | Single-line file minimum score | 0 F | ≥ 50 |

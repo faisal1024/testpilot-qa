@@ -113,9 +113,34 @@ describe('prefer-get-by-test-id', () => {
   })
 
   it('offers a scope only when the test id is genuinely an ancestor', () => {
-    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
-    expect(violation?.message).toContain('ancestor')
-    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
+    for (const selector of ['[data-testid="list"] > li a', '[data-testid="list"] >> button']) {
+      const violation = preferGetByTestId.evaluate(css(selector))
+      expect(violation?.message, selector).toContain('ancestor')
+      expect(violation?.suggestion, selector).toContain('Scope with getByTestId("list")')
+    }
+  })
+
+  it('says nothing when the test id is a sibling, not an ancestor', () => {
+    // `getByTestId('row').locator('button')` searches row's SUBTREE. Calling a
+    // `+`/`~` sibling an ancestor is a false statement about the DOM, and the
+    // rewrite it names acts on a different element. This is the round-1
+    // same-element defect in its sibling shape.
+    expect(preferGetByTestId.evaluate(css('[data-testid="row"] + button'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="row"] ~ button'))).toBeNull()
+    // ...and through the sibling step even when a descendant step follows.
+    expect(preferGetByTestId.evaluate(css('[data-testid="row"] + div button'))).toBeNull()
+  })
+
+  it('says nothing when an earlier part is a list, not only the final one', () => {
+    expect(
+      preferGetByTestId.evaluate(css('[data-testid="a"], [data-testid="b"] >> button')),
+    ).toBeNull()
+  })
+
+  it("scopes from a >> part only when the test id is on that part's own target", () => {
+    // `[data-testid=a] + div >> button` chains from the div; the test id is the
+    // div's sibling.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] + div >> button'))).toBeNull()
   })
 
   it('names the attribute without inventing an argument for a non-equality match', () => {
@@ -208,8 +233,15 @@ describe('prefer-semantic-locator', () => {
     expect(preferSemanticLocator.evaluate(css('[role="tab"]'))).toBeNull()
     expect(preferSemanticLocator.evaluate(css('[aria-label="Close"]'))).toBeNull()
     expect(preferSemanticLocator.evaluate(css('button[aria-expanded]'))).toBeNull()
-    // Nested inside :not() still counts — the test depends on it either way.
-    expect(preferSemanticLocator.evaluate(css('div:not([role="presentation"])'))).toBeNull()
+    // ...but only at the top level. Inside `:not()` the role describes an
+    // element the selector EXCLUDES; inside `:has()` a descendant. Reading
+    // nested silenced a real corpus call site because something below it had a
+    // role, which is not a handle on the element being selected.
+    expect(preferSemanticLocator.evaluate(css('div:not([role="presentation"])'))).not.toBeNull()
+    expect(preferSemanticLocator.evaluate(css('div:not([aria-hidden])'))).not.toBeNull()
+    // (`div:has([aria-hidden])` stays silent, but for the composition reason —
+    // `:has()` — not because of the nested attribute.)
+    expect(preferSemanticLocator.evaluate(css('div:has([aria-hidden])'))).toBeNull()
   })
 
   it('does not fire on the role= engine', () => {
@@ -260,12 +292,33 @@ describe('prefer-semantic-locator', () => {
     // The same Playwright feature as `locator('.row', { hasText })`, and the
     // more idiomatic spelling. Firing on one and not the other would be an
     // answer about syntax.
-    const source = "page.locator('.row').filter({ hasText: 'Save' })"
-    const row = extractLocators(source, parseSource(source, 'a.ts')).find(
-      (context) => context.selector === '.row',
-    )
-    expect(row).toBeDefined()
-    expect(preferSemanticLocator.evaluate(row as LocatorContext)).toBeNull()
+    // Including through the refinements `parentApi` already walks — the two
+    // halves of that walk were written separately and disagreed, so
+    // `.first().filter({ hasText })` lost the composition `.filter({ hasText })`
+    // kept. And through TS wrappers, whose range is not the call's.
+    for (const source of [
+      "page.locator('.row').filter({ hasText: 'Save' })",
+      "page.locator('.row').first().filter({ hasText: 'Save' })",
+      "page.locator('.row').nth(0).filter({ hasText: 'Save' })",
+      "page.locator('.row').filter({ hasText: 'Save' }).first()",
+      "(page.locator('.row') as Locator).filter({ hasText: 'Save' })",
+      "page.locator('.row')!.filter({ hasText: 'Save' })",
+    ]) {
+      const row = extractLocators(source, parseSource(source, 'a.ts')).find(
+        (context) => context.selector === '.row',
+      )
+      expect(row, source).toBeDefined()
+      expect(preferSemanticLocator.evaluate(row as LocatorContext), source).toBeNull()
+    }
+  })
+
+  it('is the rule that speaks when prefer-get-by-test-id abstains', () => {
+    // The handoff asks the other rule's own function. Handing off on the mere
+    // presence of a test-id attribute left this real corpus selector reported
+    // by neither rule.
+    expect(
+      preferSemanticLocator.evaluate(css('[data-testid="searchInput"], input[type="text"]')),
+    ).not.toBeNull()
   })
 
   it('abstains on :text() for the same reason as :has-text()', () => {

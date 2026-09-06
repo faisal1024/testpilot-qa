@@ -449,8 +449,8 @@ Written down because a tool that hides these is worse than one that doesn't have
 
 - **`prefer-semantic-locator` is a judgement call, not a defect report.** It flags a `locator()`
   selector with no role, label or ARIA handle — real advice, but advice a suite can reasonably
-  decline. It ships at `info` for that reason and is 1326 of 1829 findings across the five-repo
-  survey. Set it to `off` if your suite has made that call deliberately:
+  decline. It ships at `info` for that reason, and is 1165 of the 1677 findings these two rules
+  produce across the five-repo survey (2745 findings in total). Set it to `off` if your suite has made that call deliberately:
 
   ```ts
   rules: { 'prefer-semantic-locator': 'off' }

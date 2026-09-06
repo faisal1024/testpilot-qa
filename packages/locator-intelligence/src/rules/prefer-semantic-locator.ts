@@ -1,5 +1,6 @@
 import type { LocatorApi } from '../locator-context.js'
-import { attributeTokens, hasPseudo, topLevelAttributeTokens } from '../selector/query.js'
+import { hasPseudo, topLevelAttributeTokens } from '../selector/query.js'
+import { testIdReplacement } from '../selector/test-id.js'
 import { testIdAttributesFrom } from './prefer-get-by-test-id.js'
 import type { Rule } from './types.js'
 
@@ -82,23 +83,26 @@ export const preferSemanticLocator: Rule = {
     if (composed === null || composed) {
       return null
     }
-    const attributes = attributeTokens(context.parsed)
-    if (attributes === null) {
-      return null
-    }
     // A test id is a handle, just not a semantic one — `prefer-get-by-test-id`
     // owns that case and has an exact replacement to offer. Reporting both on
     // one call site would be two lines for one decision.
     //
-    // Read at the top level and with the *same* configured attribute list the
-    // other rule uses: hand off on a broader notion than it accepts and a call
-    // site falls between them, reported by neither.
-    const topLevel = topLevelAttributeTokens(context.parsed)
-    const testIds = testIdAttributesFrom(options)
-    if (topLevel === null || topLevel.some((attribute) => testIds.includes(attribute.name))) {
+    // The handoff asks the other rule's own function, not a looser lookalike:
+    // hand off on the mere *presence* of a test-id attribute and a selector it
+    // abstains on — `[data-testid=a], input[type=text]` — is reported by
+    // neither. Exactly what it takes, and nothing more.
+    if (testIdReplacement(context.parsed, testIdAttributesFrom(options)) !== null) {
       return null
     }
-    if (attributes.some(isSemantic)) {
+    // Top level, like the handoff: an ARIA attribute inside `:not()` describes
+    // an element the selector EXCLUDES, and inside `:has()` a descendant.
+    // Neither is a handle on the element being selected.
+    //
+    // A selector *list* is still read whole, so one semantic arm silences the
+    // others. Deliberate: abstaining is the safe direction, and which arm
+    // "counts" for a list has no obviously right answer.
+    const attributes = topLevelAttributeTokens(context.parsed)
+    if (attributes === null || attributes.some(isSemantic)) {
       return null
     }
     // `role=button[name="Save"]` through the `role=` engine is already the
