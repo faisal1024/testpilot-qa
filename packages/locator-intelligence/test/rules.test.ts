@@ -137,11 +137,27 @@ describe('prefer-get-by-test-id', () => {
     // string: three rounds looked only at where the test id sat in the CSS.
     // Live on the corpus (cal.com out-of-office.e2e.ts:177).
     for (const key of ['has', 'hasNot', 'hasText', 'hasNotText'] as const) {
-      const context = ctx({ ...css('[data-testid="row"]'), ownOptions: { [key]: true } })
-      expect(
-        preferGetByTestId.evaluate({ ...context, options: context.ownOptions }),
-        key,
-      ).toBeNull()
+      const composition = { [key]: true }
+      const context = ctx({
+        ...css('[data-testid="row"]'),
+        ownOptions: composition,
+        options: composition,
+      })
+      expect(preferGetByTestId.evaluate(context), key).toBeNull()
+    }
+    // An options bag it could not read is the same dropped filter, so
+    // `undefined` must stay the only "no options" signal. All three spellings
+    // used to get the confident rewrite.
+    for (const source of [
+      'page.locator(\'[data-testid="row"]\', OPTS)',
+      'page.locator(\'[data-testid="row"]\', { ...OPTS })',
+      "page.locator('[data-testid=\"row\"]', { [KEY]: 'Alice' })",
+    ]) {
+      const call = extractLocators(source, parseSource(source, 'a.ts')).find(
+        (context) => context.selector === '[data-testid="row"]',
+      )
+      expect(call?.ownOptions, source).toBe('unknown')
+      expect(preferGetByTestId.evaluate(call as LocatorContext), source).toBeNull()
     }
     // ...but a chained `.filter()` survives the rewrite, so it still fires:
     // `getByTestId('row').filter({ hasText })` keeps the filter.
@@ -151,6 +167,60 @@ describe('prefer-get-by-test-id', () => {
     )
     expect(chained?.ownOptions).toBeUndefined()
     expect(preferGetByTestId.evaluate(chained as LocatorContext)).not.toBeNull()
+  })
+
+  it('says nothing when an ancestor precedes the test id in the same selector', () => {
+    // The fifth shape: five rounds looked at what FOLLOWS the test id, or
+    // outside the string. `getByTestId('save')` searches the whole document,
+    // so `#login-modal` is dropped. The `>>` spelling of the identical locator
+    // has been guarded since round 3, so the two gave opposite answers.
+    // All nine of immich's findings were this.
+    expect(preferGetByTestId.evaluate(css('#login-modal [data-testid="save"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-viewer-content] [data-testid="ocr"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('body .a .b [data-testid="deep"]'))).toBeNull()
+    // ...and the same-element message was false about `.modal` too.
+    expect(preferGetByTestId.evaluate(css('.modal button[data-testid="save"]'))).toBeNull()
+    // A leading combinator is an ancestor relation of its own: the tokenizer
+    // models these as `:scope + …` / `:scope > …`, neither of which is
+    // "any descendant".
+    expect(preferGetByTestId.evaluate(css('+ [data-testid="row"]'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('> [data-testid="row"]'))).toBeNull()
+    // Still fires where nothing precedes it, including under a getBy* parent —
+    // there the chain preserves the scope.
+    expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
+    expect(
+      preferGetByTestId.evaluate(ctx({ ...css('[data-testid="row"]'), parentApi: 'getByRole' })),
+    ).not.toBeNull()
+  })
+
+  it('only names getByTestId() for the attribute Playwright will actually query', () => {
+    // `getByTestId()` resolves ONE attribute — `use.testIdAttribute`, default
+    // `data-testid`. On a stock config `[data-test="x"]` and getByTestId('x')
+    // select different elements, so the rule says what must be true first.
+    const stock = { resolvedTestIdAttribute: null }
+    expect(preferGetByTestId.evaluate(css('[data-testid="s"]'), stock)?.suggestion).toBe(
+      'Use getByTestId("s") instead.',
+    )
+    expect(preferGetByTestId.evaluate(css('[data-test="s"]'), stock)?.suggestion).toContain(
+      "testIdAttribute: 'data-test'",
+    )
+    // ...and the reverse: a project that configured `data-test` gets the
+    // caveat on `data-testid` instead.
+    const configured = { resolvedTestIdAttribute: 'data-test' }
+    expect(preferGetByTestId.evaluate(css('[data-test="s"]'), configured)?.suggestion).toBe(
+      'Use getByTestId("s") instead.',
+    )
+    expect(preferGetByTestId.evaluate(css('[data-testid="s"]'), configured)?.suggestion).toContain(
+      'queries only `data-test`',
+    )
+    // Unreadable config: only Playwright's own default may be asserted.
+    const unknown = { resolvedTestIdAttribute: 'unresolved' } as const
+    expect(preferGetByTestId.evaluate(css('[data-testid="s"]'), unknown)?.suggestion).toBe(
+      'Use getByTestId("s") instead.',
+    )
+    expect(preferGetByTestId.evaluate(css('[data-test="s"]'), unknown)?.suggestion).toContain(
+      'queries only `data-testid`',
+    )
   })
 
   it('says nothing when a >> part precedes the test id', () => {

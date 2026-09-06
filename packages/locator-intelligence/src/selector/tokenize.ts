@@ -138,14 +138,15 @@ function readString(cursor: Cursor): string {
   const quote = cursor.take()
   let out = ''
   while (!cursor.done) {
-    const char = cursor.take()
-    if (char === '\\') {
-      if (cursor.done) {
-        throw new SelectorSyntaxError('trailing backslash in string')
-      }
-      out += cursor.take()
+    if (cursor.peek() === '\\') {
+      // `readEscape`, not "copy the next character" — the doc comment said
+      // "resolving escapes" while the code did the latter, so `[a="\\41 bc"]`
+      // read as the value "41 bc" while the identical unquoted `[a=\\41 bc]`
+      // read as "Abc". One CSS value, two answers, decided by the quotes.
+      out += readEscape(cursor)
       continue
     }
+    const char = cursor.take()
     if (char === quote) {
       return out
     }

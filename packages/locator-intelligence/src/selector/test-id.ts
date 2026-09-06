@@ -59,9 +59,14 @@ const SCOPING_COMBINATORS = new Set(['descendant', 'child'])
  * - any relevant part is a selector **list**, which has more than one target or
  *   more than one scope;
  * - the test id reaches the target through anything but descendant/child steps;
- * - a `>>` part **precedes** the one holding the test id. Every earlier part is
- *   an ancestor scope, so `'#login-modal >> [data-testid=save]'` is not
- *   `getByTestId('save')` — that searches the whole document.
+ * - anything **precedes** the test id's own compound — a `>>` part, or an
+ *   earlier compound in the same selector. Both are ancestor scopes
+ *   `getByTestId()` would drop: `'#login-modal >> [data-testid=save]'` and
+ *   `'#login-modal [data-testid=save]'` are the same locator, and neither is
+ *   `getByTestId('save')`, which searches the whole document. A leading
+ *   combinator counts — the tokenizer models `'+ [data-testid=row]'` as
+ *   `:scope + [data-testid=row]`, an adjacent sibling of the scope rather than
+ *   a descendant of it.
  */
 export function testIdReplacement(
   parsed: ParsedSelector,
@@ -92,6 +97,15 @@ export function testIdReplacement(
       return null
     }
     if (found.index === arm.compounds.length - 1) {
+      // ...and so is an earlier compound in this same selector. The `>>`
+      // spelling has been guarded since the round-3 fix twenty lines below;
+      // the CSS spelling of the identical locator was not, so the two gave
+      // opposite answers for the same selector. All nine of immich's findings
+      // were this: `[data-viewer-content] [data-testid="ocr-box"]` answered
+      // "use getByTestId('ocr-box')", which searches the whole document.
+      if (arm.compounds.length > 1) {
+        return null
+      }
       return {
         kind: isOnlyHandle(target) ? 'direct' : 'same-element',
         attribute: found.match.name,

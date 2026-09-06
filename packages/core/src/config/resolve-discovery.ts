@@ -235,6 +235,19 @@ function declaresTagsIn(rootDir: string, hint: string): boolean {
   return mayDeclareTags(readPlaywrightTestSettings(path))
 }
 
+/**
+ * The `use.testIdAttribute` for a project, read the same way and at the same
+ * moments as `declaresTagsIn`.
+ *
+ * No config found means Playwright's own default applies — `null`, not
+ * unknown. That is the ordinary case for a project with no Playwright config
+ * at all, and treating it as unknown would silence the rule everywhere.
+ */
+function testIdAttributeIn(rootDir: string, hint: string): string | null | 'unresolved' {
+  const path = findPlaywrightConfig(rootDir, hint)
+  return path ? readPlaywrightTestSettings(path).testIdAttribute : null
+}
+
 export function resolveDiscovery(
   loaded: LoadConfigResult,
   options: ResolveDiscoveryOptions,
@@ -265,6 +278,10 @@ export function resolveDiscovery(
       options.rootDir,
       config.playwrightConfig,
     )
+    discovery.playwrightTestIdAttribute = testIdAttributeIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
@@ -280,6 +297,9 @@ export function resolveDiscovery(
         reason: 'playwrightConfig points at a file that does not exist',
       }
     }
+    // No Playwright config at all: Playwright's own `data-testid` default is
+    // what `getByTestId()` will query, which is knowledge, not ignorance.
+    discovery.playwrightTestIdAttribute = null
     return withoutFallback()
   }
   if ('ambiguous' in located) {
@@ -291,6 +311,10 @@ export function resolveDiscovery(
       options.rootDir,
       config.playwrightConfig,
     )
+    discovery.playwrightTestIdAttribute = testIdAttributeIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
@@ -299,6 +323,7 @@ export function resolveDiscovery(
   // Set before any branch returns: a `tag` key applies to every test whether or
   // not the config also yielded scopes we could use.
   discovery.playwrightConfigDeclaresTags = mayDeclareTags(read)
+  discovery.playwrightTestIdAttribute = read.testIdAttribute
   if (read.status === 'no-settings') {
     // Playwright's `testDir` defaults to the config file's own directory, so a config
     // kept in a sub-directory usually IS the suite location — ignoring that sent us

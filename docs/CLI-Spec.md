@@ -537,7 +537,8 @@ export default defineConfig({
     'no-nth-child': 'error',
     'no-css-class-selector': 'error',
     'no-deep-css-chain': 'warn',
-    'prefer-semantic-locator': 'off',
+    'prefer-get-by-test-id': 'warn',
+    'prefer-semantic-locator': 'info',
     'no-hard-wait': 'error',
     'avoid-positional-access': 'warn',
     'avoid-parent-traversal': 'info',
@@ -546,6 +547,9 @@ export default defineConfig({
   },
   // Per-rule settings, separate from `rules` so a severity stays a severity.
   ruleOptions: {
+    // Which attributes count as a test id. Mirror your Playwright
+    // `use.testIdAttribute` — getByTestId() queries only that one.
+    'prefer-get-by-test-id': { testIdAttributes: ['data-testid'] },
     'no-deep-css-chain': { maxChainDepth: 3 },
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.

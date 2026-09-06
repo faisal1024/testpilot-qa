@@ -336,7 +336,10 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 
     for (const context of contexts) {
       for (const { rule, severity } of rules) {
-        const violation = rule.evaluate(context, optionsFor(rule.id, options.config))
+        const violation = rule.evaluate(
+          context,
+          optionsFor(rule.id, options.config, options.discovery),
+        )
         if (!violation) {
           continue
         }
@@ -380,7 +383,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     const percent = Math.round((uninspectedCallSites / callSites) * 100)
     warnings.push({
       code: 'uninspected-call-sites',
-      message: `${uninspectedCallSites} of ${callSites} locator call-site(s) (${percent}%) use a selector that is not statically readable — an interpolated template literal, a variable, or syntax the parser declined to guess at. No rule ran on them, but they still count toward the score's denominator, so the grade is partly over locators that were never inspected.`,
+      message: `${uninspectedCallSites} of ${callSites} locator call-site(s) (${percent}%) use a selector that is not statically known — an interpolated template literal, a variable, or an \`as string\`. No rule ran on them, but they still count toward the score's denominator, so the grade is partly over locators that were never inspected.`,
     })
   }
 
@@ -562,7 +565,11 @@ function tagCoverageWarning(
 }
 
 /** Per-rule settings from the config, or `undefined` when the rule has none. */
-function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | undefined {
+function optionsFor(
+  ruleId: string,
+  config: TestPilotConfig,
+  discovery: ConfigDiscovery | undefined,
+): RuleOptions | undefined {
   if (ruleId === 'no-deep-css-chain') {
     // Optional throughout: zod fills these in for a parsed config, but a
     // programmatic caller can hand us a plain object, and crashing on a missing
@@ -576,7 +583,10 @@ function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | unde
   // at all, depending on which attribute the selector used.
   if (ruleId === 'prefer-get-by-test-id' || ruleId === 'prefer-semantic-locator') {
     const configured = config.ruleOptions?.['prefer-get-by-test-id']?.testIdAttributes
-    return configured === undefined ? undefined : { testIdAttributes: configured }
+    return {
+      ...(configured === undefined ? {} : { testIdAttributes: configured }),
+      resolvedTestIdAttribute: discovery?.playwrightTestIdAttribute ?? 'unresolved',
+    }
   }
   return undefined
 }

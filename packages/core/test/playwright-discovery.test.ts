@@ -50,6 +50,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
       status: 'ok',
       unresolved: [],
       declaresTags: false,
+      testIdAttribute: null,
       sawConfigObject: true,
       settings: {
         scopes: [
@@ -60,6 +61,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
           },
         ],
         declaresTags: false,
+        testIdAttribute: null,
       },
     })
   })
@@ -306,6 +308,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'testDir is not a literal value',
       declaresTags: false,
+      testIdAttribute: null,
       unresolved: expect.any(Array),
       sawConfigObject: expect.any(Boolean),
     })
@@ -316,6 +319,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     expect(readSettings(bare)).toEqual({
       status: 'no-settings',
       declaresTags: false,
+      testIdAttribute: null,
       unresolved: [],
       sawConfigObject: true,
     })
@@ -328,6 +332,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'file could not be read',
       declaresTags: false,
+      testIdAttribute: 'unresolved',
       unresolved: expect.any(Array),
       sawConfigObject: expect.any(Boolean),
     })
@@ -344,6 +349,8 @@ it('reports a spread as unresolved instead of reading the config as empty', () =
     status: 'unreadable',
     reason: 'it uses a spread from another object',
     declaresTags: false,
+    // A spread can carry `use` whole, so the attribute is unknown here.
+    testIdAttribute: 'unresolved',
     unresolved: expect.any(Array),
     sawConfigObject: expect.any(Boolean),
   })
@@ -626,6 +633,7 @@ describe('resolveDiscovery', () => {
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
       playwrightConfigDeclaresTags: false,
+      playwrightTestIdAttribute: null,
     })
   })
 

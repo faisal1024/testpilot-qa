@@ -126,7 +126,7 @@ penalty = 15, maxPenalty = 2 × 5 = 10   →   1 − 15/10 = −0.5   →   clam
 ## When there is no score at all
 
 If there **are** locator call-sites but not one of them could be inspected — every selector is an
-interpolated template literal, a variable, or syntax the parser declined to guess at — the score is
+interpolated template literal, a variable, or an `as string` — the score is
 `null`, printed as *"not enough evidence"*, and `score.grade` is `null` too. A `100 (A)` there would
 be the strongest claim the tool can make over the least evidence it can have.
 

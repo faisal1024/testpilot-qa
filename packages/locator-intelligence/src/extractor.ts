@@ -1,4 +1,10 @@
-import type { AnalyzedApi, LocatorApi, LocatorContext, SelectorEngine } from './locator-context.js'
+import type {
+  AnalyzedApi,
+  LocatorApi,
+  LocatorComposition,
+  LocatorContext,
+  SelectorEngine,
+} from './locator-context.js'
 import { type AstNode, walk } from './parser.js'
 import { tokenizeSelector } from './selector/tokenize.js'
 
@@ -164,8 +170,9 @@ export function extractLocators(code: string, program: AstNode): LocatorContext[
     const parentApi = receiverApi(callee.object as AstNode | undefined)
     const call = node as unknown as WithLoc
     const composed = composedRanges.get(`${call.range[0]}:${call.range[1]}`)
-    const own = readLocatorOptions(args[1])
-    const options = own || composed ? { ...own, ...composed } : undefined
+    const own = isLocator ? readOwnOptions(args[1]) : undefined
+    const readable = own === 'unknown' ? undefined : own
+    const options = readable || composed ? { ...readable, ...composed } : undefined
 
     contexts.push({
       apiCall,
@@ -259,6 +266,31 @@ function receiverApi(receiver: AstNode | undefined): LocatorApi | undefined {
  * not what it composes with. A non-literal options object yields `undefined`,
  * so a rule cannot read absence as "no options".
  */
+/**
+ * The call's own options, distinguishing "none passed" from "passed but
+ * unreadable".
+ *
+ * `readLocatorOptions` collapses both to `undefined`, which is fine for asking
+ * "is this composed?" but not for a rule that names a replacement: dropping an
+ * options bag it could not read is the same wrong rewrite as dropping one it
+ * could.
+ */
+function readOwnOptions(arg: AstNode | undefined): LocatorComposition | 'unknown' | undefined {
+  if (!arg) {
+    return undefined
+  }
+  if (arg.type !== 'ObjectExpression') {
+    return 'unknown'
+  }
+  for (const property of (arg.properties as AstNode[]) ?? []) {
+    // A spread or a computed key can carry any of the four composition keys.
+    if (property.type === 'SpreadElement' || property.computed === true) {
+      return 'unknown'
+    }
+  }
+  return readLocatorOptions(arg)
+}
+
 function readLocatorOptions(arg: AstNode | undefined): LocatorContext['options'] {
   if (!arg || arg.type !== 'ObjectExpression') {
     return undefined

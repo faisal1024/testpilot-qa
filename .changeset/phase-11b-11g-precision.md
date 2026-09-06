@@ -10,9 +10,9 @@ Phase 11b + 11g — the noisiest rule splits, and the report says what it could 
 reported on a five-repo corpus, at `warn`, whether the selector was `[data-testid="save"]` (a
 mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
 
-- **`prefer-get-by-test-id`** (`warn`, 511 corpus findings) — a test id addressed through a raw CSS
+- **`prefer-get-by-test-id`** (`warn`, 502 corpus findings) — a test id addressed through a raw CSS
   attribute selector. What it says depends on where the test id sits, because the three cases do not
-  have the same fix: on the target alone → `Use getByTestId('save')` (426); on an ancestor →
+  have the same fix: on the target alone → `Use getByTestId('save')` (417); on an ancestor →
   `Scope with getByTestId('list')` and chain the rest (29); on the target **alongside other
   conditions** → use `getByTestId()` for the test id and say plainly that the rest constrains the
   same element and cannot become a chained `locator()`, which would search inside it (46). It also
@@ -28,7 +28,7 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   options carry a filter (`locator('[data-testid=row]', { hasText: 'Alice' })` is not
   `getByTestId('row')`, which selects every row). A chained `.filter()` still reports, because it
   survives the rewrite.
-- **`prefer-semantic-locator`** (`info`, 1165 corpus findings) — a selector with no role, label or
+- **`prefer-semantic-locator`** (`info`, 1174 corpus findings) — a selector with no role, label or
   ARIA handle. It stays quiet on `[role=]`/`[aria-*]`, on content composition in **either**
   spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
   `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
@@ -41,12 +41,12 @@ its setting" about the same line.
 
 Measured on the corpus: **1973 findings became 1676**. Reasons the 297 no longer fire, counted
 independently — **a call site can appear in more than one row**, so these do not partition:
-252 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
+253 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
 previously see), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-`:has()`/`:has-text()`, 0 unreadable.
+`:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable.
 
 Scores rise (cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged)
-from re-grading 1165 findings `warn`→`info` plus those removals; `callSites` is identical on all
+from re-grading 1174 findings `warn`→`info` plus those removals; `callSites` is identical on all
 five repos, so the rise is not a denominator change. Note this also **downgrades** an existing
 double-report: **478** corpus call sites used to carry both a class-selector `error` and the old
 nudge, costing 7 points each; **348** still carry both (5.5, now that the nudge is `info`) and

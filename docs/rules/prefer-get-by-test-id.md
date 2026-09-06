@@ -29,7 +29,9 @@ await page.getByTestId('save-button').click()
 - Set `testIdAttribute` in `playwright.config.ts` if your project uses something other than `data-testid`, then use getByTestId() everywhere.
 - Tell TestPilot which attributes are test ids with `ruleOptions: { 'prefer-get-by-test-id': { testIdAttributes: ['data-qa'] } }` — the default list is `data-testid`, `data-test-id`, `data-test`.
 - When the test id is on an **ancestor** — reached by a descendant or `>` step — make it the scope: `locator('[data-testid="list"] li a')` becomes `getByTestId('list').locator('li a')`. **Keep the combinator**: `> li a` must stay `locator('> li a')`, because a chained `locator()` searches every descendant, not just children.
-- A `+`/`~` sibling is not an ancestor, and a `>>` part before the test id is a scope `getByTestId()` would drop. The rule stays quiet on both rather than name a rewrite that acts on a different element.
+- A `+`/`~` sibling is not an ancestor, and **anything** before the test id's own compound — an earlier compound, a `>>` part, or a leading combinator — is a scope `getByTestId()` would drop. The rule stays quiet on all of them rather than name a rewrite that acts on a different element.
+- `getByTestId()` queries exactly one attribute: `use.testIdAttribute` from your Playwright config, which defaults to `data-testid`. When the selector uses a different one the rule still reports, and says what your config must declare for the rewrite to hold.
+- A `locator(selector, { hasText })` has no `getByTestId()` equivalent — the options bag would be dropped — so the rule stays quiet. A chained `.filter({ hasText })` still reports, because it survives the rewrite.
 - When the test id sits on the target *alongside* other conditions (`button[data-testid="row"]`), those constrain the same element and cannot move to a chained `locator()` — narrow with `filter()` or `and()` instead.
 - A non-equality match such as `[data-testid^="row-"]` has no getByTestId() form; the rule names the attribute without inventing an argument.
 
@@ -45,6 +47,9 @@ page.locator('li:has([data-testid="x"])')  // names a descendant, not the target
 page.locator('[data-testid="a"], [data-testid="b"]') // a list has no one target
 page.locator('[data-testid="row"] + button')  // a sibling, not an ancestor
 page.locator('#modal >> [data-testid="x"]')   // the >> prefix is a scope getByTestId() drops
+page.locator('#modal [data-testid="x"]')      // so is a plain ancestor — same locator, same answer
+page.locator('> [data-testid="x"]')           // a leading combinator is not "any descendant"
+page.locator('[data-testid="x"]', { hasText: 'a' }) // getByTestId() has no form for the options bag
 ```
 
 ## In the CLI
