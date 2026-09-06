@@ -111,6 +111,42 @@ describe('extractTests', () => {
     expect(found[0]).toMatchObject({ titleKnown: false, effectiveTags: ['regression'] })
   })
 
+  it('discloses a describe title it cannot read', () => {
+    // `test.describe(GROUP, fn)` — the block's tag is invisible. The test
+    // branch has always counted this; the describe branch did not, so the tag
+    // vanished with an empty warnings list.
+    const found = extracted("test.describe(GROUP, () => { test('x', async () => {}) })")
+    expect(found.unreadableTitles).toBe(1)
+    expect(found.tests).toHaveLength(1)
+  })
+
+  it('discloses a dynamic describe title', () => {
+    expect(
+      extracted('test.describe(`grp @smoke${x}`, () => { test("x", async () => {}) })')
+        .dynamicTitles,
+    ).toBe(1)
+  })
+
+  it('does not count a missing title for the callback-only describe form', () => {
+    expect(extracted("test.describe(() => { test('x', async () => {}) })").unreadableTitles).toBe(0)
+  })
+
+  it('discloses a details argument it cannot read', () => {
+    // `test('x', OPTS, fn)` — OPTS may carry tags we never see.
+    const found = extracted("test('x', OPTS, async () => {})")
+    expect(found.unreadableTagExpressions).toBe(1)
+  })
+
+  it('discloses a spread inside the details object', () => {
+    const found = extracted("test('x', { ...BASE }, async () => {})")
+    expect(found.unreadableTagExpressions).toBe(1)
+  })
+
+  it('does not treat a two-argument body as an unreadable details object', () => {
+    // `test('x', body)` has no details position at all.
+    expect(extracted("test('x', body)").unreadableTagExpressions).toBe(0)
+  })
+
   it('finds a describe whose body is passed by reference', () => {
     // test.describe has no non-declaration overload, so requiring a literal
     // function was pure over-restriction — and dropped the block's tag.

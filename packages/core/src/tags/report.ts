@@ -132,6 +132,7 @@ export interface TagsWarning {
     | 'no-tests-recognized'
     | 'describe-body-not-inlined'
     | 'playwright-config-tags'
+    | 'scan-restricted-to-patterns'
     | 'unselectable-tags'
   message: string
 }

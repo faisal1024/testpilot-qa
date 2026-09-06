@@ -40,11 +40,11 @@ export interface PlaywrightTestSettings {
 
 export type PlaywrightConfigRead =
   /** Settings were read. `unresolved` names things present but not statically knowable. */
-  | { status: 'ok'; settings: PlaywrightTestSettings; unresolved: string[] }
+  | { status: 'ok'; settings: PlaywrightTestSettings; unresolved: string[]; declaresTags: boolean }
   /** The config declares no test-selection keys. Normal; nothing to report. */
-  | { status: 'no-settings' }
+  | { status: 'no-settings'; declaresTags: boolean }
   /** Something is there but cannot be used — the user should hear about this. */
-  | { status: 'unreadable'; reason: string }
+  | { status: 'unreadable'; reason: string; declaresTags: boolean }
 
 interface Node {
   type: string
@@ -302,7 +302,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   try {
     source = readFileSync(configPath, 'utf8')
   } catch {
-    return { status: 'unreadable', reason: 'file could not be read' }
+    return { status: 'unreadable', reason: 'file could not be read', declaresTags: false }
   }
 
   let root: Node
@@ -314,7 +314,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       jsx: false,
     }) as unknown as Node
   } catch {
-    return { status: 'unreadable', reason: 'file could not be parsed' }
+    return { status: 'unreadable', reason: 'file could not be parsed', declaresTags: false }
   }
 
   const unresolved: string[] = []
@@ -326,15 +326,19 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
         unresolved.length > 0
           ? describeUnresolved([...new Set(unresolved)])
           : 'its exported config is not a literal object',
+      declaresTags: false,
     }
   }
 
   const configDir = dirname(configPath)
 
   let declaresTags = false
-  const readSelectors = (object: Node): RawSelectors => {
+  const readSelectors = (object: Node, isProject = false): RawSelectors => {
     if (hasSpread(object)) unresolved.push('a spread from another object')
-    if (propertyValue(object, 'tag')) {
+    // `tag` is on `TestConfig` only — `TestProject` has no such key in
+    // Playwright 1.63, so reading one from a project entry would report a
+    // config-wide tag that does not exist.
+    if (!isProject && propertyValue(object, 'tag')) {
       declaresTags = true
     }
     const result: RawSelectors = { testDir: null, match: null, ignore: null }
@@ -416,7 +420,8 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     } else {
       for (const raw of (projects.elements as unknown[]) ?? []) {
         const project = asNode(raw)
-        if (project?.type === 'ObjectExpression') projectSelectors.push(readSelectors(project))
+        if (project?.type === 'ObjectExpression')
+          projectSelectors.push(readSelectors(project, true))
         // A spread inside the array hides entries that may inherit the base root.
         else projectsPartial = true
       }
@@ -455,10 +460,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   }
 
   const unique = [...new Set(unresolved)]
+  // `declaresTags` rides on every branch: Playwright defaults `testDir` to the
+  // config's own directory, so `{ tag: '@e2e', projects: [...] }` with no
+  // testDir is an ordinary config that yields no scopes — and dropping the flag
+  // there put the accusation back exactly one branch over.
   if (scopes.length === 0) {
     return unique.length > 0
-      ? { status: 'unreadable', reason: describeUnresolved(unique) }
-      : { status: 'no-settings' }
+      ? { status: 'unreadable', reason: describeUnresolved(unique), declaresTags }
+      : { status: 'no-settings', declaresTags }
   }
-  return { status: 'ok', settings: { scopes, declaresTags }, unresolved: unique }
+  return { status: 'ok', settings: { scopes, declaresTags }, unresolved: unique, declaresTags }
 }

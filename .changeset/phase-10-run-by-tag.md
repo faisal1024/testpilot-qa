@@ -21,7 +21,8 @@ Run tests by tag, and see what tags exist.
   each tag was declared** (title vs `{ tag: [...] }` — the difference between a vocabulary and
   incidental prose Playwright happens to read as a tag), the untagged count, and each configured
   suite resolved against the real vocabulary. New `--json` contract, `schemaVersion` `1.0`, with its
-  own warning-code union so `analyze`'s `1.7` contract is unchanged.
+  own warning-code union rather than widening `AnalysisWarning`.
+- **`analyze` schema `1.7` → `1.8`:** `discovery` gains `playwrightConfigDeclaresTags`.
 - **`doctor` gains a `suites` check** (`DOCTOR_SCHEMA_VERSION` `1.2`). An empty or malformed suite
   fails; a suite referencing a tag no test carries warns. A typo in `suites` previously ran zero
   tests and exited `0`. When the vocabulary cannot be read completely the check says so rather than

@@ -358,6 +358,53 @@ describe('collectTags', () => {
     })
   })
 
+  it('does not accuse a suite over a describe title it could not read', async () => {
+    write(
+      'tests/a.spec.ts',
+      [
+        "test.describe(GROUP, () => { test('hidden', async () => {}) })",
+        "test('visible', { tag: ['@regression'] }, async () => {})",
+      ].join('\n'),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { n: ['regression'] } }),
+    })
+    expect(report.summary.unreadableTitles).toBe(1)
+    expect(report.summary.vocabularyComplete).toBe(false)
+    expect(report.suites[0]?.matchingTests).toBeNull()
+  })
+
+  it('does not accuse a suite over a details argument it could not read', async () => {
+    write(
+      'tests/a.spec.ts',
+      ["const OPTS = { tag: ['@regression'] }", "test('via variable', OPTS, async () => {})"].join(
+        '\n',
+      ),
+    )
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { n: ['regression'] } }),
+    })
+    expect(report.summary.unreadableTagExpressions).toBe(1)
+    expect(report.summary.vocabularyComplete).toBe(false)
+  })
+
+  it('says the scan was pattern-restricted, so the vocabulary is of a subset', async () => {
+    // The suite lines claim things about `run --suite X`, which never takes
+    // patterns — so a narrowed scan must not read as the whole vocabulary.
+    write('tests/a.spec.ts', "test('1 @regression', async () => {})")
+    write('tests/b.spec.ts', "test('2 @smoke', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { s: ['smoke'] } }),
+      patterns: ['tests/a.spec.ts'],
+    })
+    expect(report.warnings.map((w) => w.code)).toContain('scan-restricted-to-patterns')
+    expect(report.summary.vocabularyComplete).toBe(false)
+    expect(report.suites[0]?.matchingTests).toBeNull()
+  })
+
   it('resolves an all-of suite', async () => {
     write(
       'tests/a.spec.ts',

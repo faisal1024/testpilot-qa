@@ -117,18 +117,16 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
     const extracted = extractTests(program)
     unreadableTagExpressions += extracted.unreadableTagExpressions
     describesNotInlined += extracted.describesNotInlined
+    // From the extractor, not from the declarations: a describe has no
+    // declaration of its own, so deriving these here made its title silent.
+    unreadableTitles += extracted.unreadableTitles
+    dynamicTitles += extracted.dynamicTitles
     if (extracted.tests.length === 0) {
       filesWithNoTests += 1
     }
     for (const declaration of extracted.tests) {
       declarations.push(declaration)
       tests += 1
-      if (declaration.dynamicTitle) {
-        dynamicTitles += 1
-      }
-      if (!declaration.titleKnown) {
-        unreadableTitles += 1
-      }
       if (declaration.effectiveTags.length > 0) {
         taggedTests += 1
       }
@@ -184,7 +182,16 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   if (filesWithNoTests > 0) {
     warnings.push({
       code: 'no-tests-recognized',
-      message: `${filesWithNoTests} file(s) parsed but declared no \`test()\` we recognized. Tests declared through a renamed import (e.g. \`import { test as setup }\`) are not seen, so tags in those files are missing from this vocabulary.`,
+      message: `${filesWithNoTests} file(s) parsed but declared no \`test()\` we recognized — for example a renamed import (\`import { test as setup }\`), or a file whose tests are all commented out. Any tags in those files are missing from this vocabulary.`,
+    })
+  }
+  if (usingPatterns) {
+    // The suite lines below make claims about `run --suite X`, which never
+    // takes patterns — so a vocabulary read from a deliberately narrowed scan
+    // must not be presented as the suite's whole vocabulary.
+    warnings.push({
+      code: 'scan-restricted-to-patterns',
+      message: `Only files matching ${options.patterns?.join(', ')} were scanned, so this is the vocabulary of that subset — not of the whole suite. \`run --suite\` always uses the full suite.`,
     })
   }
   if (options.discovery?.playwrightConfigDeclaresTags) {
@@ -243,6 +250,7 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
     'no-tests-recognized',
     'describe-body-not-inlined',
     'playwright-config-tags',
+    'scan-restricted-to-patterns',
   ])
   const vocabularyComplete =
     unreadableTagExpressions === 0 &&

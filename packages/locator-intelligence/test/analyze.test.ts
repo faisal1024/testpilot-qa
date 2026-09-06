@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.7')
+    expect(report.schemaVersion).toBe('1.8')
     expect(report.summary).toEqual({
       helperFiles: 0,
       helpersNotAnalyzed: 0,

@@ -256,7 +256,16 @@ have caught it, because they compiled the pattern with a bare `new RegExp` — *
 runtime wrong gives confidence proportional to nothing.** The fix is the slash-delimited form, and
 every test now asserts through a copy of Playwright's own `forceRegExp`.
 
-The same round found four blind spots, all the Phase 9 class in new clothing — a partial read
+**One bug, five argument positions.** Reviews 2–5 each reported "a declaration is silently dropped,
+`warnings: []`" — and each time it was the same defect in the next position along: the test title,
+then the test body, then the describe body, then the describe title, then the details argument. I
+fixed each instance as reported. The right move after the second was to enumerate every position the
+extractor reads and make "could not read it" a counted, disclosed outcome in all of them at once,
+which is what the code now does — both branches call one `ownTagsOf`, and the readability counters
+live there rather than being derived per-branch. **When a review reports an instance, look for the
+shape.** Four rounds instead of one is the cost of not doing that.
+
+The same rounds found further blind spots, all the Phase 9 class in new clothing — a partial read
 answering confidently: an empty `--tag ""` running the whole suite; a renamed test import
 (`import { test as setup }`) yielding "no tags found" rather than "we recognized no tests"; unreadable
 `tag` entries dropped silently; and `doctor` narrowing a partially-parsed vocabulary into "that tag

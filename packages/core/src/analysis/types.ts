@@ -139,9 +139,10 @@ export interface AnalysisReport {
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
  * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings
  * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`);
- * 1.7 `inHelper` on findings + `summary.helperFiles`.
+ * 1.7 `inHelper` on findings + `summary.helperFiles`;
+ * 1.8 `discovery.playwrightConfigDeclaresTags`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.7'
+export const ANALYSIS_SCHEMA_VERSION = '1.8'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

@@ -181,13 +181,25 @@ function tagsFromTitle(read: ReadTitle): { tags: string[]; anchored: string[] } 
 }
 
 /** Reads `{ tag: '@a' }` or `{ tag: ['@a', '@b'] }` from a details argument. */
+/**
+ * Reads `{ tag: ... }` from the details argument.
+ *
+ * `arg` is only passed when the call actually has a details position (three or
+ * more arguments), so anything that is not an object literal there is a details
+ * value we cannot read — `test('x', OPTS, fn)` — and counts as unreadable
+ * rather than as "no tags". A spread counts too: `{ ...BASE }` can carry or
+ * override `tag`.
+ */
 function tagsFromDetails(arg: AstNode | undefined): { tags: string[]; unreadable: number } {
-  if (!arg || arg.type !== 'ObjectExpression') {
+  if (!arg) {
     return { tags: [], unreadable: 0 }
+  }
+  if (arg.type !== 'ObjectExpression') {
+    return { tags: [], unreadable: 1 }
   }
   const properties = (arg.properties as AstNode[]) ?? []
   const tags: string[] = []
-  let unreadable = 0
+  let unreadable = properties.some((property) => property.type === 'SpreadElement') ? 1 : 0
   for (const property of properties) {
     if (property.type !== 'Property' || property.computed === true) {
       continue
@@ -300,6 +312,10 @@ interface OwnTags {
   all: string[]
   title: string[]
   details: string[]
+  /** True when a title was expected in this position and could not be read. */
+  titleUnreadable: boolean
+  /** True when the title is a template literal with interpolations. */
+  titleDynamic: boolean
   /**
    * Tags that appear somewhere in a form `--tag` can select. Details-argument
    * tags are always here: Playwright space-joins them onto the grep title.
@@ -308,7 +324,15 @@ interface OwnTags {
   unreadable: number
 }
 
-const EMPTY_TAGS: OwnTags = { all: [], title: [], details: [], anchored: [], unreadable: 0 }
+const EMPTY_TAGS: OwnTags = {
+  all: [],
+  title: [],
+  details: [],
+  anchored: [],
+  unreadable: 0,
+  titleUnreadable: false,
+  titleDynamic: false,
+}
 
 /** Folds an enclosing describe's tags into a test's own, preserving provenance. */
 function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
@@ -320,21 +344,36 @@ function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
     // Only ever read off the declaration itself; a describe's unreadable
     // entries are counted when that describe is visited.
     unreadable: own.unreadable,
+    titleUnreadable: own.titleUnreadable,
+    titleDynamic: own.titleDynamic,
   }
 }
 
-function ownTagsOf(node: AstNode): OwnTags {
+/**
+ * Every tag on one `test()` or `test.describe()` call, with the readability of
+ * each position it read.
+ *
+ * `hasTitle` is false when the first argument carries a title we could not read
+ * at all — a variable, a call. Four review rounds found the same defect in four
+ * different argument positions (test title, test body, describe body, describe
+ * title), each time reported as "silently dropped, no warning". The counters
+ * live here, on one function both branches call, so a position cannot be
+ * disclosed for tests and silent for describes again.
+ */
+function ownTagsOf(node: AstNode, titled: boolean): OwnTags {
   const args = (node.arguments as AstNode[]) ?? []
-  const title = readTitle(args[0])
+  const title = titled ? readTitle(args[0]) : null
   const fromTitle = title ? tagsFromTitle(title) : { tags: [], anchored: [] }
-  // Playwright's details argument is the second positional argument.
-  const fromDetails = tagsFromDetails(args[1])
+  // Playwright's details argument is the second of three or more.
+  const fromDetails = tagsFromDetails(args.length >= 3 ? args[1] : undefined)
   return {
     all: sortedUnique([...fromTitle.tags, ...fromDetails.tags]),
     title: sortedUnique(fromTitle.tags),
     details: sortedUnique(fromDetails.tags),
     anchored: sortedUnique([...fromTitle.anchored, ...fromDetails.tags]),
     unreadable: fromDetails.unreadable,
+    titleUnreadable: titled && title === null,
+    titleDynamic: title?.dynamic === true,
   }
 }
 
@@ -347,6 +386,13 @@ export interface ExtractedTests {
    * the count and the vocabulary are both short by an unknown amount.
    */
   describesNotInlined: number
+  /**
+   * Titles — on a `test()` **or** a `test.describe()` — that could not be read
+   * at all (a variable, a call). Every tag on such a title is invisible.
+   */
+  unreadableTitles: number
+  /** Titles built from a template literal with interpolations, tests and describes alike. */
+  dynamicTitles: number
   /**
    * Every unreadable `tag` entry in the file, on tests **and** describes.
    * File-level because a describe is not a declaration we report, and its
@@ -365,6 +411,8 @@ export function extractTests(program: AstNode): ExtractedTests {
   const declarations: TestDeclaration[] = []
   let unreadableTagExpressions = 0
   let describesNotInlined = 0
+  let unreadableTitles = 0
+  let dynamicTitles = 0
 
   const visit = (node: unknown, inherited: OwnTags): void => {
     if (node === null || typeof node !== 'object') {
@@ -388,10 +436,16 @@ export function extractTests(program: AstNode): ExtractedTests {
     if (candidate.type === 'CallExpression') {
       const kind = classify(candidate)
       if (kind === 'describe') {
-        const own = ownTagsOf(candidate)
-        unreadableTagExpressions += own.unreadable
-        const nested = mergeTags(inherited, own)
         const args = (candidate.arguments as AstNode[]) ?? []
+        // `test.describe(fn)` legitimately has no title; every other form does.
+        const own = ownTagsOf(candidate, !isFunctionNode(args[0]))
+        unreadableTagExpressions += own.unreadable
+        // The describe branch used to record none of this, so a tag on
+        // `test.describe(GROUP, …)` vanished with an empty warnings list while
+        // the identical case on `test()` was disclosed.
+        if (own.titleUnreadable) unreadableTitles += 1
+        if (own.titleDynamic) dynamicTitles += 1
+        const nested = mergeTags(inherited, own)
         if (!args.some(isFunctionNode)) {
           describesNotInlined += 1
         }
@@ -404,8 +458,10 @@ export function extractTests(program: AstNode): ExtractedTests {
       if (kind === 'test') {
         const args = (candidate.arguments as AstNode[]) ?? []
         const title = readTitle(args[0])
-        const own = ownTagsOf(candidate)
+        const own = ownTagsOf(candidate, true)
         unreadableTagExpressions += own.unreadable
+        if (own.titleUnreadable) unreadableTitles += 1
+        if (own.titleDynamic) dynamicTitles += 1
         const effective = mergeTags(inherited, own)
         const loc = candidate.loc as Loc | undefined
         declarations.push({
@@ -437,5 +493,11 @@ export function extractTests(program: AstNode): ExtractedTests {
 
   visit(program, EMPTY_TAGS)
   declarations.sort((a, b) => a.line - b.line || a.column - b.column)
-  return { tests: declarations, unreadableTagExpressions, describesNotInlined }
+  return {
+    tests: declarations,
+    unreadableTagExpressions,
+    describesNotInlined,
+    unreadableTitles,
+    dynamicTitles,
+  }
 }

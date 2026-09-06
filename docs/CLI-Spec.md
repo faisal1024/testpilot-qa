@@ -309,10 +309,14 @@ is the difference between a vocabulary and noise: mattermost's `@abac` (122 test
 | Warning | Meaning |
 |---|---|
 | `dynamic-test-titles` | Titles built from a template literal. Text touching a `${...}` hole is not read at all, because it fuses with the hole at runtime — ``test(`@smoke${x}`)`` is the tag `@smokeX`, not `@smoke`. |
-| `unreadable-tag-expressions` | A `tag` entry that is a spread, a variable, or an interpolated template. Each is at least one tag the suite carries and this list cannot name. |
+| `unreadable-tag-expressions` | A `tag` entry — or a whole details argument — that is a spread, a variable, or an interpolated template. Each is at least one tag the suite may carry and this list cannot name. |
+| `unreadable-test-titles` | A `test()` or `test.describe()` title taken from a variable or expression, so no tag in it can be read. |
+| `test-root-missing` | A declared test directory does not exist, so nothing under it was scanned. |
+| `playwright-config-partial` | The adopted Playwright config was only partly readable, so the scanned file set may not match what Playwright runs. |
+| `scan-restricted-to-patterns` | Explicit patterns narrowed the scan, so this is the vocabulary of that subset. `run --suite` always uses the whole suite. |
 | `no-tests-recognized` | A parsed file declared no `test()` we recognized — usually a renamed import (`import { test as setup }`), which the walk keys on by name. "No tags" would otherwise answer a question that was never asked. |
 | `describe-body-not-inlined` | A `test.describe` whose body is a variable or function reference. The tests inside it are declared elsewhere and cannot be read, nor can the block's tag reach them. |
-| `playwright-config-tags` | The Playwright config declares a `tag` key, which it applies to every test in every file. Those values are not read here. |
+| `playwright-config-tags` | The Playwright config declares a `tag` key (`testConfig.tag`), which it applies to every test in every file. Those values are not read here. |
 | `unselectable-tags` | A tag `--tag` cannot select: the name contains a comma (split on) or leads with `-` (reads as a negation), or the tag only ever appears fused to a word (`user@smoke.example`), which Playwright reads as a tag and the leading boundary deliberately does not. `run -- --grep` reaches these. |
 | `files-not-parsed` | Files that failed to parse contribute no tags. |
 | `no-files-matched` | Discovery matched nothing. Exits `3`/`2` like `analyze` — "no tags" must never be the answer to "we scanned nothing". |
@@ -577,11 +581,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.7`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.8`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.7",
+  "schemaVersion": "1.8",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -641,6 +645,9 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
 can represent, so every message that names a test directory renders these. `inHelper` (1.7) is present only on findings from the helper layer — absent, not `false`, otherwise.
+`playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
+`testConfig.tag`, which Playwright applies to every test — `analyze` does not use it, but `tags`
+cannot claim a complete vocabulary while one is declared.
 `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
@@ -708,7 +715,7 @@ a vocabulary we know is wrong would be worse than no count. Counts are over **se
 occurrences, so they never promise more tests than `--tag` can reach. `warnings[].code` is its **own** union for this command (`no-files-matched`,
 `test-root-missing`, `playwright-config-partial`, `dynamic-test-titles`,
 `unreadable-tag-expressions`, `no-tests-recognized`, `unselectable-tags`); `analyze`'s
-`AnalysisWarning` union is deliberately unchanged, so its `1.7` contract still holds.
+`AnalysisWarning` union is deliberately unchanged — the two commands' warning codes do not mix.
 
 **SARIF (`--reporter sarif`)** is a derived view of the same findings, not a second contract: each
 distinct `ruleId` becomes a SARIF reporting descriptor (with its `helpUri`), and each finding becomes a

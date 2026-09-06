@@ -49,6 +49,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
     expect(read).toEqual({
       status: 'ok',
       unresolved: [],
+      declaresTags: false,
       settings: {
         scopes: [
           {
@@ -74,13 +75,31 @@ describe('readPlaywrightTestSettings — static parsing', () => {
     expect(read.status === 'ok' && read.settings.declaresTags).toBe(true)
   })
 
-  it('reports a project-level `tag` key too', () => {
+  it('does not report a project-level `tag`, which Playwright has no such key for', () => {
+    // `tag` is on TestConfig only (types/test.d.ts). Reporting one from a
+    // project entry would claim a config-wide tag that does not exist.
     const path = writeFile(
       'playwright.config.ts',
       "export default { projects: [{ testDir: './e2e', tag: ['@a'] }] }\n",
     )
     const read = readSettings(path)
-    expect(read.status === 'ok' && read.settings.declaresTags).toBe(true)
+    expect(read.status === 'ok' && read.settings.declaresTags).toBe(false)
+  })
+
+  it('reports a config-level `tag` even when the config declares no testDir', () => {
+    // Playwright defaults testDir to the config's own directory, so this yields
+    // no scopes — and the flag was being dropped on exactly that branch.
+    const path = writeFile('playwright.config.ts', "export default { tag: '@e2e' }\n")
+    expect(readSettings(path).declaresTags).toBe(true)
+  })
+
+  it('does not mistake an unrelated nested `tag` key for a config-level one', () => {
+    const path = writeFile(
+      'playwright.config.ts',
+      "export default { testDir: './e2e', use: { tag: 'nope' } }\n",
+    )
+    const read = readSettings(path)
+    expect(read.status === 'ok' && read.settings.declaresTags).toBe(false)
   })
 
   it('preserves a RegExp testMatch instead of dropping or mistranslating it', () => {
@@ -285,12 +304,13 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     expect(readSettings(path)).toEqual({
       status: 'unreadable',
       reason: 'testDir is not a literal value',
+      declaresTags: false,
     })
   })
 
   it('separates "declares nothing" from "cannot be read"', () => {
     const bare = writeFile('bare/playwright.config.ts', "export default { reporter: 'list' }\n")
-    expect(readSettings(bare)).toEqual({ status: 'no-settings' })
+    expect(readSettings(bare)).toEqual({ status: 'no-settings', declaresTags: false })
   })
 
   it('reports unparseable and absent files without throwing', () => {
@@ -299,6 +319,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     expect(readSettings(join(dir, 'nope.config.ts'))).toEqual({
       status: 'unreadable',
       reason: 'file could not be read',
+      declaresTags: false,
     })
   })
 })
@@ -312,6 +333,7 @@ it('reports a spread as unresolved instead of reading the config as empty', () =
   expect(readSettings(path)).toEqual({
     status: 'unreadable',
     reason: 'it uses a spread from another object',
+    declaresTags: false,
   })
 })
 

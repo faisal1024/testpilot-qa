@@ -258,6 +258,9 @@ export function resolveDiscovery(
 
   const configPath = located.path
   const read = readPlaywrightTestSettings(configPath)
+  // Set before any branch returns: a `tag` key applies to every test whether or
+  // not the config also yielded scopes we could use.
+  discovery.playwrightConfigDeclaresTags = read.declaresTags
   if (read.status === 'no-settings') {
     // Playwright's `testDir` defaults to the config file's own directory, so a config
     // kept in a sub-directory usually IS the suite location — ignoring that sent us
@@ -329,7 +332,6 @@ export function resolveDiscovery(
   discovery.testDir = 'playwright-config'
   discovery.roots = [...new Set(scopes.map((scope) => scope.root))]
   discovery.playwrightConfigPath = configPath
-  discovery.playwrightConfigDeclaresTags = read.settings.declaresTags
   if (adoptedInclude) {
     // Some scopes may still use our own globs (Playwright declared none for them).
     discovery.include = scopes.some((scope) => scope.includeGlobs.length > 0)
