@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   COMPARED_METRICS,
+  deadPatterns,
   diffRepo,
   formatDiff,
   isSignalLoss,
@@ -86,6 +87,37 @@ describe('bench comparison', () => {
       const before = measurement({ filesFromRepoRoot: 61 })
       const after = measurement({ filesFromRepoRoot: 0 })
       expect(formatDiff([before], [after]).signalLoss).toBe(true)
+    })
+
+    it('does not conclude corpus-wide silence from a single-repo run', () => {
+      // `--only` is the fastest iteration loop; firing the gate's scariest message for
+      // an intended one-repo calibration is how the vocabulary stops being believed.
+      const cal = baseline.results.find((result) => result.name === 'cal.com')
+      const quieter = {
+        ...cal,
+        findings: cal.findings - cal.byRule['no-xpath'],
+        byRule: Object.fromEntries(
+          Object.entries(cal.byRule).filter(([rule]) => rule !== 'no-xpath'),
+        ),
+      }
+      expect(formatDiff([cal], [quieter], { corpusWide: false }).signalLoss).toBe(false)
+      expect(formatDiff([cal], [quieter], { corpusWide: true }).signalLoss).toBe(true)
+    })
+
+    it('reports but does not gate silence when new rule ids appeared', () => {
+      // A split explains the silence. Bailing out entirely would switch the check off
+      // for every rule during exactly the phase that introduces new ids.
+      const split = baseline.results.map((result) => ({
+        ...result,
+        byRule: Object.fromEntries(
+          Object.entries(result.byRule).map(([rule, count]) =>
+            rule === 'no-xpath' ? ['avoid-parent-traversal', count] : [rule, count],
+          ),
+        ),
+      }))
+      const diff = formatDiff(baseline.results, split)
+      expect(diff.signalLoss).toBe(false)
+      expect(diff.markdown).toContain('reads as a rule split')
     })
 
     it('flags a rule going silent across the whole corpus', () => {
@@ -206,5 +238,32 @@ describe('bench comparison', () => {
       'callSites',
       'exitCode',
     ])
+  })
+
+  describe('deadPatterns — a sparse pattern that materialized nothing', () => {
+    // The corpus shrinking is invisible on a *new* entry: there is no baseline for it
+    // to fall short of, so this guard is the only thing that objects.
+    const materialized = ['e2e-tests/playwright/spec.ts', 'e2e-tests/playwright/lib/util.ts']
+
+    it('accepts a pattern that materialized files', () => {
+      expect(deadPatterns(['e2e-tests/playwright/'], materialized)).toEqual([])
+    })
+
+    it('flags a pattern present upstream but excluded by the sparse checkout', () => {
+      // The distinction that matters: `.github/` exists in every one of these repos.
+      expect(deadPatterns(['.github/', 'api/'], materialized)).toEqual(['.github/', 'api/'])
+    })
+
+    it('matches at any depth, as non-cone gitignore patterns do', () => {
+      expect(deadPatterns(['lib/'], materialized)).toEqual([])
+    })
+
+    it('handles glob patterns instead of treating any prefix as a match', () => {
+      expect(deadPatterns(['**/*.ts'], materialized)).toEqual([])
+      expect(deadPatterns(['*.py', '**/*.does-not-exist'], materialized)).toEqual([
+        '*.py',
+        '**/*.does-not-exist',
+      ])
+    })
   })
 })

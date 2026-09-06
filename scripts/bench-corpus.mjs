@@ -20,8 +20,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import picomatch from 'picomatch'
-import { formatDiff, refsChanged, validateResults } from './bench-compare.mjs'
+import { deadPatterns, formatDiff, refsChanged, validateResults } from './bench-compare.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const cacheDir = join(root, '.bench-cache')
@@ -92,30 +91,15 @@ function ensureCheckout(repo) {
  * A sparse pattern that matches nothing fails silently and quietly shrinks the corpus,
  * so every pattern must earn its place.
  */
-function deadPatterns(repo, dir) {
-  // `git ls-files -v` marks sparse-excluded entries with a lowercase tag (usually `S`),
-  // so this asks what the checkout actually materialized rather than what exists
-  // upstream — the property the guard is claiming.
-  const materialized = run('git', ['ls-files', '-v'], { cwd: dir })
+function materializedFiles(dir) {
+  // `git ls-files -v` tags each entry: `H` is checked out, `S` is skip-worktree — the
+  // sparse-excluded ones. Both are uppercase (`-v` lowercases only assume-unchanged),
+  // so the tag has to be compared exactly. A case-insensitive test kept `S` too and
+  // made this read the whole upstream tree instead of the checkout.
+  return run('git', ['ls-files', '-v'], { cwd: dir })
     .split('\n')
-    .filter((line) => line && line[0] === line[0]?.toUpperCase())
+    .filter((line) => line.startsWith('H '))
     .map((line) => line.slice(2))
-
-  return repo.sparse.filter((pattern) => {
-    const needle = pattern.replace(/^\//, '').replace(/\/$/, '')
-    if (pattern.includes('*')) {
-      // Non-cone patterns are gitignore-style and match at any depth.
-      const isMatch = picomatch([needle, `**/${needle}`], { dot: true })
-      return !materialized.some((file) => isMatch(file))
-    }
-    return !materialized.some(
-      (file) =>
-        file === needle ||
-        file.startsWith(`${needle}/`) ||
-        file.endsWith(`/${needle}`) ||
-        file.includes(`/${needle}/`),
-    )
-  })
 }
 
 function analyze(dir, extraArgs = []) {
@@ -228,7 +212,7 @@ for (const repo of repos) {
     results.push({ name: repo.name, error: `checkout failed: ${detail}` })
     continue
   }
-  const dead = deadPatterns(repo, dir)
+  const dead = deadPatterns(repo.sparse, materializedFiles(dir))
   if (dead.length > 0) {
     process.stderr.write(`dead sparse pattern(s): ${dead.join(', ')}\n`)
     results.push({
@@ -261,7 +245,7 @@ if (updateBaseline) {
   // the evidence rather than instead of it.
   if (existsSync(baselinePath)) {
     const previous = JSON.parse(readFileSync(baselinePath, 'utf8'))
-    const preview = formatDiff(previous.results, results)
+    const preview = formatDiff(previous.results, results, { corpusWide: true })
     console.log(preview ? `\n${preview.markdown}` : '\nNo change vs the existing baseline.')
     if (preview?.signalLoss && !args.includes('--accept-signal-loss')) {
       die(
@@ -314,7 +298,7 @@ if (unusable.length > 0) {
   process.exit(1)
 }
 
-const diff = formatDiff(baselineResults, results)
+const diff = formatDiff(baselineResults, results, { corpusWide: !only })
 if (!diff) {
   console.log('\nNo change vs baseline.')
   process.exit(0)

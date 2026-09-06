@@ -43,6 +43,9 @@ jobs:
         with:
           path: .bench-cache
           key: bench-corpus-${{ hashFiles('bench/corpus.json') }}
+          # A corpus edit should not force five cold clones and turn a network blip
+          # into a red PR; the stamp check re-checks-out only what actually changed.
+          restore-keys: bench-corpus-
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
       - name: Run the corpus benchmark

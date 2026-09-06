@@ -72,8 +72,10 @@ non-Playwright `.locator()`, or dropping hard waits from the denominator) legiti
 `callSites` and *will* trip the gate. That is deliberate — it is a real change in what the tool sees —
 so explain it in the PR and record the baseline with a reason that says so.
 
-Known gap: `filesAnalyzed` is a count, not a set, so a change that drops five spec files and picks up
-five helper files is invisible. Watch the per-rule rows when discovery changes.
+Known gaps, worth reading the table for rather than trusting the exit code: `filesAnalyzed` and
+`callSites` are counts, not sets, so an equal-sized swap is invisible; findings *rising* is never
+gated (a rule that starts firing on everything ships green with an alarming table); and where a
+finding lands — file, line, rule — is outside the instrument entirely.
 
 - First run clones into `.bench-cache/` (gitignored) and needs the network; later runs reuse it. The
   cache is keyed on the pin *and* the sparse patterns, so editing either re-checks-out.

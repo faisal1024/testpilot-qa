@@ -38,6 +38,8 @@ export const EVIDENCE_METRICS = {
 /** Discovery sources that mean a real config was read; anything else is a fallback. */
 const INFORMED_SOURCES = new Set(['playwright-config', 'testpilot-config', 'mixed'])
 
+import picomatch from 'picomatch'
+
 const warningCounts = (result) => result?.warnings ?? {}
 
 /**
@@ -152,6 +154,29 @@ export function validateResults(results, { recording = true } = {}) {
 }
 
 /**
+ * Sparse patterns that matched none of the files the checkout actually materialized.
+ * A dead pattern silently shrinks the corpus, and the shrinkage is invisible on a
+ * *new* corpus entry — there is no baseline for it to fall short of.
+ */
+export function deadPatterns(patterns, materialized) {
+  return patterns.filter((pattern) => {
+    const needle = pattern.replace(/^\//, '').replace(/\/$/, '')
+    if (pattern.includes('*')) {
+      // Non-cone patterns are gitignore-style: they match at any depth.
+      const isMatch = picomatch([needle, `**/${needle}`], { dot: true })
+      return !materialized.some((file) => isMatch(file))
+    }
+    return !materialized.some(
+      (file) =>
+        file === needle ||
+        file.startsWith(`${needle}/`) ||
+        file.endsWith(`/${needle}`) ||
+        file.includes(`/${needle}/`),
+    )
+  })
+}
+
+/**
  * A rule that fired in every repo that recorded it and now fires nowhere, with no new
  * rule id to account for it. Findings are deliberately not gated — but a rule going
  * completely silent corpus-wide is not calibration, and it has no false-positive
@@ -161,25 +186,32 @@ export function silencedRules(baselineResults, results) {
   const nowByName = new Map(results.map((result) => [result.name, result]))
   const beforeIds = new Set()
   const afterIds = new Set()
-  const candidates = new Map()
   for (const before of baselineResults ?? []) {
     const after = nowByName.get(before.name)
-    if (!after) return []
+    if (!after) return { rules: [], newIds: [] }
     for (const [rule, count] of Object.entries(before.byRule ?? {})) {
       if (count > 0) beforeIds.add(rule)
-      candidates.set(rule, (candidates.get(rule) ?? 0) + count)
     }
     for (const [rule, count] of Object.entries(after.byRule ?? {})) {
       if (count > 0) afterIds.add(rule)
     }
   }
-  // A split introduces new ids; that is progress, not silence.
-  if ([...afterIds].some((rule) => !beforeIds.has(rule))) return []
-  return [...beforeIds].filter((rule) => !afterIds.has(rule)).sort()
+  return {
+    rules: [...beforeIds].filter((rule) => !afterIds.has(rule)).sort(),
+    // A split introduces new ids. That makes silence explicable, so it is reported
+    // rather than gated — bailing out entirely would switch the check off for every
+    // rule during exactly the phase that introduces new ids.
+    newIds: [...afterIds].filter((rule) => !beforeIds.has(rule)).sort(),
+  }
 }
 
 /** Renders the whole comparison as Markdown, or `null` when nothing moved. */
-export function formatDiff(baselineResults, results) {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.corpusWide] Whether `results` covers the whole corpus.
+ *   `--only` runs a subset, where "silent everywhere" cannot be concluded.
+ */
+export function formatDiff(baselineResults, results, { corpusWide = true } = {}) {
   const baseByName = new Map((baselineResults ?? []).map((result) => [result.name, result]))
   const nowByName = new Map(results.map((result) => [result.name, result]))
   const names = [...new Set([...baseByName.keys(), ...nowByName.keys()])]
@@ -200,14 +232,23 @@ export function formatDiff(baselineResults, results) {
       ].join('\n'),
     )
   }
-  const silenced = silencedRules(baselineResults, results)
-  if (silenced.length > 0) {
-    signalLoss = true
-    sections.push(
-      `\n#### ⚠ signal loss — rule(s) silent across the whole corpus\n\n${silenced
-        .map((rule) => `- \`${rule}\` fired in the baseline and fires nowhere now`)
-        .join('\n')}`,
-    )
+  if (corpusWide) {
+    const { rules, newIds } = silencedRules(baselineResults, results)
+    if (rules.length > 0) {
+      // With new rule ids present this is very likely a split, so it is reported and
+      // left for the reviewer rather than gated.
+      const gated = newIds.length === 0
+      if (gated) signalLoss = true
+      sections.push(
+        [
+          `\n#### ${gated ? '⚠ signal loss — ' : ''}rule(s) silent across the whole corpus\n`,
+          ...rules.map((rule) => `- \`${rule}\` fired in the baseline and fires nowhere now`),
+          ...(gated
+            ? []
+            : [`\nNew rule id(s) appeared (${newIds.join(', ')}), so this reads as a rule split.`]),
+        ].join('\n'),
+      )
+    }
   }
   if (sections.length === 0) return null
   return {
