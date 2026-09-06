@@ -654,12 +654,12 @@ but excluded from the score. A rule declares this itself (`RuleMeta.scored: fals
 property of the rule's kind, so a later test-level rule that *does* belong in the score is not
 blocked by the abstraction. Today only `require-test-tag` is unscored: it is per **test**, while the
 score's denominator is locator **call sites**, so scoring it would move the grade for a reason it
-does not measure. The exclusion is named in `--json`, in the table, and in the HTML report — never
-applied silently. `warnings[].code` also gains `test-tag-coverage`, a one-line rollup that
+does not measure. The exclusion is named in `--json`, in the table (in every mode, including
+`--baseline`), and in the HTML report — never applied silently. `warnings[].code` also gains `test-tag-coverage`, a one-line rollup that
 reconciles the flagged count against `testpilot tags`.
 `playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
-`testConfig.tag`, which Playwright applies to every test — `analyze` does not use it, but `tags`
-cannot claim a complete vocabulary while one is declared.
+`testConfig.tag`, which Playwright applies to every test. `tags` cannot claim a complete vocabulary
+while one is declared, and `require-test-tag` abstains entirely — no test in such a suite is untagged.
 `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the

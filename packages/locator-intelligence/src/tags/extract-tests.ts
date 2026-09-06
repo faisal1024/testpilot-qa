@@ -354,7 +354,14 @@ function mergeTags(inherited: OwnTags, own: OwnTags): OwnTags {
     // something was unreadable has to reach the tests inside, or a rule over
     // them cannot know its view is partial.
     unreadable: own.unreadable,
-    inheritedUnreadable: inherited.inheritedUnreadable + inherited.unreadable,
+    // Everything an ancestor could not read, folded down: its `tag` entries AND
+    // its title, which is a tag source in its own right. Carrying only the tag
+    // entries left `test.describe(GROUP, …)` flagging every test inside it as
+    // untagged — the same blind spot one position over, for the fifth time.
+    inheritedUnreadable:
+      inherited.inheritedUnreadable +
+      inherited.unreadable +
+      (inherited.titleUnreadable || inherited.titleDynamic ? 1 : 0),
     titleUnreadable: own.titleUnreadable,
     titleDynamic: own.titleDynamic,
   }

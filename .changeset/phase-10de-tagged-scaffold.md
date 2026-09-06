@@ -21,11 +21,12 @@ Tagged scaffold, tag guidance for AI agents, and an opt-in `require-test-tag` ru
   test, which says nothing about quality. It does not fire on a test whose title could not be read
   statically: that title may well carry a tag, and flagging it would be an accusation based on our
   own blind spot.
-  It also abstains wherever it cannot see: a title or `tag` entry that is not statically readable
-  (its own or an enclosing `test.describe`'s), and any suite whose Playwright config declares a
-  global `testConfig.tag` — which tags every test, so none is untagged. It judges on
-  **selectable** tags, so a tag fused into a word (`user@example.com`) does not count, matching what
-  `testpilot tags` reports as unselectable.
+  It also abstains wherever it cannot see: a title or `tag` entry that is not statically readable —
+  its own **or an enclosing `test.describe`'s, title included** — and any suite whose Playwright
+  config declares a global `testConfig.tag`, which tags every test so none is untagged. It judges on
+  **selectable** tags, so a tag fused into a word (`user@example.com`) does not count; the finding
+  says exactly that ("no tag `--tag` can select"), because such a tag *is* a Playwright tag and
+  `--grep` can reach it.
 - **A one-line coverage rollup** (`warnings[].code: 'test-tag-coverage'`) replaces triaging N
   interleaved `info` lines, and reconciles against `testpilot tags` — which counts more, because it
   includes the tests this rule declines to judge.

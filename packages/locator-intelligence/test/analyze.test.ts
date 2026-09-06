@@ -606,9 +606,62 @@ describe('require-test-tag (opt-in)', () => {
     })
     const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
     expect(rollup?.message).toContain(
-      '1 of 2 readable test declaration(s) carry no tag (50% tagged)',
+      '1 of 2 readable test declaration(s) carry no tag `--tag` can select (50% tagged)',
     )
     expect(rollup?.message).toContain('a further 1 could not be judged')
+  })
+
+  it('does not blame unreadability when the config tags every test', async () => {
+    // A correct abstention explained by a false reason is still a false claim.
+    writeFixture('tests/a.spec.ts', "test('untagged', async ({ page }) => { await page.click() })")
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+      discovery: { ...DEFAULT_DISCOVERY, playwrightConfigDeclaresTags: true },
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('the Playwright config declares a `tag`')
+    expect(rollup?.message).not.toContain('not statically readable')
+  })
+
+  it('never rounds up to 100% while findings remain', async () => {
+    // "100% tagged" beside a non-zero count is the reassuring wrong number a
+    // team would gate on.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        ...Array.from(
+          { length: 399 },
+          (_u, i) => `test('t${i} @smoke', async ({ page }) => { await page.click() })`,
+        ),
+        "test('untagged', async ({ page }) => { await page.click() })",
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const rollup = report.warnings.find((warning) => warning.code === 'test-tag-coverage')
+    expect(rollup?.message).toContain('(99% tagged)')
+  })
+
+  it('abstains on a test inside a describe whose title it could not read', async () => {
+    // The describe title is a tag source; `test.describe(GROUP, …)` hides it.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'const GROUP = "billing @regression"',
+        "test.describe(GROUP, () => { test('inside', async ({ page }) => { await page.click() }) })",
+        'test.describe(`checkout ${SUFFIX}`, () => {',
+        "  test('inside dynamic', async ({ page }) => { await page.click() })",
+        '})',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.filter((f) => f.ruleId === 'require-test-tag')).toHaveLength(0)
   })
 
   it('emits no rollup when the rule is off', async () => {

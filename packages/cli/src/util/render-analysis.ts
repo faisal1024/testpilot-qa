@@ -74,8 +74,11 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
       `${summary.findings} finding(s) in ${summary.filesAnalyzed} file(s) — ` +
         `${error} error, ${warn} warn, ${info} info.`,
     )
-    lines.push(...unscoredNote(summary))
   }
+  // Outside the branches: the score card is printed in every mode, so the note
+  // that some findings are missing from it has to be too. Putting it in the
+  // default branch only left `--baseline` runs — the CI mode — silent.
+  lines.push(...unscoredNote(summary))
 
   if (parseErrors.length > 0) {
     lines.push('')

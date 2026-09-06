@@ -16,7 +16,7 @@ import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
 import { allBuiltinRules, builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
-import { isJudgeable } from './rules/require-test-tag.js'
+import { abstentionFor, requireTestTag } from './rules/require-test-tag.js'
 import type { Rule, TestRule } from './rules/types.js'
 import { computeScore } from './score.js'
 import { extractTests } from './tags/extract-tests.js'
@@ -179,7 +179,8 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   const parseErrors: ParseError[] = []
   let callSites = 0
   let testDeclarations = 0
-  let unjudgeableTests = 0
+  let unreadableTests = 0
+  let configTaggedTests = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
@@ -211,8 +212,11 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       }
       for (const declaration of extractTests(program).tests) {
         testDeclarations += 1
-        if (!isJudgeable(declaration, testContext)) {
-          unjudgeableTests += 1
+        const abstention = abstentionFor(declaration, testContext)
+        if (abstention === 'unreadable') {
+          unreadableTests += 1
+        } else if (abstention === 'config-tags') {
+          configTaggedTests += 1
         }
         for (const { rule, severity } of testRules) {
           const violation = rule.evaluate(declaration, testContext)
@@ -268,19 +272,9 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // cannot triage — and it reconciles against `testpilot tags`, which counts
   // every untagged test including the ones this rule abstains on.
   if (testRules.length > 0 && testDeclarations > 0) {
-    const flagged = findings.filter((finding) => finding.ruleId === 'require-test-tag').length
-    if (flagged > 0 || unjudgeableTests > 0) {
-      const judged = testDeclarations - unjudgeableTests
-      const coverage = judged > 0 ? Math.round(((judged - flagged) / judged) * 100) : 100
-      warnings.push({
-        code: 'test-tag-coverage',
-        message: `require-test-tag: ${flagged} of ${judged} readable test declaration(s) carry no tag (${coverage}% tagged)${
-          unjudgeableTests > 0
-            ? `; a further ${unjudgeableTests} could not be judged — their title or tags are not statically readable, so they are neither flagged here nor counted as tagged. \`testpilot tags\` counts whichever of those it sees as untagged, so its total is the higher of the two.`
-            : '.'
-        }`,
-      })
-    }
+    warnings.push(
+      ...tagCoverageWarning(findings, testDeclarations, unreadableTests, configTaggedTests),
+    )
   }
 
   findings.sort(compareFindings)
@@ -356,4 +350,45 @@ function describeScanned(options: AnalyzeOptions, base: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * One-line `require-test-tag` rollup.
+ *
+ * The abstention *reason* is carried through, because "we could not read it"
+ * and "the config tags everything" are different facts and reporting the first
+ * for the second would be a false explanation of a correct answer.
+ */
+function tagCoverageWarning(
+  findings: Finding[],
+  declarations: number,
+  unreadable: number,
+  configTagged: number,
+): AnalysisWarning[] {
+  if (configTagged > 0) {
+    return [
+      {
+        code: 'test-tag-coverage',
+        message: `${requireTestTag.id} found nothing to flag: the Playwright config declares a \`tag\`, which applies to every test in every file, so no test in this suite is untagged.`,
+      },
+    ]
+  }
+  const flagged = findings.filter((finding) => finding.ruleId === requireTestTag.id).length
+  if (flagged === 0 && unreadable === 0) {
+    return []
+  }
+  const judged = declarations - unreadable
+  // Floor, not round: "100% tagged" printed beside a non-zero flagged count is
+  // exactly the kind of reassuring wrong number a team would gate on.
+  const coverage = judged > 0 ? Math.floor(((judged - flagged) / judged) * 100) : 100
+  return [
+    {
+      code: 'test-tag-coverage',
+      message: `${requireTestTag.id}: ${flagged} of ${judged} readable test declaration(s) carry no tag \`--tag\` can select (${coverage}% tagged)${
+        unreadable > 0
+          ? `; a further ${unreadable} could not be judged — a title or \`tag\` entry, theirs or an enclosing describe's, is not statically readable, so they are neither flagged here nor counted as tagged.`
+          : '.'
+      }`,
+    },
+  ]
 }

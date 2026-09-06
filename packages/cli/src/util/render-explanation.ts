@@ -13,7 +13,9 @@ function indent(text: string): string {
  */
 export function renderExplanationText(explanation: RuleExplanation): string {
   return [
-    `${explanation.id}  [${explanation.defaultSeverity}] ${explanation.category}`,
+    // An opt-in rule must not read as shipping on, in the one place a user asks
+    // "what is this rule?".
+    `${explanation.id}  [${explanation.defaultOff === true ? `off — ${explanation.defaultSeverity} when enabled` : explanation.defaultSeverity}] ${explanation.category}`,
     explanation.title,
     '',
     explanation.summary,

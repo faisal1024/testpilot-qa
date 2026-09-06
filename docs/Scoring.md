@@ -28,7 +28,7 @@ score      = clamp( round( 100 × (1 − penalty / maxPenalty) ), 0, 100 )
   *call site*: on Ghost (95 call-sites, 321 tests) `require-test-tag` alone would turn a `98 (A)`
   into roughly `64 (D)` without a single locator changing. Such rules are **counted** in
   `summary.findings` and reported in full, and **excluded** from `penalty`. `summary.unscoredFindings`
-  and `summary.unscoredRuleIds` name the exclusion, and the table and HTML report both say so — a
+  and `summary.unscoredRuleIds` name the exclusion, and the table (in every mode) and the HTML report both say so — a
   silent adjustment to a number you gate on would be worse than the rule not existing.
   Today exactly one rule is unscored: [`require-test-tag`](rules/require-test-tag.md), which is also
   `off` by default.

@@ -643,3 +643,41 @@ describe('analyze --baseline / --update-baseline', () => {
     expect(stderr).toContain('got none')
   })
 })
+
+describe('unscored findings are disclosed where the reader is', () => {
+  // This note has been added twice after review; without a test it can be
+  // deleted with every gate green.
+  beforeEach(() => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'b.spec.ts'), "test('untagged', async () => {})\n")
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { rules: { 'require-test-tag': 'info' } }\n",
+    )
+  })
+
+  it('names the exclusion in the table', async () => {
+    const { stdout } = await runAnalyze()
+    expect(stdout).toContain('not scored')
+    expect(stdout).toContain('require-test-tag')
+  })
+
+  it('names it in baseline mode too, which is the CI mode', async () => {
+    await runAnalyze(['--baseline', 'bl.json', '--update-baseline'])
+    const { stdout } = await runAnalyze(['--baseline', 'bl.json'])
+    expect(stdout).toContain('not scored')
+  })
+
+  it('names it in the HTML report, which is what gets shared', async () => {
+    await runAnalyze(['--reporter', 'html', '--output', 'r.html'])
+    const html = readFileSync(join(dir, 'r.html'), 'utf8')
+    expect(html).toContain('not scored')
+    expect(html).toContain('require-test-tag')
+  })
+
+  it('says nothing when there is nothing to exclude', async () => {
+    rmSync(join(dir, 'testpilot.config.ts'))
+    const { stdout } = await runAnalyze()
+    expect(stdout).not.toContain('not scored')
+  })
+})
