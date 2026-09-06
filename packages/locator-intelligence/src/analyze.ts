@@ -91,13 +91,14 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const { files, helpers, helperCandidatesRejected } = await resolveFiles({
-    cwd: options.cwd,
-    patterns: options.patterns,
-    config: options.config,
-    rootDir: options.rootDir,
-    scopes: options.scopes,
-  })
+  const { files, helpers, helperCandidatesRejected, helpersNotAnalyzed, helpersNotAnalyzedFiles } =
+    await resolveFiles({
+      cwd: options.cwd,
+      patterns: options.patterns,
+      config: options.config,
+      rootDir: options.rootDir,
+      scopes: options.scopes,
+    })
   // Paths are reported relative to the same base discovery used (see discoveryBase).
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.
@@ -106,6 +107,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
+  if (helpersNotAnalyzed > 0) {
+    warnings.push({
+      code: 'helpers-not-analyzed',
+      message: `${helpersNotAnalyzed} page object/fixture file(s) use Playwright but were not analyzed (${describeFiles(helpersNotAnalyzedFiles, reportBase)}) — Playwright's testMatch does not select them as test files, so this score covers your tests only. Add --with-helpers to include them.`,
+    })
+  }
   if (helperCandidatesRejected > 0) {
     // Not only when *every* candidate was rejected: a layer where one file is admitted
     // and twenty real ones are dropped is the same blindness, one level down.
@@ -217,6 +224,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     summary: {
       filesAnalyzed: files.length,
       helperFiles: helpers.size,
+      helpersNotAnalyzed,
       filesWithParseErrors: parseErrors.length,
       findings: findings.length,
       bySeverity,
@@ -226,6 +234,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     warnings,
     parseErrors,
   }
+}
+
+/** A count nobody can check is a number to be trusted; name enough of it to dispute. */
+function describeFiles(files: string[], base: string): string {
+  const shown = files.slice(0, 3).map((file) => toPosix(relative(base, file)))
+  const rest = files.length - shown.length
+  return rest > 0 ? `${shown.join(', ')}, and ${rest} more` : shown.join(', ')
 }
 
 /** Names what was actually scanned — never `config.testDir`, which discovery may not have used. */

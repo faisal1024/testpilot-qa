@@ -47,6 +47,7 @@ export interface AnalysisWarning {
     | 'playwright-config-ignored'
     | 'test-root-missing'
     | 'helpers-not-recognized'
+    | 'helpers-not-analyzed'
   message: string
   ruleId?: string
 }
@@ -60,6 +61,12 @@ export interface ParseError {
 export interface AnalysisSummary {
   /** How many of `filesAnalyzed` were page objects / fixtures / helpers. */
   helperFiles?: number
+  /**
+   * Page-object / fixture files that use Playwright and were **not** analyzed. Zero
+   * once `--with-helpers` covers them. Recorded so a regression in the disclosure is
+   * visible to the corpus benchmark, not only to a reader.
+   */
+  helpersNotAnalyzed?: number
   /** Files matched for analysis (including any that failed to parse). */
   filesAnalyzed: number
   /** Subset of matched files that could not be parsed. */

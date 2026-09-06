@@ -1,0 +1,39 @@
+name: False positive
+description: A rule flagged something that is fine
+labels: [false-positive]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These are the most useful reports we get. A rule that fires on correct code costs
+        more than a rule that misses something — it teaches people to ignore the output.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id
+      description: The `ruleId` from the report, e.g. `prefer-user-facing-locator`.
+      placeholder: prefer-user-facing-locator
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: The code it flagged
+      description: The smallest snippet that reproduces it. We will turn this into a test case.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is correct as written
+      description: What the rule missed — a test id, a scoped locator, an unavoidable selector.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `npx testpilot-qa --version`.
+    validations:
+      required: true

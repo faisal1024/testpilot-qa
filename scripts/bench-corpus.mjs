@@ -169,6 +169,9 @@ function measure(repo, dir) {
   return {
     name: repo.name,
     exitCode,
+    // Recorded as a number, not as "the warning fired": a probe that regresses from 73
+    // files to 1 still fires, and the warning-count row would stay green.
+    helpersNotAnalyzed: report.summary?.helpersNotAnalyzed ?? 0,
     withHelpers: helpers
       ? { filesAnalyzed: helpers.filesAnalyzed, helperFiles: helpers.helperFiles ?? 0 }
       : null,

@@ -15,6 +15,18 @@ import { CLI_VERSION } from './version.js'
  * dry-run-by-default mechanical locator rewrites) and `add ai` (safe,
  * dry-run-by-default AI guidance regeneration).
  */
+/** Commander shows a subcommand's own options only; these live on the program. */
+const GLOBAL_FLAGS_HELP = `
+Global flags (usable on any command):
+  --json                     Output machine-readable JSON.
+  --config <path>            Path to testpilot.config.ts.
+  --cwd <path>               Run as if in this directory.
+  -y, --yes                  Skip confirmation prompts.
+  -q, --quiet                Only print errors.
+  --verbose                  Explain what was discovered and why.
+  --no-color                 Disable ANSI color.
+  --no-playwright-discovery  Ignore playwright.config.* when discovering tests.`
+
 export function buildProgram(): Command {
   const program = new Command('testpilot')
     .description('A developer-experience layer and project accelerator for Playwright.')
@@ -62,6 +74,7 @@ export function buildProgram(): Command {
       '--update-baseline',
       'Write the current findings to the --baseline path (records, does not gate).',
     )
+    .addHelpText('after', GLOBAL_FLAGS_HELP)
     .action(analyzeCommand)
 
   program
@@ -72,6 +85,7 @@ export function buildProgram(): Command {
       '--with-helpers',
       'Also fix page objects, fixtures and helpers (files Playwright does not run).',
     )
+    .addHelpText('after', GLOBAL_FLAGS_HELP)
     .action(fixCommand)
 
   program
@@ -81,6 +95,7 @@ export function buildProgram(): Command {
       '--strict-guidance',
       'Also check AI guidance files on a project with no testpilot.config.ts.',
     )
+    .addHelpText('after', GLOBAL_FLAGS_HELP)
     .action(doctorCommand)
 
   program

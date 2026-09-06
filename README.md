@@ -357,6 +357,46 @@ the **[release checklist](docs/Release-Checklist.md)**.
 
 ---
 
+## Known limitations (alpha)
+
+Written down because a tool that hides these is worse than one that doesn't have them yet.
+
+- **`prefer-user-facing-locator` over-fires.** It flags every `page.locator()` with a CSS or text
+  selector, including `[data-testid="…"]`, `[role="…"]`, `[aria-label="…"]`, and calls chained off a
+  `getByRole()` parent. On a five-repo survey of real suites it was ~65% of all findings and roughly
+  half of those were wrong. Until it is split into a mechanical rule and a judgement rule, set it to
+  `info` or `off` in `testpilot.config.ts`:
+
+  ```ts
+  rules: { 'prefer-user-facing-locator': 'info' }
+  ```
+
+- **The score is not yet comparable between projects.** The same selectors score differently
+  depending on whether you wrote `page.locator('[data-testid=x]')` or `page.getByTestId('x')`, and a
+  single line can carry two findings. Use it as a trend within one repo, not as a bar between repos.
+  `--baseline` is the honest gate today: it fails on *new* findings and grandfathers what you have.
+- **Selectors built with `${}` are counted but never inspected.** An interpolated selector still
+  counts as a call site — the score's denominator — while no rule can read it. A suite that
+  interpolates heavily can therefore score `100 (A)` over locators the tool never looked at. Fixed in
+  Phase 11.
+- **Some `error`-severity findings are false positives, and silencing the noisy rule does not clear
+  them.** `no-css-class-selector` fires on an escaped `#id`, on a dot inside an attribute *value*
+  (`input[name="meta.subject"]`), and on a test id containing `@`; `no-deep-css-chain` counts
+  combinators across comma-separated selector lists; `no-nth-child` fires on `.nth(1)` but not
+  `.first()`. Setting `prefer-user-facing-locator` to `info` leaves all of these at `error` — set
+  them down too if they are noisy for you.
+- **Accessibility and Maintainability sub-scores are always 100 A.** No rule feeds them yet.
+- **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
+  `analyze` reports the count when they sit in a conventional directory (`pages/`, `page-objects/`,
+  `pageobjects/`, `pom/`, `fixtures/`, `helpers/`, `support/`) — if yours live elsewhere, name them in
+  `includeHelpers`, because nothing will tell you. Add `--with-helpers` to include them in the score.
+- **`no-hard-wait` overlaps `eslint-plugin-playwright`.** If you already run that plugin's
+  `no-wait-for-timeout`, TestPilot adds nothing there — its value is the suite-level score, the
+  brownfield baseline, and the report formats.
+
+Found a rule firing on correct code? That is the most useful bug report we get —
+[open a false-positive issue](https://github.com/faisal1024/testpilot-qa/issues/new?template=false-positive.yml).
+
 ## Documentation
 
 The design and planning docs (the alpha is implemented; these capture the architecture and

@@ -29,6 +29,10 @@ export async function doctorCommand(options: DoctorOptions, command: Command): P
     process.exit(ExitCode.INTERNAL)
   }
 
+  if (globals.verbose && !globals.quiet) {
+    const testDir = report.checks.find((check) => check.id === 'test-directory')
+    console.error(`[testpilot] ${testDir?.message ?? 'no test directory resolved'}`)
+  }
   if (globals.json) {
     console.log(JSON.stringify(report))
   } else if (!globals.quiet) {

@@ -87,6 +87,12 @@ export async function analyzeCommand(
       throw error
     }
     if (!globals.quiet) {
+      // This is the command a brownfield project runs to adopt the gate; a baseline
+      // recorded over a suite whose page objects were never read is exactly the
+      // silence this release exists to end.
+      for (const warning of report.warnings) {
+        console.error(`⚠ ${warning.message}`)
+      }
       console.log(`Baseline written to ${options.baseline} (${report.findings.length} finding(s)).`)
     }
     // Recording a baseline is not a gate.

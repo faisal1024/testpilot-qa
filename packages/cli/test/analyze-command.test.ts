@@ -331,6 +331,27 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(stdout).toContain('page object/helper file(s)')
   })
 
+  it('says the helper layer went unmeasured, rather than scoring the tests in silence', async () => {
+    // Ghost scores 98 A over 95 of its 768 call sites. The number is not wrong; it is
+    // about the wrong files, and the report has to say which.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    mkdirSync(join(dir, 'page-objects'), { recursive: true })
+    writeFileSync(
+      join(dir, 'page-objects', 'login.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const { stdout } = await runAnalyze(['--json'])
+    const report = JSON.parse(stdout)
+    expect(report.warnings.map((w: { code: string }) => w.code)).toContain('helpers-not-analyzed')
+
+    // Silent once you have asked for them.
+    const withHelpers = JSON.parse((await runAnalyze(['--json', '--with-helpers'])).stdout)
+    expect(withHelpers.warnings.map((w: { code: string }) => w.code)).not.toContain(
+      'helpers-not-analyzed',
+    )
+  })
+
   it('cannot let a non-Playwright helper raise the score or flip the gate', async () => {
     // Twice now the gate admitted files that produce no findings but add call sites —
     // the score's denominator — turning a failing --min-score into a passing one.
