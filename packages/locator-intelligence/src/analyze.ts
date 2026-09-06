@@ -13,7 +13,7 @@ import {
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
-import { discoveryBase, resolveTestFiles } from './resolve-files.js'
+import { type FileScope, discoveryBase, resolveTestFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 import { computeScore } from './score.js'
@@ -33,12 +33,8 @@ export interface AnalyzeOptions {
   rootDir?: string
   /** How the files were selected; surfaced verbatim in the report. */
   discovery?: ConfigDiscovery
-  /** Absolute test roots (Playwright suites can declare several via `projects[]`). */
-  roots?: string[]
-  /** Playwright RegExp `testMatch` sources. */
-  matchRegex?: string[]
-  /** Playwright RegExp `testIgnore` sources. */
-  ignoreRegex?: string[]
+  /** Directories to scan with their selectors (see `resolveDiscovery`). */
+  scopes?: FileScope[]
 }
 
 interface EnabledRule {
@@ -99,9 +95,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     patterns: options.patterns,
     config: options.config,
     rootDir: options.rootDir,
-    roots: options.roots,
-    matchRegex: options.matchRegex,
-    ignoreRegex: options.ignoreRegex,
+    scopes: options.scopes,
   })
   // Paths are reported relative to the same base discovery used (see discoveryBase).
   // Always absolute: `rootDir` is part of the report contract and consumers
@@ -115,7 +109,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       code: 'no-files-matched',
       message: usingPatterns
         ? `No test files matched ${options.patterns?.join(', ')}.`
-        : `No test files matched include ${JSON.stringify(options.config.include)} (exclude ${JSON.stringify(options.config.exclude)}) under testDir "${options.config.testDir}".`,
+        : `No test files matched under ${describeScanned(options)}.`,
     })
   }
 
@@ -193,6 +187,15 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     warnings,
     parseErrors,
   }
+}
+
+/** Names what was actually scanned — never `config.testDir`, which discovery may not have used. */
+function describeScanned(options: AnalyzeOptions): string {
+  const roots = options.discovery?.roots ?? []
+  if (roots.length > 0) {
+    return `${roots.join(', ')} (include ${JSON.stringify(options.scopes?.[0]?.includeGlobs ?? options.config.include)})`
+  }
+  return `testDir "${options.config.testDir}" (include ${JSON.stringify(options.config.include)})`
 }
 
 function errorMessage(error: unknown): string {

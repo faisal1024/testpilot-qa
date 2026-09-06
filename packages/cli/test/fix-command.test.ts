@@ -82,6 +82,16 @@ describe('fix — nothing matched', () => {
 })
 
 describe('fix — path base agrees with analyze', () => {
+  it('uses the same base as analyze when a Playwright config supplied the root', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './e2e' }\n")
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "await page.locator('text=Save').click()\n")
+    const { stdout } = await runFix([], ['--json'])
+    // Must match analyze's reported path so the dry-run diff applies from the root.
+    expect(JSON.parse(stdout).files[0].file).toBe('e2e/a.spec.ts')
+  })
+
   it('reports files relative to the config directory when run from a sub-directory', async () => {
     writeSpec('a.spec.ts', "await page.locator('text=Save').click()\n")
     writeFileSync(join(dir, 'testpilot.config.ts'), "export default { testDir: 'tests' }\n")

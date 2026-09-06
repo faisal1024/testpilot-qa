@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { GUIDANCE_VERSION, generateAgentFiles } from '@testpilot/ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DOCTOR_SCHEMA_VERSION, type DoctorReport, runDoctor } from '../src/index.js'
+import { type DoctorReport, runDoctor } from '../src/index.js'
 
 let dir: string
 
@@ -84,6 +84,9 @@ describe('runDoctor', () => {
     expect(check?.status).toBe('pass')
     expect(check?.message).toContain('playwright.config.ts')
     expect(check?.details?.source).toBe('playwright-config')
+    // The label must name what was scanned, not the unused built-in `testDir`.
+    expect(check?.message).toContain('"e2e"')
+    expect(check?.details?.testDir).toBe('e2e')
   })
 
   it('tells a bare project that its testDir is only a built-in default', async () => {
@@ -94,11 +97,40 @@ describe('runDoctor', () => {
     expect(check?.remediation).toContain('testpilot.config.ts')
   })
 
+  it('honors --no-playwright-discovery, so it still predicts analyze', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    mkdirSync(join(dir, 'e2e'))
+    const adopted = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(adopted, 'test-directory')?.status).toBe('pass')
+
+    const opted = await runDoctor({
+      cwd: dir,
+      nodeVersion: NODE_OK,
+      disablePlaywrightFallback: true,
+    })
+    // Without the fallback, `analyze` would look in `tests/` and fail — so must doctor.
+    expect(checkById(opted, 'test-directory')?.status).toBe('warn')
+  })
+
+  it('finds a Playwright config kept in a sub-directory, like discovery does', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'e2e', 'specs'), { recursive: true })
+    writeFileSync(
+      join(dir, 'e2e', 'playwright.config.ts'),
+      "export default { testDir: './specs' }\n",
+    )
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    // Previously: "No Playwright config found" one line above "falls back to e2e/playwright.config.ts".
+    expect(checkById(report, 'playwright-config')?.status).toBe('pass')
+    expect(checkById(report, 'test-directory')?.details?.testDir).toBe(join('e2e', 'specs'))
+  })
+
   it('passes a complete, healthy project', async () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
 
-    expect(report.schemaVersion).toBe(DOCTOR_SCHEMA_VERSION)
+    expect(report.schemaVersion).toBe('1.1')
     expect(report.command).toBe('doctor')
     expect(report.status).toBe('pass')
     expect(report.checks.every((check) => check.status === 'pass')).toBe(true)

@@ -152,6 +152,7 @@ describe('analyze — nothing matched is never a pass', () => {
       testDir: 'playwright-config',
       include: 'playwright-config',
       exclude: 'default',
+      roots: [join(dir, 'e2e')],
       playwrightConfigPath: join(dir, 'playwright.config.ts'),
       playwrightConfigIgnored: null,
     })
@@ -163,6 +164,7 @@ describe('analyze — nothing matched is never a pass', () => {
       testDir: 'default',
       include: 'default',
       exclude: 'default',
+      roots: [join(dir, 'tests')],
       playwrightConfigPath: null,
       playwrightConfigIgnored: null,
     })
@@ -171,6 +173,7 @@ describe('analyze — nothing matched is never a pass', () => {
   it('explains where discovery settings came from under --verbose', async () => {
     const { stderr } = await runAnalyze(['--verbose'])
     expect(stderr).toContain('discovery: testDir "tests" (built-in default)')
+    expect(stderr).toContain('include (built-in default)')
   })
 
   it("says on stderr when another tool's config chose the files", async () => {
@@ -183,7 +186,7 @@ describe('analyze — nothing matched is never a pass', () => {
     writeFileSync(join(dir, 'e2e', 'a.e2e.ts'), "page.locator('//button')\n")
     const { stderr, exitCode } = await runAnalyze([])
     expect(exitCode).toBeUndefined()
-    expect(stderr).toContain('Using testDir/include from')
+    expect(stderr).toContain('Scanning e2e from')
     expect(stderr).toContain('playwright.config.ts')
   })
 
@@ -207,7 +210,41 @@ describe('analyze — nothing matched is never a pass', () => {
     const { stderr, exitCode } = await runAnalyze([])
     expect(exitCode).toBe(3)
     expect(stderr).toContain('but not used for discovery')
-    expect(stderr).toContain('computed, not a literal')
+    expect(stderr).toContain('not a literal value')
+  })
+
+  it('never analyzes node_modules, even when the config replaces exclude', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { testDir: '.', exclude: ['**/nope/**'] }\n",
+    )
+    mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'dep', 'a.spec.ts'), "page.locator('//button')\n")
+    const { stdout } = await runAnalyze(['--json'])
+    const report = JSON.parse(stdout)
+    expect(report.findings.every((f: { file: string }) => !f.file.includes('node_modules'))).toBe(
+      true,
+    )
+  })
+
+  it('keeps reported paths inside rootDir when a Playwright testDir escapes it', async () => {
+    // A sub-directory config with `testDir: '../shared'` would otherwise emit `../`
+    // SARIF URIs, which GitHub code scanning rejects.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'repo'), { recursive: true })
+    mkdirSync(join(dir, 'shared'), { recursive: true })
+    writeFileSync(join(dir, 'shared', 'a.spec.ts'), "page.locator('//button')\n")
+    writeFileSync(
+      join(dir, 'repo', 'playwright.config.ts'),
+      "export default { testDir: '../shared' }\n",
+    )
+    writeFileSync(join(dir, 'repo', 'package.json'), '{"name":"inner"}\n')
+    const { stdout } = await runAnalyze(['--json', '--cwd', join(dir, 'repo')])
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0].file).not.toContain('..')
+    expect(report.findings[0].file).toBe('shared/a.spec.ts')
   })
 
   it('analyzes an explicitly named file inside an excluded directory', async () => {

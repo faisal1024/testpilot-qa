@@ -8,18 +8,23 @@ const ALWAYS_IGNORED = ['**/node_modules/**']
 /** Candidate set when a Playwright RegExp `testMatch` decides membership. */
 const ANY_SOURCE_FILE = ['**/*.{ts,tsx,js,jsx,mjs,cjs}']
 
+/** One directory to scan with the selectors that apply to it (see `resolveDiscovery`). */
+export interface FileScope {
+  root: string
+  includeGlobs: string[]
+  matchRegex: string[]
+  excludeGlobs: string[]
+  ignoreRegex: string[]
+}
+
 export interface ResolveFilesOptions {
   cwd: string
   patterns?: string[]
   config: TestPilotConfig
   /** Anchor for config-driven discovery — see {@link discoveryBase}. */
   rootDir?: string
-  /** Absolute test roots; defaults to `<discoveryBase>/<config.testDir>`. */
-  roots?: string[]
-  /** Playwright RegExp `testMatch` sources, matched against the absolute path. */
-  matchRegex?: string[]
-  /** Playwright RegExp `testIgnore` sources. */
-  ignoreRegex?: string[]
+  /** Scopes to scan; defaults to one built from `config` under `<discoveryBase>/<testDir>`. */
+  scopes?: FileScope[]
 }
 
 interface SplitPatterns {
@@ -92,43 +97,49 @@ function compile(sources: string[] | undefined): RegExp[] {
 export async function resolveTestFiles(options: ResolveFilesOptions): Promise<string[]> {
   const { cwd, patterns, config } = options
   const usingPatterns = patterns !== undefined && patterns.length > 0
-  const matchRegex = compile(options.matchRegex)
-  const ignoreRegex = compile(options.ignoreRegex)
-
-  const roots = usingPatterns
-    ? [cwd]
-    : options.roots && options.roots.length > 0
-      ? options.roots
-      : [resolve(discoveryBase(cwd, patterns, options.rootDir), config.testDir)]
-
   const matches: string[] = []
+
+  // `ALWAYS_IGNORED` is unconditional: `exclude` replaces its default when the user
+  // sets it, and nothing — least of all `fix --write` — may touch dependency code.
   const run = async (base: string, globs: string[], ignore: string[]) => {
-    if (globs.length === 0) return
-    matches.push(...(await glob(globs, { cwd: base, absolute: true, ignore })))
+    if (globs.length === 0) return []
+    return glob(globs, { cwd: base, absolute: true, ignore: [...ALWAYS_IGNORED, ...ignore] })
   }
 
   if (usingPatterns) {
     const { literal, expanded } = splitPatterns(cwd, patterns, config.include)
-    await run(cwd, literal, ALWAYS_IGNORED)
-    await run(cwd, expanded, config.exclude)
-  } else {
-    for (const base of roots) {
-      await run(base, config.include, config.exclude)
-      if (matchRegex.length > 0) {
-        const candidates = await glob(ANY_SOURCE_FILE, {
-          cwd: base,
-          absolute: true,
-          ignore: config.exclude,
-        })
-        matches.push(...candidates.filter((file) => matchRegex.some((re) => re.test(file))))
-      }
-    }
+    matches.push(...(await run(cwd, literal, [])))
+    matches.push(...(await run(cwd, expanded, config.exclude)))
+    return [...new Set(matches)].sort()
   }
 
-  const unique = [...new Set(matches)]
-  const kept =
-    ignoreRegex.length === 0
-      ? unique
-      : unique.filter((file) => !ignoreRegex.some((re) => re.test(file)))
-  return kept.sort()
+  const scopes: FileScope[] = options.scopes?.length
+    ? options.scopes
+    : [
+        {
+          root: resolve(discoveryBase(cwd, patterns, options.rootDir), config.testDir),
+          includeGlobs: config.include,
+          matchRegex: [],
+          excludeGlobs: config.exclude,
+          ignoreRegex: [],
+        },
+      ]
+
+  for (const scope of scopes) {
+    const ignoreRegex = compile(scope.ignoreRegex)
+    const matchRegex = compile(scope.matchRegex)
+    const found = [...(await run(scope.root, scope.includeGlobs, scope.excludeGlobs))]
+    if (matchRegex.length > 0) {
+      const candidates = await run(scope.root, ANY_SOURCE_FILE, scope.excludeGlobs)
+      found.push(...candidates.filter((file) => matchRegex.some((re) => re.test(file))))
+    }
+    // A scope's ignores apply only to that scope's files, as Playwright scopes them.
+    matches.push(
+      ...(ignoreRegex.length === 0
+        ? found
+        : found.filter((file) => !ignoreRegex.some((re) => re.test(file)))),
+    )
+  }
+
+  return [...new Set(matches)].sort()
 }

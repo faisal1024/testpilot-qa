@@ -60,9 +60,7 @@ export async function analyzeCommand(
     config,
     patterns: patterns.length > 0 ? patterns : undefined,
     rootDir: resolved.rootDir,
-    roots: resolved.roots,
-    matchRegex: resolved.matchRegex,
-    ignoreRegex: resolved.ignoreRegex,
+    scopes: resolved.scopes,
     discovery,
   })
   const noFilesMatched = report.summary.filesAnalyzed === 0

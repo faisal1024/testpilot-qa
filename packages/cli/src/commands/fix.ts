@@ -50,18 +50,14 @@ export async function fixCommand(
     patterns: explicitPatterns,
     config,
     rootDir,
-    roots: resolved.roots,
-    matchRegex: resolved.matchRegex,
-    ignoreRegex: resolved.ignoreRegex,
+    scopes: resolved.scopes,
   })
   if (files.length === 0) {
     failNoFilesMatched(globals, patterns, config, filepath, discovery)
   }
-  // Display paths use the same base as `analyze` reports, so the two agree.
-  const displayBase =
-    resolved.roots.length === 1 && !explicitPatterns
-      ? (resolved.roots[0] ?? rootDir)
-      : discoveryBase(globals.cwd, explicitPatterns, rootDir)
+  // Exactly the base `analyze` reports against, so the two commands agree and a
+  // dry-run diff still applies from the project root.
+  const displayBase = discoveryBase(globals.cwd, explicitPatterns, rootDir)
 
   const results: FileFixSummary[] = []
   const diffs: string[] = []

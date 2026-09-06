@@ -12,7 +12,11 @@ import {
 import { type ConfigDiscovery, DEFAULT_DISCOVERY } from '../config/discovery.js'
 import { ConfigError } from '../config/errors.js'
 import { loadConfig } from '../config/load-config.js'
-import { resolveDiscovery } from '../config/resolve-discovery.js'
+import {
+  describeRoots,
+  findPlaywrightConfigNearby,
+  resolveDiscovery,
+} from '../config/resolve-discovery.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
 import {
   findPlaywrightConfig,
@@ -59,6 +63,8 @@ export interface DoctorReport {
 export interface DoctorOptions {
   cwd: string
   configPath?: string
+  /** Skip the Playwright-config fallback, so `doctor` matches `--no-playwright-discovery`. */
+  disablePlaywrightFallback?: boolean
   /**
    * Check AI guidance files even when the project has no `testpilot.config.ts`.
    * Off by default: `doctor` is useful on a repo you're only evaluating, and
@@ -148,10 +154,13 @@ function checkPlaywrightConfig(configPath: string | null): DoctorCheck {
 }
 
 function checkTestDirectory(
-  testDir: string,
   exists: boolean,
   discovery: ConfigDiscovery,
+  rootDir: string,
 ): DoctorCheck {
+  // Always name what discovery actually resolved. `config.testDir` is not it when
+  // the Playwright config supplied the roots, or when there are several.
+  const testDir = describeRoots(discovery.roots, rootDir)
   // Naming the source turns "was not found" from a puzzle into an instruction.
   const source =
     discovery.testDir === 'playwright-config'
@@ -356,10 +365,13 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     const result = await loadConfig({ cwd, configPath: options.configPath })
     configFilePresent = result.filepath !== null
     configDir = result.filepath === null ? null : dirname(result.filepath)
-    const resolved = resolveDiscovery(result, { rootDir: configDir ?? projectRoot })
+    const resolved = resolveDiscovery(result, {
+      rootDir: configDir ?? projectRoot,
+      disablePlaywrightFallback: options.disablePlaywrightFallback,
+    })
     config = resolved.config
     discovery = resolved.discovery
-    roots = resolved.roots
+    roots = resolved.discovery.roots
     configCheck = {
       id: 'config',
       title: 'TestPilot config',
@@ -382,14 +394,14 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     }
   }
 
-  const playwrightConfigPath = findPlaywrightConfig(projectRoot, config.playwrightConfig)
+  // The same lookup discovery uses, or `doctor` warns "no Playwright config" one line
+  // after naming the one discovery just read.
+  const located = findPlaywrightConfigNearby(configDir ?? projectRoot, config.playwrightConfig)
+  const playwrightConfigPath = located && 'path' in located ? located.path : null
   // Resolve testDir exactly as `analyze`/`fix` do (see resolveRootDir in the CLI):
   // the config file's directory, else the project root. `doctor` must predict what
   // `analyze` will do, so these two fallbacks have to stay in step.
-  const testDirExists =
-    roots.length > 0
-      ? roots.every((root) => isDirectory(root))
-      : isDirectory(join(configDir ?? projectRoot, config.testDir))
+  const testDirExists = roots.every((root) => isDirectory(root))
 
   const checks: DoctorCheck[] = [
     checkNodeVersion(nodeVersion),
@@ -397,7 +409,7 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     checkPlaywrightInstalled(resolvePlaywrightBin(projectRoot)),
     checkPlaywrightConfig(playwrightConfigPath),
     configCheck,
-    checkTestDirectory(config.testDir, testDirExists, discovery),
+    checkTestDirectory(testDirExists, discovery, configDir ?? projectRoot),
     checkIncludeGlobs(config.include),
     ...(discovery.playwrightConfigIgnored ? [checkPlaywrightDiscovery(discovery)] : []),
     checkProjectStructure(configFilePresent, playwrightConfigPath !== null, testDirExists),

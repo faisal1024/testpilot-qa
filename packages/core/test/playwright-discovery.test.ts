@@ -49,9 +49,13 @@ describe('readPlaywrightTestSettings — static parsing', () => {
       status: 'ok',
       unresolved: [],
       settings: {
-        testDirs: [join(dir, 'e2e')],
-        testMatch: [{ kind: 'glob', value: '**/*.e2e.ts' }],
-        testIgnore: [],
+        scopes: [
+          {
+            root: join(dir, 'e2e'),
+            match: [{ kind: 'glob', value: '**/*.e2e.ts' }],
+            ignore: [],
+          },
+        ],
       },
     })
   })
@@ -65,7 +69,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
     const read = readSettings(path)
     expect(read.status).toBe('ok')
     if (read.status !== 'ok') return
-    expect(read.settings.testMatch).toEqual([
+    expect(read.settings.scopes[0]?.match).toEqual([
       { kind: 'regex', source: '.*\\.e2e-spec\\.ts', flags: '' },
     ])
   })
@@ -86,11 +90,11 @@ export default defineConfig({
     const read = readSettings(path)
     expect(read.status).toBe('ok')
     if (read.status !== 'ok') return
-    expect(read.settings.testDirs).toEqual([
+    expect(read.settings.scopes.map((scope) => scope.root)).toEqual([
       join(dir, 'apps/web/playwright'),
       join(dir, 'apps/api/playwright'),
     ])
-    expect(read.settings.testMatch).toHaveLength(2)
+    expect(read.settings.scopes[0]?.match).toHaveLength(1)
   })
 
   it('unwraps defineConfig() and `export default config`', () => {
@@ -106,7 +110,7 @@ export default defineConfig({
       const read = readSettings(path)
       expect(read.status, path).toBe('ok')
       if (read.status !== 'ok') continue
-      expect(read.settings.testDirs).toHaveLength(1)
+      expect(read.settings.scopes).toHaveLength(1)
     }
   })
 
@@ -126,7 +130,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     const read = readSettings(path)
     expect(read.status).toBe('ok')
     if (read.status !== 'ok') return
-    expect(read.settings.testDirs).toEqual([join(dir, 'e2e')])
+    expect(read.settings.scopes[0]?.root).toBe(join(dir, 'e2e'))
     expect(() => rmSync(sentinel)).toThrow() // the side effect never ran
   })
 
@@ -137,7 +141,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     )
     expect(readSettings(path)).toEqual({
       status: 'unreadable',
-      reason: 'testDir is computed, not a literal',
+      reason: 'testDir is not a literal value',
     })
   })
 
@@ -156,13 +160,68 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
   })
 })
 
+it('reports a spread as unresolved instead of reading the config as empty', () => {
+  // The standard shared-base monorepo shape: keys we cannot see must not look absent.
+  const path = writeFile(
+    'playwright.config.ts',
+    "import base from './base'\nexport default { ...base, reporter: 'list' }\n",
+  )
+  expect(readSettings(path)).toEqual({
+    status: 'unreadable',
+    reason: 'a spread from another object is not a literal value',
+  })
+})
+
+it('reads a CommonJS module.exports config', () => {
+  const path = writeFile(
+    'playwright.config.cjs',
+    "const { defineConfig } = require('@playwright/test')\nmodule.exports = defineConfig({ testDir: 'e2e' })\n",
+  )
+  const read = readSettings(path)
+  expect(read.status).toBe('ok')
+  if (read.status !== 'ok') return
+  expect(read.settings.scopes[0]?.root).toBe(join(dir, 'e2e'))
+})
+
+it('defaults a scope root to the config directory, as Playwright does', () => {
+  const path = writeFile(
+    'e2e/playwright.config.ts',
+    "export default { testMatch: '**/*.e2e.ts' }\n",
+  )
+  const read = readSettings(path)
+  expect(read.status).toBe('ok')
+  if (read.status !== 'ok') return
+  expect(read.settings.scopes[0]?.root).toBe(join(dir, 'e2e'))
+})
+
+it('gives each project its own selectors, inheriting the top level', () => {
+  const path = writeFile(
+    'playwright.config.ts',
+    `export default {
+  testMatch: '**/*.spec.ts',
+  projects: [
+    { name: 'web', testDir: './web' },
+    { name: 'embeds', testDir: './embeds', testIgnore: '**/legacy/**' },
+  ],
+}
+`,
+  )
+  const read = readSettings(path)
+  expect(read.status).toBe('ok')
+  if (read.status !== 'ok') return
+  const [web, embeds] = read.settings.scopes
+  expect(web?.match).toEqual([{ kind: 'glob', value: '**/*.spec.ts' }]) // inherited
+  expect(web?.ignore).toEqual([]) // NOT the sibling project's ignore
+  expect(embeds?.ignore).toEqual([{ kind: 'glob', value: '**/legacy/**' }])
+})
+
 describe('resolveDiscovery', () => {
   it('adopts a Playwright suite when there is no testpilot.config.ts', async () => {
     writeFile('playwright.config.ts', "export default { testDir: 'e2e', testMatch: '*.e2e.ts' }\n")
     const resolved = await resolveIn(dir)
-    expect(resolved.roots).toEqual([join(dir, 'e2e')])
+    expect(resolved.discovery.roots).toEqual([join(dir, 'e2e')])
     // A bare pattern must match at any depth, as Playwright matches it.
-    expect(resolved.config.include).toEqual(['**/*.e2e.ts'])
+    expect(resolved.scopes[0]?.includeGlobs).toEqual(['**/*.e2e.ts'])
     expect(resolved.discovery.testDir).toBe('playwright-config')
     expect(resolved.discovery.include).toBe('playwright-config')
     expect(resolved.discovery.playwrightConfigPath).toBe(join(dir, 'playwright.config.ts'))
@@ -182,14 +241,16 @@ describe('resolveDiscovery', () => {
       '**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}',
     ])
     expect(resolved.discovery.include).toBe('default')
-    expect(resolved.roots).toEqual([])
+    expect(resolved.discovery.roots).toEqual([join(dir, 'tests')])
+    // An explicit testDir makes adoption impossible, so nothing is reported as ignored.
+    expect(resolved.discovery.playwrightConfigIgnored).toBeNull()
   })
 
   it('is skipped entirely when the user opts out', async () => {
     writeFile('playwright.config.ts', "export default { testDir: 'e2e' }\n")
     const resolved = await resolveIn(dir, { disable: true })
     expect(resolved.discovery.playwrightConfigPath).toBeNull()
-    expect(resolved.roots).toEqual([])
+    expect(resolved.discovery.testDir).toBe('default')
   })
 
   it('appends testIgnore globs to exclude and keeps RegExp ignores separate', async () => {
@@ -198,9 +259,8 @@ describe('resolveDiscovery', () => {
       "export default { testDir: 'e2e', testIgnore: ['legacy/**', /fixtures/] }\n",
     )
     const resolved = await resolveIn(dir)
-    expect(resolved.config.exclude).toContain('**/node_modules/**')
-    expect(resolved.config.exclude).toContain('**/legacy/**')
-    expect(resolved.ignoreRegex).toEqual(['fixtures'])
+    expect(resolved.scopes[0]?.excludeGlobs).toContain('**/legacy/**')
+    expect(resolved.scopes[0]?.ignoreRegex).toEqual(['fixtures'])
     expect(resolved.discovery.exclude).toBe('playwright-config')
   })
 
@@ -208,7 +268,7 @@ describe('resolveDiscovery', () => {
     writeFile('e2e/playwright.config.ts', "export default { testDir: './src/specs' }\n")
     const resolved = await resolveIn(dir)
     expect(resolved.discovery.playwrightConfigPath).toBe(join(dir, 'e2e/playwright.config.ts'))
-    expect(resolved.roots).toEqual([resolve(dir, 'e2e/src/specs')])
+    expect(resolved.discovery.roots).toEqual([resolve(dir, 'e2e/src/specs')])
   })
 
   it('refuses to guess when several sub-directories have a Playwright config', async () => {
@@ -217,6 +277,8 @@ describe('resolveDiscovery', () => {
     const resolved = await resolveIn(dir)
     expect(resolved.discovery.playwrightConfigPath).toBeNull()
     expect(resolved.discovery.testDir).toBe('default')
+    // Refusing to guess is fine; refusing silently is not.
+    expect(resolved.discovery.playwrightConfigIgnored?.reason).toContain('several sub-directories')
   })
 
   it('records why a Playwright config was found but not used', async () => {
@@ -225,7 +287,7 @@ describe('resolveDiscovery', () => {
     expect(resolved.discovery.playwrightConfigPath).toBeNull()
     expect(resolved.discovery.playwrightConfigIgnored).toEqual({
       path: join(dir, 'playwright.config.ts'),
-      reason: 'testDir is computed, not a literal',
+      reason: 'testDir is not a literal value',
     })
   })
 
@@ -234,7 +296,7 @@ describe('resolveDiscovery', () => {
     writeFile('testpilot.config.ts', 'export default { testDir: undefined }\n')
     const resolved = await resolveIn(dir)
     expect(resolved.discovery.testDir).toBe('playwright-config')
-    expect(resolved.roots).toEqual([join(dir, 'e2e')])
+    expect(resolved.discovery.roots).toEqual([join(dir, 'e2e')])
   })
 
   it('reports built-in defaults when there is no Playwright config at all', async () => {
@@ -244,8 +306,28 @@ describe('resolveDiscovery', () => {
       testDir: 'default',
       include: 'default',
       exclude: 'default',
+      roots: [join(dir, 'tests')],
       playwrightConfigPath: null,
       playwrightConfigIgnored: null,
     })
+  })
+
+  it("keeps the user's exclude provenance when it only appends a Playwright ignore", async () => {
+    writeFile(
+      'playwright.config.ts',
+      "export default { testDir: 'e2e', testIgnore: '**/theirs/**' }\n",
+    )
+    writeFile('testpilot.config.ts', "export default { exclude: ['**/mine/**'] }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.exclude).toBe('testpilot-config')
+    expect(resolved.scopes[0]?.excludeGlobs).toEqual(
+      expect.arrayContaining(['**/mine/**', '**/theirs/**']),
+    )
+  })
+
+  it('marks exclude as Playwright-sourced when only a RegExp testIgnore filtered', async () => {
+    writeFile('playwright.config.ts', "export default { testDir: 'e2e', testIgnore: /slow/ }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.exclude).toBe('playwright-config')
   })
 })

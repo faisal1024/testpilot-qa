@@ -1,10 +1,12 @@
 import { dirname } from 'node:path'
+import { relative, resolve, sep } from 'node:path'
 import {
   type ConfigDiscovery,
   ConfigError,
   type LoadConfigResult,
   type ResolvedDiscovery,
   type TestPilotConfig,
+  describeRoots,
   findProjectRoot,
   formatDiscoverySource,
   loadConfig,
@@ -47,6 +49,7 @@ export function resolveRootDir(cwd: string, filepath: string | null): string {
 
 export interface DiscoveryResult extends ResolvedDiscovery {
   filepath: string | null
+  /** Base every reported path is relative to; encloses every scanned root. */
   rootDir: string
 }
 
@@ -61,20 +64,48 @@ export async function resolveDiscoveryOrExit(
   patterns: string[],
 ): Promise<DiscoveryResult> {
   const loaded = await resolveConfigOrExit(globals)
-  const rootDir = resolveRootDir(globals.cwd, loaded.filepath)
+  const configRoot = resolveRootDir(globals.cwd, loaded.filepath)
   const resolved = resolveDiscovery(loaded, {
-    rootDir,
+    rootDir: configRoot,
     disablePlaywrightFallback: patterns.length > 0 || globals.playwrightDiscovery === false,
   })
-  announceDiscovery(globals, resolved.config, resolved.discovery)
+  // A Playwright `testDir` may point outside the config's directory. Reported paths
+  // must stay inside `rootDir` — `../` segments make SARIF unusable to code scanning
+  // — so anchor at the common ancestor of everything actually scanned.
+  const rootDir = commonAncestor([configRoot, ...resolved.discovery.roots])
+  announceDiscovery(globals, resolved.config, resolved.discovery, rootDir)
   return { ...resolved, filepath: loaded.filepath, rootDir }
 }
 
-/** One-line, human-readable account of where discovery settings came from. */
-export function describeDiscovery(config: TestPilotConfig, discovery: ConfigDiscovery): string {
+/** Deepest directory containing every path given. */
+function commonAncestor(paths: string[]): string {
+  const split = paths.filter(Boolean).map((path) => resolve(path).split(sep))
+  const first = split[0]
+  if (!first) return process.cwd()
+  const shared: string[] = []
+  for (let i = 0; i < first.length; i += 1) {
+    const segment = first[i]
+    if (!split.every((parts) => parts[i] === segment)) break
+    shared.push(segment as string)
+  }
+  return shared.join(sep) || sep
+}
+
+/**
+ * One-line, human-readable account of where discovery settings came from. Names the
+ * directories actually scanned, never `config.testDir` — which a Playwright-sourced
+ * run does not use, and which several `projects[]` roots cannot be squeezed into.
+ */
+export function describeDiscovery(
+  config: TestPilotConfig,
+  discovery: ConfigDiscovery,
+  rootDir: string,
+): string {
+  const scanned =
+    discovery.roots.length > 0 ? describeRoots(discovery.roots, rootDir) : `${config.testDir}`
   const parts = [
-    `testDir "${config.testDir}" (${formatDiscoverySource(discovery, 'testDir')})`,
-    `include ${JSON.stringify(config.include)} (${formatDiscoverySource(discovery, 'include')})`,
+    `testDir "${scanned}" (${formatDiscoverySource(discovery, 'testDir')})`,
+    `include (${formatDiscoverySource(discovery, 'include')})`,
   ]
   if (discovery.exclude !== 'default') {
     parts.push(`exclude (${formatDiscoverySource(discovery, 'exclude')})`)
@@ -91,18 +122,20 @@ function announceDiscovery(
   globals: GlobalOptions,
   config: TestPilotConfig,
   discovery: ConfigDiscovery,
+  rootDir: string,
 ): void {
   if (globals.quiet) return
   if (globals.verbose) {
-    console.error(`[testpilot] ${describeDiscovery(config, discovery)}`)
+    console.error(`[testpilot] ${describeDiscovery(config, discovery, rootDir)}`)
   }
   if (discovery.playwrightConfigPath && !globals.verbose) {
     console.error(
-      `[testpilot] Using testDir/include from ${discovery.playwrightConfigPath} (no testpilot.config.ts setting for them).`,
+      `[testpilot] Scanning ${describeRoots(discovery.roots, rootDir)} from ${discovery.playwrightConfigPath} (no testpilot.config.ts setting for testDir).`,
     )
   }
   if (discovery.playwrightConfigIgnored) {
     const { path, reason } = discovery.playwrightConfigIgnored
-    console.error(`[testpilot] Ignored ${path} for discovery: ${reason}.`)
+    const verb = discovery.playwrightConfigPath ? 'Partially read' : 'Ignored'
+    console.error(`[testpilot] ${verb} ${path} for discovery: ${reason}.`)
   }
 }

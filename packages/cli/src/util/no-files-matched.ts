@@ -50,7 +50,7 @@ export function failNoFilesMatched(
   fail(
     globals,
     [
-      `No test files matched ${includeHint} under testDir "${config.testDir}" (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
+      `No test files matched ${includeHint} under ${discovery.roots.length > 0 ? discovery.roots.join(', ') : `testDir "${config.testDir}"`} (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
       ...(discovery.playwrightConfigIgnored
         ? [
             `A Playwright config was found at ${discovery.playwrightConfigIgnored.path} but not used for discovery: ${discovery.playwrightConfigIgnored.reason}.`,

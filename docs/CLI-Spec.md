@@ -424,6 +424,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "testDir": "playwright-config",
     "include": "playwright-config",
     "exclude": "default",
+    "roots": ["/abs/path/to/e2e"],
     "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
     "playwrightConfigIgnored": null
   },
@@ -469,7 +470,9 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 `discovery` (1.5) says where each file-selection setting came from —
 `testpilot-config` | `playwright-config` | `default` — plus the Playwright config that supplied them
 (`playwrightConfigPath`) or the one that was found and could not be used
-(`playwrightConfigIgnored: { path, reason }`). `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
+(`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
+scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
+can represent, so every message that names a test directory renders these. `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
@@ -537,6 +540,10 @@ When `testpilot.config.ts` does not set `testDir` (or does not exist), TestPilot
 them. If the root has no Playwright config, one first-level sub-directory is checked (real suites keep
 it in `e2e/`); an ambiguous result adopts nothing.
 
+- Each `projects[]` entry becomes its own scope: a root plus the `testMatch`/`testIgnore` that apply
+  **to it**, inheriting the top-level values it doesn't set. One project's `testIgnore` can never
+  delete another project's files.
+- `node_modules` is **always** skipped, whatever `exclude` says.
 - The config is **parsed, never executed.** `analyze` is static and offline, and is routinely pointed
   at a repository the user is only evaluating. A value that isn't a literal (`testDir: process.env.DIR
   ?? 'e2e'`) is reported as unusable rather than guessed at, and named in the zero-file error and by
@@ -545,7 +552,10 @@ it in `e2e/`); an ambiguous result adopts nothing.
   selection neither tool would make.
 - An explicit TestPilot `testDir` always wins; `testIgnore` is appended to `exclude`.
 - Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
-- `--no-playwright-discovery` turns the fallback off. Explicit CLI patterns skip it automatically.
+- `--no-playwright-discovery` turns the fallback off, for `analyze`, `fix`, and `doctor` alike.
+  Explicit CLI patterns skip it automatically, as does an explicit `testDir` in `testpilot.config.ts`.
+- Reported paths always stay inside `rootDir`: if an adopted `testDir` points outside the config's
+  directory, `rootDir` is re-anchored to the common ancestor so SARIF URIs never contain `..`.
 
 ---
 

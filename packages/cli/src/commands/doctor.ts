@@ -18,6 +18,7 @@ export async function doctorCommand(options: DoctorOptions, command: Command): P
       cwd: globals.cwd,
       configPath: globals.configPath,
       strictGuidance: options.strictGuidance === true,
+      disablePlaywrightFallback: globals.playwrightDiscovery === false,
     })
   } catch (error) {
     if (!globals.quiet) {

@@ -44,10 +44,13 @@ export {
 export {
   type PathPattern,
   type PlaywrightConfigRead,
+  type PlaywrightScope,
   type PlaywrightTestSettings,
   readPlaywrightTestSettings,
 } from './config/playwright-config.js'
 export {
+  type DiscoveryScope,
+  describeRoots,
   findPlaywrightConfigNearby,
   type ResolveDiscoveryOptions,
   type ResolvedDiscovery,
