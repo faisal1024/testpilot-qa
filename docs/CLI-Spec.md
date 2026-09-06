@@ -537,7 +537,8 @@ export default defineConfig({
     'no-nth-child': 'error',
     'no-css-class-selector': 'error',
     'no-deep-css-chain': 'warn',
-    'prefer-semantic-locator': 'off',
+    'prefer-get-by-test-id': 'warn',
+    'prefer-semantic-locator': 'info',
     'no-hard-wait': 'error',
     'avoid-positional-access': 'warn',
     'avoid-parent-traversal': 'info',
@@ -546,6 +547,9 @@ export default defineConfig({
   },
   // Per-rule settings, separate from `rules` so a severity stays a severity.
   ruleOptions: {
+    // Which attributes count as a test id. Mirror your Playwright
+    // `use.testIdAttribute` — getByTestId() queries only that one.
+    'prefer-get-by-test-id': { testIdAttributes: ['data-testid'] },
     'no-deep-css-chain': { maxChainDepth: 3 },
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
@@ -592,11 +596,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.11`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.12`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.11",
+  "schemaVersion": "1.12",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -607,7 +611,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
     "playwrightConfigIgnored": null,
     "playwrightConfigPartial": null,
-    "playwrightConfigDeclaresTags": false
+    "playwrightConfigDeclaresTags": false,
+    "playwrightTestIdAttribute": null
   },
   "summary": {
     "filesAnalyzed": 3,
@@ -699,6 +704,11 @@ the field this tool exists to protect. Check explicitly:
 { "score": { "score": null, "grade": null, "callSites": 12,
              "subScores": { "resilience": { "score": null, "grade": null } } } }
 ```
+
+`discovery.playwrightTestIdAttribute` (**1.12**) is the `use.testIdAttribute` your Playwright config
+declares — the only attribute `getByTestId()` queries. `null` means the config sets none and
+Playwright's `data-testid` default applies; `"unresolved"` means it could not be determined (a
+spread, a non-literal value, several candidate configs, or projects that declare different ones).
 
 `summary.uninspectedCallSites` (1.11) counts those call-sites whatever the score, and a run where
 they exceed 10% of `score.callSites` adds an `uninspected-call-sites` warning. They still count

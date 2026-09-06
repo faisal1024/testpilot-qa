@@ -157,6 +157,7 @@ describe('analyze — nothing matched is never a pass', () => {
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
       playwrightConfigDeclaresTags: false,
+      playwrightTestIdAttribute: null,
     })
   })
 
@@ -171,6 +172,7 @@ describe('analyze — nothing matched is never a pass', () => {
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
       playwrightConfigDeclaresTags: false,
+      playwrightTestIdAttribute: null,
     })
   })
 

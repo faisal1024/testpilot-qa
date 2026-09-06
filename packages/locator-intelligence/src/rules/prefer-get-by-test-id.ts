@@ -15,6 +15,51 @@ export const DEFAULT_TEST_ID_ATTRIBUTES: readonly string[] = [
   'data-test',
 ]
 
+/** Playwright's own `testIdAttribute` default — the attribute `getByTestId()` queries. */
+export const PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE = 'data-testid'
+
+/**
+ * Whether `getByTestId()` would query this exact attribute.
+ *
+ * `getByTestId()` resolves **one** attribute — `use.testIdAttribute` from the
+ * Playwright config, defaulting to `data-testid`. So on a stock config
+ * `locator('[data-test="x"]')` and `getByTestId('x')` select different
+ * elements, and naming the second as a replacement for the first is the same
+ * class of wrong rewrite this rule has produced five times. The rule still
+ * reports — a test id in raw CSS is worth flagging either way — but it says
+ * what has to be true for the rewrite to hold.
+ */
+function queriedBy(attribute: string, resolved: RuleOptions['resolvedTestIdAttribute']): boolean {
+  return resolved === undefined || resolved === 'unresolved'
+    ? // Nothing was read. Only the attribute Playwright queries by default can
+      // be asserted, and even that only because it is the overwhelming case.
+      attribute === PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE
+    : attribute === (resolved ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE)
+}
+
+/**
+ * How to say "and here is what your config must say for that to be true".
+ *
+ * Distinguishes the three states rather than collapsing them: a config that
+ * was read and sets nothing really does mean `data-testid`, while "could not
+ * be determined" means we do not know — and stating the default there is a
+ * claim about a file we failed to open.
+ *
+ * The unknown case covers more than an unreadable file: a spread, a non-literal
+ * value, several candidate configs, or projects that declare different
+ * attributes. Saying "could not be read" for the last of those would be a false
+ * explanation of a correct answer — the config was read perfectly.
+ */
+function configCaveat(attribute: string, resolved: RuleOptions['resolvedTestIdAttribute']): string {
+  const unknown = resolved === undefined || resolved === 'unresolved'
+  const queried = unknown
+    ? `the \`testIdAttribute\` your Playwright config declares (default \`${PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`), which could not be determined here`
+    : `\`${resolved ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`${
+        resolved === null ? " (Playwright's default)" : ''
+      }`
+  return ` getByTestId() queries only ${queried}, not \`${attribute}\` — set \`use: { testIdAttribute: '${attribute}' }\` in your Playwright config, or locate by the attribute it already declares.`
+}
+
 /** The configured test-id attribute names, or the defaults. */
 export function testIdAttributesFrom(options: RuleOptions | undefined): readonly string[] {
   const configured = options?.testIdAttributes
@@ -55,6 +100,7 @@ export const preferGetByTestId: Rule = {
     // the rewrite, because only the `locator()` call is being replaced.
     const own = context.ownOptions
     if (
+      own === 'unknown' ||
       own?.has === true ||
       own?.hasNot === true ||
       own?.hasText === true ||
@@ -67,9 +113,16 @@ export const preferGetByTestId: Rule = {
     // `getByTestId()`, and invisible to the CSS attribute scan below.
     const [only] = context.parsed.parts
     if (only?.engine === 'test-id' && context.parsed.parts.length === 1) {
+      // `data-test=`/`data-test-id=` are engines of their own, and getByTestId()
+      // queries neither unless the config says so.
+      const engine = only.engineName ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE
       return {
-        message: `The ${only.engineName ?? 'data-testid'}= selector engine addresses a test id.`,
-        suggestion: `Use getByTestId(${JSON.stringify(only.body)}) instead.`,
+        message: `The ${engine}= selector engine addresses a test id.`,
+        suggestion: `Use getByTestId(${JSON.stringify(only.body)}) instead.${
+          queriedBy(engine, options?.resolvedTestIdAttribute)
+            ? ''
+            : configCaveat(engine, options?.resolvedTestIdAttribute)
+        }`,
       }
     }
     const replacement = testIdReplacement(context.parsed, names)
@@ -83,10 +136,13 @@ export const preferGetByTestId: Rule = {
       exactValue === undefined
         ? ' getByTestId() also accepts a RegExp for a partial or case-insensitive match.'
         : ''
+    const caveat = queriedBy(attribute, options?.resolvedTestIdAttribute)
+      ? ''
+      : configCaveat(attribute, options?.resolvedTestIdAttribute)
     if (replacement.kind === 'direct') {
       return {
         message: `The test id [${attribute}] is addressed through a raw CSS selector.`,
-        suggestion: `Use ${named} instead.${inexact}`,
+        suggestion: `Use ${named} instead.${inexact}${caveat}`,
       }
     }
     if (replacement.kind === 'scope') {
@@ -98,14 +154,14 @@ export const preferGetByTestId: Rule = {
         : ''
       return {
         message: `The test id [${attribute}] is on an ancestor of the element this selector targets.`,
-        suggestion: `Scope with ${named} and keep the rest of the selector — combinator included — on a chained locator().${widening}${inexact}`,
+        suggestion: `Scope with ${named} and keep the rest of the selector — combinator included — on a chained locator().${widening}${inexact}${caveat}`,
       }
     }
     // same-element: the remaining conditions are on the target itself, so they
     // cannot become a chained `locator()` — that would search inside it.
     return {
       message: `The test id [${attribute}] is addressed through a raw CSS selector, alongside other conditions on the same element.`,
-      suggestion: `Use ${named} for the test id. The rest of this selector constrains the same element, so it cannot move to a chained locator() — narrow with filter() or and(), or rely on the test id alone if it is unique.${inexact}`,
+      suggestion: `Use ${named} for the test id. The rest of this selector constrains the same element, so it cannot move to a chained locator() — narrow with filter() or and(), or rely on the test id alone if it is unique.${inexact}${caveat}`,
     }
   },
 }

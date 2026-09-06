@@ -10,9 +10,9 @@ Phase 11b + 11g — the noisiest rule splits, and the report says what it could 
 reported on a five-repo corpus, at `warn`, whether the selector was `[data-testid="save"]` (a
 mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
 
-- **`prefer-get-by-test-id`** (`warn`, 511 corpus findings) — a test id addressed through a raw CSS
+- **`prefer-get-by-test-id`** (`warn`, 502 corpus findings) — a test id addressed through a raw CSS
   attribute selector. What it says depends on where the test id sits, because the three cases do not
-  have the same fix: on the target alone → `Use getByTestId('save')` (426); on an ancestor →
+  have the same fix: on the target alone → `Use getByTestId('save')` (417); on an ancestor →
   `Scope with getByTestId('list')` and chain the rest (29); on the target **alongside other
   conditions** → use `getByTestId()` for the test id and say plainly that the rest constrains the
   same element and cannot become a chained `locator()`, which would search inside it (46). It also
@@ -23,16 +23,20 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   It stays silent where `getByTestId()` has no equivalent: a bare `[data-testid]` presence check, a
   test id inside `:not()`/`:has()` (where it names an element the selector excludes, or a
   descendant), a selector list (more than one target), a test id reached through a `+`/`~` sibling
-  step (`[data-testid="row"] + button` puts it on a sibling), a `>>` part *preceding* the test id
-  (`#modal >> [data-testid=x]` — an ancestor scope `getByTestId()` would drop), and a call whose own
+  step (`[data-testid="row"] + button` puts it on a sibling), **anything preceding the test id's own
+  compound** — an earlier compound, a `>>` part, or a leading combinator, each an ancestor scope
+  `getByTestId()` would drop — and a call whose own
   options carry a filter (`locator('[data-testid=row]', { hasText: 'Alice' })` is not
   `getByTestId('row')`, which selects every row). A chained `.filter()` still reports, because it
   survives the rewrite.
-- **`prefer-semantic-locator`** (`info`, 1165 corpus findings) — a selector with no role, label or
+- **`prefer-semantic-locator`** (`info`, 1174 corpus findings) — a selector with no role, label or
   ARIA handle. It stays quiet on `[role=]`/`[aria-*]`, on content composition in **either**
   spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
   `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
-  `.filter()`/`.first()`/`.last()`/`.nth()` — and on test ids.
+  `.filter()`/`.first()`/`.last()`/`.nth()` — and on a test id **that
+  `prefer-get-by-test-id` actually reports**. Where that rule abstains (an ancestor before the test
+  id, a selector list, a bare presence check) this one speaks instead, so no call site falls between
+  them.
 
 **A config or baseline written against the old id keeps working**: `prefer-user-facing-locator` maps
 to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It is no
@@ -41,12 +45,12 @@ its setting" about the same line.
 
 Measured on the corpus: **1973 findings became 1676**. Reasons the 297 no longer fire, counted
 independently — **a call site can appear in more than one row**, so these do not partition:
-252 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
+253 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
 previously see), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-`:has()`/`:has-text()`, 0 unreadable.
+`:has()`/`:has-text()`, 1 a test id whose call passed its own `hasText` option, 0 unreadable.
 
 Scores rise (cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged)
-from re-grading 1165 findings `warn`→`info` plus those removals; `callSites` is identical on all
+from re-grading 1174 findings `warn`→`info` plus those removals; `callSites` is identical on all
 five repos, so the rise is not a denominator change. Note this also **downgrades** an existing
 double-report: **478** corpus call sites used to carry both a class-selector `error` and the old
 nudge, costing 7 points each; **348** still carry both (5.5, now that the nudge is `info`) and

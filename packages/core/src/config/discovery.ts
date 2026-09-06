@@ -40,6 +40,17 @@ export interface ConfigDiscovery {
    * was adopted: the tag applies either way.
    */
   playwrightConfigDeclaresTags: boolean
+  /**
+   * The `use.testIdAttribute` the Playwright config declares — the only
+   * attribute `getByTestId()` queries. `null` means the config does not set it
+   * and Playwright's `data-testid` default applies; `'unresolved'` means it is
+   * set but unreadable, or projects disagree.
+   *
+   * `prefer-get-by-test-id` needs it before it may name `getByTestId('x')` as
+   * the replacement for `[data-test="x"]`: on a stock config those select
+   * different elements.
+   */
+  playwrightTestIdAttribute: string | null | 'unresolved'
 }
 
 export const DEFAULT_DISCOVERY: ConfigDiscovery = {
@@ -51,6 +62,8 @@ export const DEFAULT_DISCOVERY: ConfigDiscovery = {
   playwrightConfigIgnored: null,
   playwrightConfigPartial: null,
   playwrightConfigDeclaresTags: false,
+  // Unknown, not "the default applies": no config was consulted at all.
+  playwrightTestIdAttribute: 'unresolved',
 }
 
 /** Human-readable provenance for one setting — the single source of this wording. */

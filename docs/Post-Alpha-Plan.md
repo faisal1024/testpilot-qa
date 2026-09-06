@@ -309,14 +309,16 @@ false-positive rate < 5% per rule.
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
 
-  **Measured on the corpus.** 1973 findings became 1676: `prefer-get-by-test-id` 511 (426 direct,
-  29 scope, 46 same-element, 10 through the `data-testid=` engine), `prefer-semantic-locator` 1165.
+  **Measured on the corpus.** 1973 findings became 1676: `prefer-get-by-test-id` 502 (417 direct,
+  29 scope, 46 same-element, 10 through the `data-testid=` engine), `prefer-semantic-locator` 1174.
   Reasons the 297 no longer fire, counted **independently — a call site can appear in more than one
-  row, so these do not partition**: 252 composed with a `has`/`hasText` option (167 of them through
+  row, so these do not partition**: 253 composed with a `has`/`hasText` option (167 of them through
   `.filter()`), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-  `:has()`/`:has-text()`, 0 unreadable. An earlier draft published a first-match classification
-  (84/27/21/12) as though it were a partition; it was not, and a reviewer's independent recount is
-  what caught it. A later draft said 168 `.filter()` cases where every way of counting gives 167.
+  `:has()`/`:has-text()`, 1 a test id whose call passed its own `hasText` option, 0 unreadable. Three earlier
+  drafts of this paragraph were wrong, each caught by a reviewer recounting independently: a
+  first-match classification (84/27/21/12) published as a partition; "168 `.filter()` cases" where
+  every way of counting gives 167; and 252 here, which did not absorb the removal that round 4's own
+  fix added.
 
   The probe that produced this ran over the same discovery and the shipped rule objects, and had to
   reproduce the benchmark's own totals before any of it was written down. Its first run reported
@@ -325,7 +327,7 @@ false-positive rate < 5% per rule.
   a plausible wrong one.
 
   Scores rose: cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged.
-  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1165
+  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1174
   findings from `warn` to `info` plus those removals, and not a denominator change.
 
   **No false-positive rate is claimed.** The phase target is stated as a percentage, and measuring it

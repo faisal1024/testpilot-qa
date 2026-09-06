@@ -36,6 +36,18 @@ export interface PlaywrightTestSettings {
    * claiming the vocabulary is complete.
    */
   declaresTags: boolean
+  /**
+   * The `use.testIdAttribute` the config declares, which is the **only**
+   * attribute `getByTestId()` queries (Playwright defaults it to
+   * `data-testid`).
+   *
+   * `null` when the config does not set it — the default applies.
+   * `'unresolved'` when it is set but not statically readable, or when
+   * projects disagree: a rule that names `getByTestId('x')` as the replacement
+   * for `[data-test="x"]` is claiming those select the same element, and on a
+   * stock config they do not.
+   */
+  testIdAttribute: string | null | 'unresolved'
 }
 
 export type PlaywrightConfigRead =
@@ -45,15 +57,23 @@ export type PlaywrightConfigRead =
       settings: PlaywrightTestSettings
       unresolved: string[]
       declaresTags: boolean
+      testIdAttribute: string | null | 'unresolved'
       sawConfigObject: boolean
     }
   /** The config declares no test-selection keys. Normal; nothing to report. */
-  | { status: 'no-settings'; declaresTags: boolean; unresolved: string[]; sawConfigObject: boolean }
+  | {
+      status: 'no-settings'
+      declaresTags: boolean
+      testIdAttribute: string | null | 'unresolved'
+      unresolved: string[]
+      sawConfigObject: boolean
+    }
   /** Something is there but cannot be used — the user should hear about this. */
   | {
       status: 'unreadable'
       reason: string
       declaresTags: boolean
+      testIdAttribute: string | null | 'unresolved'
       unresolved: string[]
       /** False when no config object literal was ever seen — a `tag` key is then unknowable. */
       sawConfigObject: boolean
@@ -344,6 +364,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       status: 'unreadable',
       reason: 'file could not be read',
       declaresTags: false,
+      testIdAttribute: 'unresolved',
       unresolved: [],
       // Nothing was parsed, so a `tag` key is unknowable, not absent.
       sawConfigObject: false,
@@ -363,6 +384,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       status: 'unreadable',
       reason: 'file could not be parsed',
       declaresTags: false,
+      testIdAttribute: 'unresolved',
       unresolved: [],
       sawConfigObject: false,
     }
@@ -378,6 +400,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
           ? describeUnresolved([...new Set(unresolved)])
           : 'its exported config is not a literal object',
       declaresTags: false,
+      testIdAttribute: 'unresolved',
       unresolved: [...new Set(unresolved)],
       // `export default makeConfig({...})` — the object never became visible.
       sawConfigObject: false,
@@ -387,8 +410,36 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const configDir = dirname(configPath)
 
   let declaresTags = false
+  // Collected across the config and every project. `use.testIdAttribute` is on
+  // both `TestConfig` and `TestProject`, so unlike `tag` it must be read from
+  // projects too — and if they disagree there is no single answer.
+  // Config level and per-project are kept apart because a project that does
+  // not declare one *inherits* the config's — or, if that is unset too,
+  // Playwright's `data-testid`. Folding both into one set made
+  // `projects: [{ use: { testIdAttribute: 'data-qa' } }, {}]` look like a
+  // single answer of `data-qa`, which is false for the second project.
+  let configTestIdAttribute: string | 'unresolved' | null = null
+  const projectTestIdAttributes: Array<string | 'unresolved' | null> = []
   const readSelectors = (object: Node, isProject = false): RawSelectors => {
-    if (hasSpread(object)) unresolved.push('a spread from another object')
+    const spread = hasSpread(object)
+    if (spread) unresolved.push('a spread from another object')
+    const use = propertyValue(object, 'use')
+    // A spread at this level can carry `use` entirely, so the attribute is
+    // unknown — not "unset, so the default applies". Same for a `use` that is
+    // not an object literal.
+    let own: string | 'unresolved' | null = spread ? 'unresolved' : null
+    if (use?.type === 'ObjectExpression') {
+      if (hasSpread(use)) own = 'unresolved'
+      const attribute = propertyValue(use, 'testIdAttribute')
+      if (attribute) own = staticString(attribute) ?? 'unresolved'
+    } else if (use) {
+      own = 'unresolved'
+    }
+    if (isProject) {
+      projectTestIdAttributes.push(own)
+    } else if (own !== null) {
+      configTestIdAttribute = own
+    }
     // `tag` is on `TestConfig` only — `TestProject` has no such key in
     // Playwright 1.63, so reading one from a project entry would report a
     // config-wide tag that does not exist.
@@ -514,6 +565,22 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   }
 
   const unique = [...new Set(unresolved)]
+  // One answer or none. Two projects with different test-id attributes have no
+  // single answer, and a rule must not pick one of them.
+  // A project that declares nothing inherits the config's value, so resolve
+  // each project against it before asking whether they agree. `projects:
+  // makeProjects()` hides entries that may declare their own, which is the
+  // same "unknown" as a spread.
+  const effective = projectsPartial
+    ? ['unresolved' as const]
+    : projectTestIdAttributes.map((own) => own ?? configTestIdAttribute)
+  const attributeCandidates = new Set<string | 'unresolved' | null>(
+    effective.length > 0 ? effective : [configTestIdAttribute],
+  )
+  const testIdAttribute: string | null | 'unresolved' =
+    attributeCandidates.size === 1
+      ? ([...attributeCandidates][0] as string | null | 'unresolved')
+      : 'unresolved'
   // `declaresTags` rides on every branch: Playwright defaults `testDir` to the
   // config's own directory, so `{ tag: '@e2e', projects: [...] }` with no
   // testDir is an ordinary config that yields no scopes — and dropping the flag
@@ -524,16 +591,24 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
           status: 'unreadable',
           reason: describeUnresolved(unique),
           declaresTags,
+          testIdAttribute,
           unresolved: unique,
           sawConfigObject: true,
         }
-      : { status: 'no-settings', declaresTags, unresolved: unique, sawConfigObject: true }
+      : {
+          status: 'no-settings',
+          declaresTags,
+          testIdAttribute,
+          unresolved: unique,
+          sawConfigObject: true,
+        }
   }
   return {
     status: 'ok',
-    settings: { scopes, declaresTags },
+    settings: { scopes, declaresTags, testIdAttribute },
     unresolved: unique,
     declaresTags,
+    testIdAttribute,
     sawConfigObject: true,
   }
 }

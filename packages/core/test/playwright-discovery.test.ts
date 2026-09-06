@@ -50,6 +50,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
       status: 'ok',
       unresolved: [],
       declaresTags: false,
+      testIdAttribute: null,
       sawConfigObject: true,
       settings: {
         scopes: [
@@ -60,6 +61,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
           },
         ],
         declaresTags: false,
+        testIdAttribute: null,
       },
     })
   })
@@ -306,6 +308,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'testDir is not a literal value',
       declaresTags: false,
+      testIdAttribute: null,
       unresolved: expect.any(Array),
       sawConfigObject: expect.any(Boolean),
     })
@@ -316,6 +319,7 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
     expect(readSettings(bare)).toEqual({
       status: 'no-settings',
       declaresTags: false,
+      testIdAttribute: null,
       unresolved: [],
       sawConfigObject: true,
     })
@@ -328,9 +332,56 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'file could not be read',
       declaresTags: false,
+      testIdAttribute: 'unresolved',
       unresolved: expect.any(Array),
       sawConfigObject: expect.any(Boolean),
     })
+  })
+})
+
+describe('use.testIdAttribute — what getByTestId() will actually query', () => {
+  const attributeOf = (source: string) =>
+    readSettings(writeFile('playwright.config.ts', source)).testIdAttribute
+
+  it('reads it from the config and from a project', () => {
+    expect(
+      attributeOf("export default { testDir: './e2e', use: { testIdAttribute: 'data-qa' } }\n"),
+    ).toBe('data-qa')
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', projects: [{ use: { testIdAttribute: 'data-qa' } }] }\n",
+      ),
+    ).toBe('data-qa')
+  })
+
+  it(`is null when nothing sets it — Playwright's default applies, which is knowledge`, () => {
+    expect(attributeOf("export default { testDir: './e2e' }\n")).toBeNull()
+  })
+
+  it('is unresolved when a project that declares none would inherit a different value', () => {
+    // The second project inherits the config level — unset, so `data-testid`.
+    // Folding both into one set answered `data-qa`, which is false there.
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', projects: [{ use: { testIdAttribute: 'data-qa' } }, {}] }\n",
+      ),
+    ).toBe('unresolved')
+    // ...but a project inheriting an explicit config-level value agrees with it.
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', use: { testIdAttribute: 'data-qa' }, projects: [{ use: { testIdAttribute: 'data-qa' } }, {}] }\n",
+      ),
+    ).toBe('data-qa')
+  })
+
+  it('is unresolved when it is set but cannot be read', () => {
+    expect(
+      attributeOf("export default { testDir: './e2e', use: { testIdAttribute: NAME } }\n"),
+    ).toBe('unresolved')
+    expect(attributeOf("export default { testDir: './e2e', use: base.use }\n")).toBe('unresolved')
+    expect(attributeOf("export default { testDir: './e2e', projects: makeProjects() }\n")).toBe(
+      'unresolved',
+    )
   })
 })
 
@@ -344,6 +395,8 @@ it('reports a spread as unresolved instead of reading the config as empty', () =
     status: 'unreadable',
     reason: 'it uses a spread from another object',
     declaresTags: false,
+    // A spread can carry `use` whole, so the attribute is unknown here.
+    testIdAttribute: 'unresolved',
     unresolved: expect.any(Array),
     sawConfigObject: expect.any(Boolean),
   })
@@ -626,6 +679,7 @@ describe('resolveDiscovery', () => {
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
       playwrightConfigDeclaresTags: false,
+      playwrightTestIdAttribute: null,
     })
   })
 

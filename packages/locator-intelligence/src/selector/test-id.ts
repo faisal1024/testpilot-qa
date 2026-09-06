@@ -59,9 +59,14 @@ const SCOPING_COMBINATORS = new Set(['descendant', 'child'])
  * - any relevant part is a selector **list**, which has more than one target or
  *   more than one scope;
  * - the test id reaches the target through anything but descendant/child steps;
- * - a `>>` part **precedes** the one holding the test id. Every earlier part is
- *   an ancestor scope, so `'#login-modal >> [data-testid=save]'` is not
- *   `getByTestId('save')` — that searches the whole document.
+ * - anything **precedes** the test id's own compound — a `>>` part, or an
+ *   earlier compound in the same selector. Both are ancestor scopes
+ *   `getByTestId()` would drop: `'#login-modal >> [data-testid=save]'` and
+ *   `'#login-modal [data-testid=save]'` are the same locator, and neither is
+ *   `getByTestId('save')`, which searches the whole document. A leading
+ *   combinator counts — the tokenizer models `'+ [data-testid=row]'` as
+ *   `:scope + [data-testid=row]`, an adjacent sibling of the scope rather than
+ *   a descendant of it.
  */
 export function testIdReplacement(
   parsed: ParsedSelector,
@@ -87,8 +92,19 @@ export function testIdReplacement(
   // `same-element` answer can come from.
   const found = findIn(arm.compounds, names)
   if (found) {
-    // An earlier `>>` part is an ancestor this rule would silently drop.
-    if (parsed.parts.length > 1) {
+    // Anything before the test id's own compound is an ancestor this rule
+    // would silently drop — an earlier `>>` part, or an earlier compound in
+    // this same selector. `'#modal >> [data-testid=x]'` and
+    // `'#modal [data-testid=x]'` are one locator, and neither is
+    // `getByTestId('x')`, which searches the whole document. All nine of
+    // immich's findings were the second spelling.
+    //
+    // ONE check, before the branches. The first version of this guard sat
+    // inside the target-compound branch below, so it never covered `scope`:
+    // `'#modal [data-testid=x] .child'` still offered a rewrite that dropped
+    // `#modal`, and the two spellings still disagreed. That was the sixth
+    // round of this defect, produced by the fix for the fifth.
+    if (parsed.parts.length > 1 || found.index > 0) {
       return null
     }
     if (found.index === arm.compounds.length - 1) {
@@ -114,6 +130,14 @@ export function testIdReplacement(
   // Otherwise an earlier `>>` part, which chains as a scope. The match has to
   // be on that part's own target — `[data-testid=a] + div >> button` scopes
   // from the div, and the test id is that div's sibling.
+  // `xpath=..` walks UP from the scope, so a later xpath part can put the
+  // target outside the test id's subtree: in `'[data-testid=x] >> .. >> div'`
+  // the target is under x's *parent*, and calling x an ancestor is false.
+  // The rewrite would still be sound — `>>` is a chained `locator()` — but the
+  // sentence would not be, and the sentence is what this rule sells.
+  if (parsed.parts.slice(1).some((part) => part.engine === 'xpath')) {
+    return null
+  }
   // Only the *first* part: anything before the one holding the test id is a
   // further ancestor that `getByTestId()` would drop.
   const first = parsed.parts[0]

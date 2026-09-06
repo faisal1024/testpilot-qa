@@ -32,6 +32,7 @@ function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
       playwrightConfigDeclaresTags: false,
+      playwrightTestIdAttribute: null,
     },
     summary: {
       filesAnalyzed: 1,
@@ -229,6 +230,7 @@ describe('toHtml', () => {
           roots: ['/repo/e2e'],
           playwrightConfigPath: '/repo/playwright.config.ts',
           playwrightConfigDeclaresTags: false,
+          playwrightTestIdAttribute: null,
           playwrightConfigIgnored: null,
           playwrightConfigPartial: null,
         },

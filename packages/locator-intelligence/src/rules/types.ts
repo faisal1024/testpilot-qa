@@ -50,6 +50,12 @@ export interface RuleOptions {
    * a project's Playwright `testIdAttribute`.
    */
   testIdAttributes?: readonly string[]
+  /**
+   * `prefer-get-by-test-id`: the attribute `getByTestId()` actually queries,
+   * from the Playwright config's `use.testIdAttribute`. `null` for Playwright's
+   * `data-testid` default, `'unresolved'` when it could not be read.
+   */
+  resolvedTestIdAttribute?: string | null | 'unresolved'
 }
 
 export interface Rule extends RuleMeta {

@@ -58,7 +58,8 @@ Completed or in progress through Milestone 5B:
 - `testpilot run` as a thin Playwright pass-through;
 - generated UI/API sample tests and parallel-friendly scripts;
 - `testpilot analyze`;
-- six MVP static rules:
+- six MVP static rules *(as shipped in Milestone 3B — the set is nine as of Phase 11, and
+  `prefer-user-facing-locator` has since split; see [the rule index](rules/README.md))*:
   - `no-xpath`;
   - `no-css-class-selector`;
   - `no-nth-child`;

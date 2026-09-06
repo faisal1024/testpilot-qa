@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11b + 11g, after four review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 511: 426 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1165). 1973 findings -> 1676; reasons the 297 no longer fire are counted INDEPENDENTLY and do not partition -- a call site can appear in more than one row: 252 has/hasText composition (167 via .filter()), 35 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 0 unreadable. THREE corrections to earlier reasons here, each found by an independent recount and left visible rather than replaced: (1) a first-match classification (84/27/21/12) published as a partition; (2) '168 .filter() cases' where every counting rule gives 167; (3) '458 call sites carry both a class-selector error and this nudge' -- measured, 478 used to carry both (7 points each), 348 still do (5.5) and 130 now carry only the error (5). Round 4 also found the defect class outside the selector string for the first time: locator('[data-testid=row]', {hasText}) was answered 'Use getByTestId(\"row\")', which selects every row -- live on cal.com out-of-office.e2e.ts:177, and the reason this run is 1676 rather than 1677. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites so Phase 12 has a pinned 'before': 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
+  "reason": "Round-5 follow-up to Phase 11b. Fifth shape of the same defect: prefer-get-by-test-id named getByTestId(x) as the replacement whenever the test id sat on the target compound, without checking what PRECEDED it. '#login-modal [data-testid=save]' was answered 'Use getByTestId(\"save\")', which searches the whole document -- while the identical locator written '#login-modal >> [data-testid=save]' correctly abstained since the round-3 fix, so the two spellings gave opposite answers. ALL NINE of immich's prefer-get-by-test-id findings were this ([data-viewer-content] [data-testid=ocr-box]); they are now prefer-semantic-locator info instead of a wrong warn, which is the whole of this baseline's movement. Totals are unchanged at 1973 -> 1676 (297 removals); the split moves: prefer-get-by-test-id 511 -> 502 (direct 426 -> 417), prefer-semantic-locator 1165 -> 1174. Second P1: getByTestId() resolves exactly one attribute (use.testIdAttribute, default data-testid), so suggesting it for [data-test=x] or [data-test-id=x] on a stock config named a locator that selects different elements. TestPilot now reads use.testIdAttribute from the Playwright config and qualifies the suggestion when they differ; corpus incidence is 0, which is why five rounds and a green bench missed it. Also corrected here: the has/hasText row is 253, not 252 -- it never absorbed the one removal round 4's own fix added. That is the third arithmetic correction recorded in this file rather than replaced silently.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -63,8 +63,7 @@
         "avoid-positional-access": 6,
         "no-css-class-selector": 1,
         "no-hard-wait": 3,
-        "prefer-get-by-test-id": 9,
-        "prefer-semantic-locator": 53
+        "prefer-semantic-locator": 62
       },
       "warnings": {},
       "discovery": {

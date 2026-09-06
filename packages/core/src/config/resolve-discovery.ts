@@ -235,6 +235,33 @@ function declaresTagsIn(rootDir: string, hint: string): boolean {
   return mayDeclareTags(readPlaywrightTestSettings(path))
 }
 
+/**
+ * The `use.testIdAttribute` for a project, read at the same moments as
+ * `declaresTagsIn`.
+ *
+ * `findPlaywrightConfigNearby`, **not** `findPlaywrightConfig`: the narrow
+ * lookup does not descend a level, and immich and Ghost — two of the five
+ * corpus repos — keep their config in `e2e/`. Missing it there returned `null`,
+ * which the rule reads as the positive claim "the config sets none, so
+ * `data-testid` applies" — a default asserted over a file we never opened, and
+ * the same mistake one layer up from where it was last fixed.
+ *
+ * Genuinely finding nothing *is* `null`: Playwright's own default then applies,
+ * and treating that as unknown would qualify every suggestion in every project
+ * that has no Playwright config. Ambiguity is not an answer, so several
+ * candidate configs are `'unresolved'` — the discovery path refuses to pick one
+ * and this must not pick one either.
+ */
+function testIdAttributeIn(rootDir: string, hint: string): string | null | 'unresolved' {
+  const located = findPlaywrightConfigNearby(rootDir, hint)
+  if (!located) {
+    return null
+  }
+  return 'ambiguous' in located
+    ? 'unresolved'
+    : readPlaywrightTestSettings(located.path).testIdAttribute
+}
+
 export function resolveDiscovery(
   loaded: LoadConfigResult,
   options: ResolveDiscoveryOptions,
@@ -265,6 +292,10 @@ export function resolveDiscovery(
       options.rootDir,
       config.playwrightConfig,
     )
+    discovery.playwrightTestIdAttribute = testIdAttributeIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
@@ -280,6 +311,9 @@ export function resolveDiscovery(
         reason: 'playwrightConfig points at a file that does not exist',
       }
     }
+    // No Playwright config at all: Playwright's own `data-testid` default is
+    // what `getByTestId()` will query, which is knowledge, not ignorance.
+    discovery.playwrightTestIdAttribute = null
     return withoutFallback()
   }
   if ('ambiguous' in located) {
@@ -291,6 +325,10 @@ export function resolveDiscovery(
       options.rootDir,
       config.playwrightConfig,
     )
+    discovery.playwrightTestIdAttribute = testIdAttributeIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
@@ -299,6 +337,7 @@ export function resolveDiscovery(
   // Set before any branch returns: a `tag` key applies to every test whether or
   // not the config also yielded scopes we could use.
   discovery.playwrightConfigDeclaresTags = mayDeclareTags(read)
+  discovery.playwrightTestIdAttribute = read.testIdAttribute
   if (read.status === 'no-settings') {
     // Playwright's `testDir` defaults to the config file's own directory, so a config
     // kept in a sub-directory usually IS the suite location — ignoring that sent us

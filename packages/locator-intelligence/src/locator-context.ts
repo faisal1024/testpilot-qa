@@ -81,8 +81,14 @@ export interface LocatorContext {
    * while `locator('[data-testid=row]').filter({ hasText: 'Alice' })` rewrites
    * to `getByTestId('row').filter({ hasText: 'Alice' })`, because only the
    * `locator()` call is being replaced and the `.filter()` survives.
+   *
+   * `'unknown'` when a second argument was passed that could not be read — a
+   * variable, a spread, a computed key. `undefined` is the *only* signal for
+   * "no options", so an unreadable bag must not collapse into it: that is how
+   * `locator('[data-testid=row]', OPTS)` got the same confident rewrite as
+   * `locator('[data-testid=row]')`.
    */
-  ownOptions?: LocatorComposition
+  ownOptions?: LocatorComposition | 'unknown'
   /** Source text of the whole call expression, e.g. `page.locator('.btn-primary')`. */
   raw: string
   /** 1-based line of the method name. */
