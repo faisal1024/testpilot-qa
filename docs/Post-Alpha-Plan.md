@@ -135,8 +135,13 @@ findings list is worth reading top to bottom; after **12**, the number is worth 
 Goal: **`analyze` can never report a score for files it did not open — and it finds the suite.**
 
 Delivered, with one honest qualification: a page-object layer in a *conventional* directory is
-disclosed, and one somewhere unconventional is not. Making that evidence-based rather than
-name-based is a Phase 11 follow-up; the README says so plainly rather than implying coverage.
+disclosed on every invocation — config-driven, explicit patterns, `fix`, and `--update-baseline` alike
+— and one somewhere unconventional is not. Making admission evidence-based rather than name-based is
+a Phase 11 follow-up; the README says so plainly rather than implying coverage.
+
+Carried into Phase 11: unconventional directories; the sniff missing the pre-`locator()` selector-
+argument style (`page.click('div.form > .btn')`), which no rule reads today either; and one explicit-
+glob benchmark run per repo, so the path §1.1's evidence table measures is gated like the default.
 
 - ✅ **#71** — fail (exit 2/3) on zero matched files (`--json`/SARIF still emitted first, so
   agents and `upload-sarif` have something to read); default include

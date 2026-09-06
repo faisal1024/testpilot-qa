@@ -118,7 +118,7 @@ export async function fixCommand(
       `[testpilot] ${helpersNotAnalyzed} page object/fixture file(s) were not considered. Add --with-helpers to fix those too.`,
     )
   }
-  report(results, diffs, write, skipped, globals, resolved)
+  report(results, diffs, write, skipped, globals, resolved, helpersNotAnalyzed)
 }
 
 function totalFixes(results: FileFixSummary[]): number {
@@ -132,6 +132,7 @@ function report(
   skipped: number,
   globals: GlobalOptions,
   resolved: DiscoveryResult,
+  helpersNotAnalyzed: number,
 ): void {
   if (globals.json) {
     console.log(
@@ -148,6 +149,8 @@ function report(
         // This is the write path: it must be at least as loud as `analyze` about a
         // file set chosen by a half-read or mis-adopted Playwright config.
         discovery: resolved.discovery,
+        // The agent-facing path must see the same gap the human one is told about.
+        helpersNotAnalyzed,
         warnings: discoveryWarnings(resolved.discovery),
       }),
     )

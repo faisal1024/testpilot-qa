@@ -308,6 +308,60 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
       expect(found.helpersNotAnalyzed).toBe(1)
     })
 
+    it('discloses page objects beside an explicit pattern too', async () => {
+      // The README's own quickstart is `analyze tests`. Every narrowing so far — no
+      // config, a narrowed includeHelpers, an explicit pattern — silenced this by
+      // skipping the probe in one branch.
+      write('tests/a.spec.ts')
+      playwrightFile('tests/pages/LoginPage.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        patterns: ['tests'],
+      })
+      expect(found.helpersNotAnalyzed).toBe(1)
+      expect(found.helpersNotAnalyzedFiles.map((f) => relative(dir, f))).toEqual([
+        join('tests', 'pages', 'LoginPage.ts'),
+      ])
+    })
+
+    it('keeps the disclosure scoped to what an explicit pattern pointed at', async () => {
+      write('tests/a.spec.ts')
+      playwrightFile('tests/pages/Here.ts')
+      playwrightFile('other/pages/Elsewhere.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        patterns: ['tests'],
+      })
+      // Reporting page objects the user did not ask about answers a different question.
+      expect(found.helpersNotAnalyzedFiles.map((f) => relative(dir, f))).toEqual([
+        join('tests', 'pages', 'Here.ts'),
+      ])
+    })
+
+    it('is not silenced by an exclude that removed the layer from analysis', async () => {
+      // `exclude` says "do not analyze it", not "do not tell me it exists".
+      write('e2e/a.spec.ts')
+      playwrightFile('page-objects/one.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: { ...defaultConfig, exclude: ['**/page-objects/**'] },
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            excludeGlobs: ['**/page-objects/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.helpersNotAnalyzed).toBe(1)
+    })
+
     it('counts nothing once the helper layer is being analyzed', async () => {
       write('e2e/a.spec.ts')
       playwrightFile('page-objects/one.ts')

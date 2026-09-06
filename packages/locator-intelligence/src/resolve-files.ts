@@ -200,6 +200,54 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
  * Playwright never runs those, so their findings are real but belong in a different
  * bucket from the suite's own.
  */
+interface ProbeResult {
+  notAnalyzed: string[]
+}
+
+/**
+ * Counts page-object / fixture files that use Playwright and were **not** analyzed.
+ *
+ * Shared by both discovery paths on purpose: every narrowing so far — no config, a
+ * narrowed `includeHelpers`, explicit patterns — has silenced this disclosure by
+ * skipping it in one branch, and the goal is that no invocation can score a suite
+ * without saying which of its locators it never read.
+ *
+ * The probe ignores `config.exclude` and honours `ALWAYS_IGNORED` alone: excluding a
+ * directory says "do not analyze it", not "do not tell me it exists".
+ */
+async function probeHelperLayer(
+  roots: string[],
+  patterns: string[],
+  alreadyCovered: (file: string) => boolean,
+): Promise<ProbeResult> {
+  const isHelper = picomatch([...new Set(patterns)], { dot: true })
+  const notAnalyzed: string[] = []
+  for (const root of new Set(roots)) {
+    const base = realpathOrNull(root)
+    if (!base) continue
+    const candidates = await glob(ANY_SOURCE_FILE, {
+      cwd: root,
+      absolute: true,
+      ignore: ALWAYS_IGNORED,
+    })
+    for (const file of candidates) {
+      if (alreadyCovered(file) || !isHelper(toPosix(file))) continue
+      if (!withinRoot(file, base)) continue
+      if (usesPlaywright(file)) notAnalyzed.push(file)
+    }
+  }
+  return { notAnalyzed: [...new Set(notAnalyzed)].sort() }
+}
+
+/** The directory a positional pattern points at, for probing what sits beside it. */
+function patternRoot(cwd: string, pattern: string): string {
+  if (isDirectory(resolve(cwd, pattern))) return resolve(cwd, pattern)
+  const firstGlob = pattern.search(/[*?[{]/)
+  const prefix = firstGlob === -1 ? pattern : pattern.slice(0, firstGlob)
+  const dir = prefix.replace(/[^/\\]*$/, '')
+  return resolve(cwd, dir || '.')
+}
+
 export async function resolveFiles(options: ResolveFilesOptions): Promise<ResolvedFiles> {
   const { cwd, patterns, config } = options
   const usingPatterns = patterns !== undefined && patterns.length > 0
@@ -213,16 +261,23 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
 
   if (usingPatterns) {
     const { literal, expanded } = splitPatterns(cwd, patterns, config.include)
-    const matched = [
+    const matched = new Set([
       ...(await run(cwd, literal, [])),
       ...(await run(cwd, expanded, config.exclude)),
-    ]
+    ])
+    // Scoped to what the user pointed at: reporting page objects elsewhere in the repo
+    // would be answering a question they did not ask.
+    const { notAnalyzed } = await probeHelperLayer(
+      patterns.map((pattern) => patternRoot(cwd, pattern)),
+      [...DEFAULT_HELPER_PATTERNS, ...config.includeHelpers],
+      (file) => matched.has(file),
+    )
     return {
-      files: [...new Set(matched)].sort(),
+      files: [...matched].sort(),
       helpers: new Set(),
       helperCandidatesRejected: 0,
-      helpersNotAnalyzed: 0,
-      helpersNotAnalyzedFiles: [],
+      helpersNotAnalyzed: notAnalyzed.length,
+      helpersNotAnalyzedFiles: notAnalyzed,
     }
   }
 
@@ -291,44 +346,41 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
 
   const probeScope = helperScope ?? scopes[0]
   if (probeScope && testFiles.size > 0) {
-    // One pass over the union of what the user asked for and where page objects
-    // conventionally live. A narrowed `includeHelpers` must not silence the
-    // disclosure — that made the report claim coverage it did not have, which is
-    // worse than the silence this warning exists to end.
     const analysing = helperScope !== undefined
-    const analysed = picomatch(helperScope?.helperGlobs ?? [], { dot: true })
-    const anyHelper = picomatch(
-      [...new Set([...DEFAULT_HELPER_PATTERNS, ...(helperScope?.helperGlobs ?? [])])],
-      { dot: true },
-    )
-    // No `dot: true` on the walk: the patterns have no dotted segment, so it only
-    // reaches editor history and cache copies (`.history/`, `.cache/`) and inflates
-    // the very count this warning is asking to be trusted.
-    const candidates = await run(probeScope.helperRoot, ANY_SOURCE_FILE, probeScope.excludeGlobs)
-    const projectRoot = realpathOrNull(probeScope.helperRoot)
-    for (const file of candidates) {
-      // Membership as a test always wins: a spec that happens to live under
-      // `fixtures/` is still a test, and demoting its findings would hide them.
-      if (testFiles.has(file) || !anyHelper(toPosix(file))) continue
-      // A symlink can point anywhere; `fix --write` follows it. The helper scan
-      // widened the root from `testDir` to the whole project, so this is the one
-      // remaining route out of the checkout.
-      if (!projectRoot || !withinRoot(file, projectRoot)) {
-        if (analysing) helperCandidatesRejected += 1
-        continue
-      }
-      // Directory names alone are not evidence: `pages/` is Next.js's routes and
-      // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
-      if (!usesPlaywright(file)) {
-        if (analysing && analysed(toPosix(file))) helperCandidatesRejected += 1
-        continue
-      }
-      if (analysing && analysed(toPosix(file))) helpers.add(file)
-      else {
-        helpersNotAnalyzed += 1
-        helpersNotAnalyzedFiles.push(file)
+    if (analysing && helperScope) {
+      // The layer the user asked for, analyzed. `exclude` applies here — this decides
+      // what gets read, not what gets reported.
+      const analysed = picomatch(helperScope.helperGlobs, { dot: true })
+      const base = realpathOrNull(helperScope.helperRoot)
+      const candidates = await run(
+        helperScope.helperRoot,
+        ANY_SOURCE_FILE,
+        helperScope.excludeGlobs,
+      )
+      for (const file of candidates) {
+        // Membership as a test always wins: a spec that happens to live under
+        // `fixtures/` is still a test, and demoting its findings would hide them.
+        if (testFiles.has(file) || !analysed(toPosix(file))) continue
+        // A symlink can point anywhere; `fix --write` follows it.
+        if (!base || !withinRoot(file, base)) {
+          helperCandidatesRejected += 1
+          continue
+        }
+        // Directory names alone are not evidence: `pages/` is Next.js's routes and
+        // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
+        if (usesPlaywright(file)) helpers.add(file)
+        else helperCandidatesRejected += 1
       }
     }
+    // And the layer that was not analyzed, whatever the reason — no flag, a narrowed
+    // `includeHelpers`, or an `exclude` that removed it from analysis.
+    const { notAnalyzed } = await probeHelperLayer(
+      [probeScope.helperRoot],
+      [...DEFAULT_HELPER_PATTERNS, ...(helperScope?.helperGlobs ?? [])],
+      (file) => testFiles.has(file) || helpers.has(file),
+    )
+    helpersNotAnalyzed = notAnalyzed.length
+    helpersNotAnalyzedFiles.push(...notAnalyzed)
   }
 
   return {
