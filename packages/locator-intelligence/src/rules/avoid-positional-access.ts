@@ -8,12 +8,10 @@ import type { Rule } from './types.js'
  * idiomatic Playwright and appears throughout its own docs.
  *
  * It handles `.first()`/`.last()` too, but the extractor does not yet emit
- * them. Doing so is not a rule change: it adds ~10% more call sites, which is
- * the score's **denominator**, and measured on the corpus it moves every score
- * by 3-8 points in one direction or the other depending on this rule's
- * severity — enough to flip a `--min-score 70` gate on cal.com. The denominator
- * is Phase 12's subject; a precision PR must not move the score sideways while
- * claiming to be about false positives. The rule is ready for them.
+ * them. Deferred to Phase 12, which owns the denominator.
+ * Measured with the real code path by adding them to LOCATOR_METHODS and re-running the corpus: callSites +7.9% cal.com, +4.0% immich, +50.5% Ghost, +7.4% documenso, +8.4% mattermost; scores 74->73, 91->90, 99->86, 91->89, 67->66.
+ * Ghost loses 13 points because half its locator calls are positional.
+ * Bundling that with this release's severity re-grade would put two unrelated mechanisms on the same number in one release, and callSites is byte-identical here precisely so a reader can attribute the movement.
  */
 export const avoidPositionalAccess: Rule = {
   id: 'avoid-positional-access',

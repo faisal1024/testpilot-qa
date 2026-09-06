@@ -1,10 +1,10 @@
-# `no-nth-child` — Avoid positional selection
+# `no-nth-child` — Avoid :nth-child() selectors
 
 <!-- Generated from packages/locator-intelligence/src/explanations.ts by `pnpm docs:rules`. Do not edit by hand. -->
 
 > **Category:** locator · **Default severity:** error
 
-Selecting by position (:nth-child or .nth()) depends on sibling order and breaks when items move.
+A CSS :nth-child() or :nth-last-child() selector depends on sibling order and breaks when items move.
 
 ## Why it matters
 

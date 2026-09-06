@@ -70,9 +70,6 @@ function resolveRules(config: TestPilotConfig): {
     }
   }
   for (const id of Object.keys(config.rules)) {
-    if (DEPRECATED_RULE_IDS.includes(id) && !builtinRuleIds.has(id)) {
-      continue
-    }
     if (!builtinRuleIds.has(id)) {
       warnings.push({
         code: 'unknown-rule',

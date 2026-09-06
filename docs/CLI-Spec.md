@@ -589,11 +589,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.9`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.10`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.9",
+  "schemaVersion": "1.10",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -645,7 +645,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     { "code": "playwright-config-partial", "message": "…/playwright.config.ts was used for test discovery, but part of it could not be read: …" }
   ],
   "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
-  "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
+  "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8, "matchedByPreviousId": 0 }
 }
 ```
 
@@ -681,7 +681,10 @@ no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps w
 still have something to read; the table and HTML reporters print only the error.
 
 `baseline` is present **only** when the run used `--baseline`; it reports the comparison summary
-against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
+against the saved baseline. `matchedByPreviousId` (1.10) counts findings that matched under a rule's
+**previous** id — a baseline recorded before that rule was split or renamed. A finding's identity is
+`(ruleId, file, snippet)`, so without this a rule split would re-report every grandfathered finding
+as new and fail a gate on a suite that did not change. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.
 
 ### `tags --json` (`schemaVersion` `1.0`)

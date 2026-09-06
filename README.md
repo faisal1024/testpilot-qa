@@ -117,7 +117,7 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 
 `analyze` statically flags fragile locators with Tier 1 rules — `no-xpath`,
 `no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
-`no-hard-wait` — plus `avoid-positional-access` (`.first()`/`.nth()`, `warn`) and
+`no-hard-wait` — plus `avoid-positional-access` (`.nth()`, `warn`) and
 `avoid-parent-traversal` (`locator('..')`, `info`), and prints a human table or stable JSON.
 Severity is configurable per rule (`off` disables a rule), and `no-deep-css-chain`'s threshold is
 configurable via `ruleOptions`.
@@ -467,7 +467,7 @@ Written down because a tool that hides these is worse than one that doesn't have
 - **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
   The other two are the same pattern, but counting them changes the score's denominator, so they
   arrive with the scoring work in Phase 12.
-- **Your score will change when you upgrade to `alpha.3`.** `.nth()` dropped from `error` to `warn`
+- **Your score will change when you upgrade to the next alpha.** `.nth()` dropped from `error` to `warn`
   and `locator('..')` from `error` to `info`, which raises most scores by a few points (measured on
   five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — a gate that was
   passing will still pass, but one you had tuned tightly may now be looser than you meant.

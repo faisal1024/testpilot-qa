@@ -316,16 +316,18 @@ false-positive rate < 5% per rule.
   CSS stays **error**.
 - **11f — `no-xpath`. ✅ Complete.** the `locator('..')` parent-traversal idiom becomes a separate **info**
   finding (`avoid-parent-traversal`), so real hand-written XPath stands out.
+
 **What landed (11a, 11c–11f), and one deliberate deviation.** The tokenizer's contract is that it
 never guesses: anything unreadable lands in `unparsed` and rules abstain. A differential test pins it
 to Playwright's own parser over every corpus selector — a hand-written parser for someone else's
 syntax drifts, and that test is what makes maintaining one defensible.
 
 **`.first()`/`.last()` are deferred to Phase 12, against 11e's wording.** Extracting them is not a
-rule change: they become **call sites**, which is the score's denominator. Measured, that moves every
-score 3–8 points — enough to flip a `--min-score 70` gate on cal.com from fail to pass. A precision
-phase must not move the score sideways while claiming to be about false positives, and the
-denominator is Phase 12's subject. The rule already handles them.
+rule change: they become **call sites**, the score's denominator. Measured: callSites +4% to +50%
+depending on the repo, and scores −1 to −13 (Ghost worst, because half its locator calls are
+positional). A precision phase must not move the score by a second, unrelated mechanism while
+claiming to be about false positives; the denominator is Phase 12's subject. The rule already
+handles them.
 
 **Scores did rise anyway**, and only from the two deliberate re-gradings: `.nth()` error→warn and
 `..` error→info. cal.com 69→74 is 113 findings × 3 weight points plus one xpath finding × 4.5, over
@@ -335,8 +337,9 @@ the re-grading and not the denominator.
 **A lesson worth keeping.** *Three times* in this phase a published claim about the corpus was wrong
 because the measurement script differed from the shipped rule: once omitting the rule's engine gate,
 once excluding selectors containing a backslash so the oracle never saw the syntax the bugs lived in,
-and once counting `.locator('…')` only in spec files, which reported "6 of 8" xpath findings where
-the analyzer sees 9 of 11. Every one of them read as a plausible number and went into an artifact
+once counting `.locator('…')` only in spec files, which reported "6 of 8" xpath findings where the
+analyzer sees 9 of 11, and once carrying forward a denominator measurement taken *before* the rule
+that changed its sign existed. Every one of them read as a plausible number and went into an artifact
 whose whole purpose is being checkable. **Measure with the real code path** — a probe script is a
 different program, and its answer is about that program.
 

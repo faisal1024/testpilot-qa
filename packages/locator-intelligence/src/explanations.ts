@@ -60,9 +60,9 @@ const EXPLANATIONS: RuleExplanation[] = [
     ],
   }),
   fromRule(noNthChild, {
-    title: 'Avoid positional selection',
+    title: 'Avoid :nth-child() selectors',
     summary:
-      'Selecting by position (:nth-child or .nth()) depends on sibling order and breaks when items move.',
+      'A CSS :nth-child() or :nth-last-child() selector depends on sibling order and breaks when items move.',
     whyItMatters:
       'Positional locators assume a fixed order and count of elements. Adding, removing, or reordering items — common as features evolve or data changes — silently retargets the locator to the wrong element.',
     badExample: `await page.locator('ul li:nth-child(2)').click()`,

@@ -125,6 +125,13 @@ export interface BaselineReport {
   newFindings: number
   /** Findings absorbed by the baseline (tolerated legacy debt). */
   baselinedFindings: number
+  /**
+   * Of those, how many matched under a rule's **previous** id — a baseline
+   * recorded before that rule was split or renamed. Reported so the absorption
+   * is visible: silently accepting them is the behaviour the successor map was
+   * added to replace, not to reproduce.
+   */
+  matchedByPreviousId?: number
 }
 
 /** The full, JSON-serializable analysis report (`testpilot analyze --json`). */
@@ -154,9 +161,10 @@ export interface AnalysisReport {
  * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`);
  * 1.7 `inHelper` on findings + `summary.helperFiles`;
  * 1.8 `discovery.playwrightConfigDeclaresTags`;
- * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`.
+ * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`;
+ * 1.10 `baseline.matchedByPreviousId`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.9'
+export const ANALYSIS_SCHEMA_VERSION = '1.10'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

@@ -12,6 +12,9 @@ import type { Rule } from './types.js'
  * Reads the tokenized selector, so `[title=":nth-child(2)"]` — the pseudo's
  * name inside an attribute *value* — no longer fires.
  */
+/** Both are sibling-index selectors; the parsed pseudo covers each. */
+const POSITIONAL_PSEUDOS = new Set(['nth-child', 'nth-last-child'])
+
 export const noNthChild: Rule = {
   id: 'no-nth-child',
   category: 'locator',
@@ -21,12 +24,16 @@ export const noNthChild: Rule = {
     if (context.isDynamic || context.apiCall !== 'locator' || !context.parsed) {
       return null
     }
-    const found = hasPseudo(context.parsed, new Set(['nth-child', 'nth-last-child']))
+    const found = hasPseudo(context.parsed, POSITIONAL_PSEUDOS)
     if (found !== true) {
       return null
     }
     return {
-      message: 'CSS :nth-child() selectors depend on sibling order and break easily.',
+      // Names both, because moving to the parsed pseudo widened this from a
+      // `:nth-child(` substring match to `:nth-last-child()` as well — a user
+      // flagged on the latter should not read a message about the former.
+      message:
+        'CSS :nth-child() / :nth-last-child() selectors depend on sibling order and break easily.',
       suggestion: 'Prefer a stable user-facing locator such as getByRole() or getByTestId().',
     }
   },

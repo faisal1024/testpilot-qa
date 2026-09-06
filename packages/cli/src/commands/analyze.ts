@@ -114,6 +114,9 @@ export async function analyzeCommand(
       path: options.baseline,
       newFindings: comparison.newFindings.length,
       baselinedFindings: comparison.baselinedFindings,
+      ...(comparison.matchedByPreviousId > 0
+        ? { matchedByPreviousId: comparison.matchedByPreviousId }
+        : {}),
     }
   }
 

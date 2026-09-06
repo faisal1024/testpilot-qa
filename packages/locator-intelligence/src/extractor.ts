@@ -5,8 +5,9 @@ import { tokenizeSelector } from './selector/tokenize.js'
 /**
  * Note `first`/`last` are absent deliberately. `avoid-positional-access`
  * already handles them, but extracting them makes them **call sites** — the
- * score's denominator — which moves every score by 3-8 points. That belongs
- * with Phase 12, which owns the denominator. See `avoid-positional-access.ts`.
+ * score's denominator. Measured: callSites +4% to +50% depending on the repo,
+ * and scores -1 to -13. That belongs with Phase 12, which owns the denominator.
+ * See `avoid-positional-access.ts` for the per-repo figures.
  */
 const LOCATOR_METHODS = new Set<LocatorApi>([
   'locator',

@@ -28,16 +28,23 @@ xpath finding × 4.5, over 1326 × 5 — 5.18%. **`callSites` is unchanged on al
 the rise is not the denominator moving.
 
 `.first()`/`.last()` are **not** extracted yet, against the plan's wording for 11e. They would become
-call sites — the score's denominator — and that moves every score a *further* 3–8 points on top of
-the re-grading here.
+call sites — the score's denominator. Measured by adding them to `LOCATOR_METHODS` and re-running the
+corpus:
 
-To be straight about it: this release already moves cal.com 69 → 74, which flips a `--min-score 70`
-gate from failing to passing. So "it would flip a gate" is not by itself the reason — this PR does
-that too. The reason is that it would be a **second, unrelated** mechanism moving the same number in
-the same release: a severity re-grade and a denominator change are different claims about a suite,
-and bundling them makes neither checkable. `callSites` is byte-identical on all five repos precisely
-so a reader can attribute this release's movement entirely to the re-grading. The denominator is
-Phase 12's subject; the rule already handles the two calls.
+| repo | callSites | score |
+|---|---|---|
+| cal.com | 1326 → 1431 (+7.9%) | 74 → 73 |
+| immich | 352 → 366 (+4.0%) | 91 → 90 |
+| Ghost | 95 → 143 (**+50.5%**) | 99 → **86** |
+| documenso | 3774 → 4054 (+7.4%) | 91 → 89 |
+| mattermost | 2954 → 3202 (+8.4%) | 67 → 66 |
+
+Ghost loses 13 points because half its locator calls are positional. The reason to hold it back is
+not the size of the move but that it is a **second, unrelated mechanism** acting on the same number:
+a severity re-grade and a denominator change are different claims about a suite, and shipping both at
+once makes neither checkable. `callSites` is byte-identical on all five repos here precisely so a
+reader can attribute this release's movement entirely to the re-grading. The denominator is Phase
+12's subject; the rule already handles the two calls.
 
 **If you gate on `--min-score`, re-check your threshold on this release.** A gate that was passing
 still passes; one you had tuned tightly is now looser than you meant.
@@ -50,10 +57,16 @@ Also folds in two follow-ups to the tokenizer: `:nth-child(2 of.foo)` with no sp
 valid CSS that Playwright accepts and was silently dropping its selector, and the differential CI
 step now runs after the corpus exists rather than before it.
 
+**Existing configs and `--baseline` files keep working; SARIF suppressions do not.** GitHub code
+scanning keys an alert on `ruleId` plus location, and the successor map is a TestPilot-side concept,
+so findings that changed id will surface as closed-and-reopened alerts on the first run after
+upgrading. There is no way to avoid that from here — flagged because it is the one place the
+compatibility work does not reach.
+
 **Existing configs and baselines keep working.** A rule split changes finding ids, which would
 otherwise re-report every grandfathered finding as new (measured: 114 on cal.com, on a suite where
 nothing changed) and un-silence a rule someone had set to `off`. Both are handled by a successor map:
-a `--baseline` entry recorded under a rule's previous id still matches (and the comparison reports
-how many did), and a severity set on the old id carries to its successors with a
+a `--baseline` entry recorded under a rule's previous id still matches, and both the table and
+`--json` report how many did, so the absorption is visible rather than silent, and a severity set on the old id carries to its successors with a
 `deprecated-rule-id` warning naming the replacement. `GUIDANCE_VERSION` 4 → 5, since the AI guidance
 told agents to "never use `.nth()`" and the analyzer no longer agrees.
