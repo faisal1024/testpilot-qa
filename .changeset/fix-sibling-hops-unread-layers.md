@@ -7,15 +7,24 @@
 Two more places `prefer-get-by-test-id` made a claim it could not support, and one place
 `prefer-semantic-locator` gave advice a call site had already taken.
 
-**A sibling step on a later `>>` part was called an ancestor — in every spelling of "the scope".**
+**`prefer-get-by-test-id` now recognises a closed set of shapes it can prove, instead of enumerating
+the ways a selector can escape.**
 `locator('[data-testid="a"] >> + div')` reported *"the test id is on an ancestor of the element this
 selector targets"* — but Playwright parses that second part as `:scope + div`, so the target is the
 test id's **adjacent sibling**. The within-part spelling `'[data-testid="a"] + div'` has abstained
 since the rule learned about combinators; the `>>` spelling had not, so one locator written two ways
-gave two answers. Also `>> ~ div`, mid-chain `>> + div >> span`, and — caught by a second review of
-the first fix — `>> *:scope + div` and `>> :scope:hover + div`, which Playwright parses identically
-to `>> + div` but which a predicate matching only a *bare* `:scope` let through. A part that simply
-*is* the scope (`>> :scope`) is not an ancestor either.
+gave two answers. Fixing that spelling surfaced the next: `>> *:scope + div` and
+`>> :scope:hover + div`, which Playwright parses identically to `>> + div`. Fixing *those* surfaced
+`>> :is(:scope) + div` — `:is(:scope)` is `:scope` to Playwright's own engine. Three rounds, three
+spellings, each found inside the fix for the last.
+
+So the rule stopped enumerating escapes. It now names a rewrite only for shapes it can prove: **one**
+selector, no `>>` chaining, the test id leading it, reaching the target through descendant or `>`
+steps. Everything else is silent. The set of ways to leave a subtree is open — CSS and Playwright
+keep adding spellings — while the set of shapes that provably stay is small and closed.
+
+`locator('[data-testid=a] >> div')` loses its finding to this, which is real advice given up. It
+occurs **zero** times across the five corpus repos, and the corpus counts are unchanged.
 
 **Playwright's default was asserted over a config layer the same run said it could not read.**
 `defineConfig(base, { testDir })` with an imported `base` reported

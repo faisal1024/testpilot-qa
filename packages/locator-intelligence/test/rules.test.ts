@@ -113,11 +113,12 @@ describe('prefer-get-by-test-id', () => {
   })
 
   it('offers a scope only when the test id is genuinely an ancestor', () => {
-    for (const selector of ['[data-testid="list"] > li a', '[data-testid="list"] >> button']) {
-      const violation = preferGetByTestId.evaluate(css(selector))
-      expect(violation?.message, selector).toContain('ancestor')
-      expect(violation?.suggestion, selector).toContain('Scope with getByTestId("list")')
-    }
+    // Within ONE selector only. The `>>` spelling used to report here too, and
+    // reasoning across an engine boundary is what produced ten rounds of wrong
+    // "ancestor" claims — see the multi-part test below.
+    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
+    expect(violation?.message).toContain('ancestor')
+    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
   })
 
   it('says nothing when the test id is a sibling, not an ancestor', () => {
@@ -213,13 +214,26 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope + div'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope ~ div'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope:hover + div'))).toBeNull()
+    // Including the spellings a `:scope`-recognising predicate could not see —
+    // `:is(:scope)` IS `:scope` to Playwright, which was the tenth instance,
+    // inside the fix for the ninth. Nothing here recognises `:scope` any more.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :is(:scope) + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :where(:scope) + div'))).toBeNull()
+    expect(
+      preferGetByTestId.evaluate(css('[data-testid="a"] >> :nth-match(:scope + div, 1)')),
+    ).toBeNull()
     // A part that IS the scope targets the same element, not a descendant.
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope'))).toBeNull()
-    // A child step from the scope is still a scope.
-    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope > div'))).not.toBeNull()
-    // A descendant or child step is still a scope.
-    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> div'))).not.toBeNull()
-    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> > div'))).not.toBeNull()
+    // Multi-part, so silent now — including the descendant/child forms that
+    // were genuinely correct. See the note on the closed shape set above.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope > div'))).toBeNull()
+    // ...and so does every multi-part selector, descendant steps included. The
+    // rule now recognises a closed set of shapes it can prove, rather than
+    // enumerating the ways a later part might escape the subtree — that list
+    // was incomplete ten times running. `>> div` is a real finding given up to
+    // close the class; it occurs zero times in the corpus.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> > div'))).toBeNull()
     // Still fires where nothing precedes it, including under a getBy* parent —
     // there the chain preserves the scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()

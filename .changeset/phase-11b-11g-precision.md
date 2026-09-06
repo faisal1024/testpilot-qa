@@ -38,7 +38,9 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   ancestor before the test id, a selector list, a bare presence check) this one speaks instead. The
   one gap is a call whose own options carry a filter: `prefer-get-by-test-id` abstains on the options
   bag while this rule still defers on the test id, so `locator('[data-testid=x]', { hasText })` is
-  reported by neither — one corpus call site, and the same one counted in the removals below.
+  reported by neither — one corpus call site, and the same one counted in the removals below. An
+  options bag neither rule can read (`locator('[data-testid=x]', opts)`) falls in the same gap; it
+  occurs zero times in the corpus.
 
 **A config or baseline written against the old id keeps working**: `prefer-user-facing-locator` maps
 to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It is no
