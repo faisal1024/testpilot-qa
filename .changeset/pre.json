@@ -12,6 +12,7 @@
   },
   "changesets": [
     "alpha-1-no-silent-green",
+    "fix-test-id-ancestors",
     "milestone-2-5-init-run",
     "milestone-2-cli-basics",
     "milestone-3-5-parallel-foundation",

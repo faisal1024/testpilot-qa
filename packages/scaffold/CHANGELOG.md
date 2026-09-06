@@ -1,5 +1,11 @@
 # @testpilot/scaffold
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- @testpilot/templates@0.1.0-alpha.2
+
 ## 0.1.0-alpha.1
 
 ### Patch Changes
