@@ -26,6 +26,10 @@ export function buildProgram(): Command {
     .option('-q, --quiet', 'Only print errors.', false)
     .option('--verbose', 'Enable verbose logging.', false)
     .option('--no-color', 'Disable colored output.')
+    .option(
+      '--no-playwright-discovery',
+      'Do not read testDir/testMatch from playwright.config.* when testpilot.config.ts omits them.',
+    )
 
   program
     .command('init [directory]')
@@ -65,6 +69,10 @@ export function buildProgram(): Command {
   program
     .command('doctor')
     .description('Diagnose project readiness and common setup issues.')
+    .option(
+      '--strict-guidance',
+      'Also check AI guidance files on a project with no testpilot.config.ts.',
+    )
     .action(doctorCommand)
 
   program

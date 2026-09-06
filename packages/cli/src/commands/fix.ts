@@ -12,7 +12,11 @@ import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
-import { resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
+import {
+  type DiscoveryResult,
+  discoveryWarnings,
+  resolveDiscoveryOrExit,
+} from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
@@ -40,16 +44,23 @@ export async function fixCommand(
   command: Command,
 ): Promise<void> {
   const globals = readGlobalOptions(command)
-  const { config, filepath } = await resolveConfigOrExit(globals)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const { config, filepath, discovery, rootDir } = resolved
   const write = options.write === true
 
-  const rootDir = resolveRootDir(globals.cwd, filepath)
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
-  const files = await resolveTestFiles(globals.cwd, explicitPatterns, config, rootDir)
+  const files = await resolveTestFiles({
+    cwd: globals.cwd,
+    patterns: explicitPatterns,
+    config,
+    rootDir,
+    scopes: resolved.scopes,
+  })
   if (files.length === 0) {
-    failNoFilesMatched(globals, patterns, config, filepath)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
-  // Display paths use the same base as `analyze` reports, so the two agree.
+  // Exactly the base `analyze` reports against, so the two commands agree and a
+  // dry-run diff still applies from the project root.
   const displayBase = discoveryBase(globals.cwd, explicitPatterns, rootDir)
 
   const results: FileFixSummary[] = []
@@ -90,7 +101,7 @@ export async function fixCommand(
     }
   }
 
-  report(results, diffs, write, skipped, globals)
+  report(results, diffs, write, skipped, globals, resolved)
 }
 
 function totalFixes(results: FileFixSummary[]): number {
@@ -103,6 +114,7 @@ function report(
   write: boolean,
   skipped: number,
   globals: GlobalOptions,
+  resolved: DiscoveryResult,
 ): void {
   if (globals.json) {
     console.log(
@@ -111,6 +123,10 @@ function report(
         dryRun: !write,
         files: results.map((r) => ({ file: r.file, written: r.written, fixes: r.fixes })),
         summary: { files: results.length, fixes: totalFixes(results), skipped },
+        // This is the write path: it must be at least as loud as `analyze` about a
+        // file set chosen by a half-read or mis-adopted Playwright config.
+        discovery: resolved.discovery,
+        warnings: discoveryWarnings(resolved.discovery),
       }),
     )
     return

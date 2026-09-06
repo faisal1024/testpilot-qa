@@ -1,4 +1,5 @@
-import { relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   type AnalysisReport,
   type Finding,
@@ -21,6 +22,17 @@ export interface SarifLog {
 interface SarifRun {
   tool: { driver: SarifDriver }
   results: SarifResult[]
+  /** Non-result diagnostics (e.g. an incompletely-read Playwright config). */
+  invocations?: SarifInvocation[]
+}
+
+interface SarifInvocation {
+  executionSuccessful: boolean
+  toolExecutionNotifications: {
+    level: 'warning'
+    message: { text: string }
+    descriptor: { id: string }
+  }[]
 }
 
 interface SarifDriver {
@@ -28,6 +40,8 @@ interface SarifDriver {
   informationUri: string
   version: string
   rules: SarifReportingDescriptor[]
+  /** Descriptors for `toolExecutionNotifications`, so their references resolve. */
+  notifications?: { id: string; shortDescription: { text: string } }[]
 }
 
 interface SarifReportingDescriptor {
@@ -90,14 +104,31 @@ export interface SarifOptions {
 }
 
 function artifactUri(report: AnalysisReport, file: string, cwd: string | undefined): string {
-  if (!cwd || !report.rootDir) return file
-  return relative(cwd, resolve(report.rootDir, file)).split(sep).join('/') || file
+  const absolute = report.rootDir ? resolve(report.rootDir, file) : file
+  // A file outside the project itself (a Playwright `testDir: '../shared'`) has no
+  // valid checkout-relative URI; code scanning rejects one and drops the upload. An
+  // absolute file URI is at least well-formed. A path that merely escapes `--cwd`
+  // (running from a sub-directory) is fine and stays relative, as documented.
+  if (file.startsWith('../') || file === '..' || isAbsolute(file)) {
+    return pathToFileURL(absolute).href
+  }
+  return cwd ? relative(cwd, absolute).split(sep).join('/') || file : file
 }
 
 export function toSarif(report: AnalysisReport, options: SarifOptions = {}): SarifLog {
   const ruleIndex = new Map<string, number>()
   const rules: SarifReportingDescriptor[] = []
   const results: SarifResult[] = []
+
+  // Every warning, not just discovery ones: a `no-files-matched` run published SARIF
+  // indistinguishable from a genuinely clean scan, which is the false green this
+  // reporter exists to prevent.
+  const notifications = (report.warnings ?? []).map((warning) => ({
+    level: 'warning' as const,
+    message: { text: warning.message },
+    descriptor: { id: warning.code },
+  }))
+  const analyzedNothing = report.summary?.filesAnalyzed === 0
 
   for (const finding of report.findings) {
     let index = ruleIndex.get(finding.ruleId)
@@ -130,9 +161,41 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   return {
     $schema: SARIF_SCHEMA,
     version: '2.1.0',
-    runs: [{ tool: { driver: driver(rules) }, results }],
+    runs: [
+      {
+        tool: { driver: driver(rules) },
+        results,
+        // Warnings that are not findings — a partly-read Playwright config, or a run that
+        // matched nothing — which the gate's consumer must see.
+        ...(notifications.length > 0 || analyzedNothing
+          ? {
+              invocations: [
+                {
+                  // A run that opened no files did not successfully analyze anything —
+                  // publishing it as a success is indistinguishable from a clean scan.
+                  executionSuccessful: !analyzedNothing,
+                  toolExecutionNotifications: notifications,
+                },
+              ],
+            }
+          : {}),
+      },
+    ],
   }
 }
+
+const NOTIFICATION_DESCRIPTORS = [
+  { id: 'unknown-rule', shortDescription: { text: 'A configured rule id is not recognized.' } },
+  { id: 'no-files-matched', shortDescription: { text: 'No test files matched.' } },
+  {
+    id: 'playwright-config-partial',
+    shortDescription: { text: 'The Playwright config was only partly readable.' },
+  },
+  {
+    id: 'playwright-config-ignored',
+    shortDescription: { text: 'The Playwright config was not used for discovery.' },
+  },
+]
 
 function driver(rules: SarifReportingDescriptor[]): SarifDriver {
   return {
@@ -140,6 +203,7 @@ function driver(rules: SarifReportingDescriptor[]): SarifDriver {
     informationUri: INFORMATION_URI,
     version: CLI_VERSION,
     rules,
+    notifications: NOTIFICATION_DESCRIPTORS,
   }
 }
 

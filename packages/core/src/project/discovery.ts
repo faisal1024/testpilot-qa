@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-const PLAYWRIGHT_CONFIG_BASENAMES = [
+export const PLAYWRIGHT_CONFIG_BASENAMES = [
   'playwright.config.ts',
   'playwright.config.mts',
   'playwright.config.cts',

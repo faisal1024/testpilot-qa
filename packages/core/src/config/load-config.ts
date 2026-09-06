@@ -23,6 +23,12 @@ export interface LoadConfigResult {
   config: TestPilotConfig
   /** Absolute path of the loaded file, or `null` when defaults were used. */
   filepath: string | null
+  /**
+   * Keys the user set in the config file (with a defined value). Lets callers
+   * distinguish "the user chose `tests`" from "zod applied its default", which is
+   * what makes the Playwright fallback safe — see `resolveDiscovery`.
+   */
+  explicitKeys: ReadonlySet<string>
 }
 
 /** Walks up from `cwd` looking for a `testpilot.config.*` file. */
@@ -66,7 +72,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadC
   }
 
   if (!filepath) {
-    return { config: configSchema.parse({}), filepath: null }
+    return { config: configSchema.parse({}), filepath: null, explicitKeys: new Set() }
   }
 
   let loaded: unknown
@@ -85,5 +91,14 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadC
     throw new ConfigError(`Invalid TestPilot config in ${filepath}:\n${issues}`)
   }
 
-  return { config: parsed.data, filepath }
+  // An explicitly-`undefined` value is not a choice — zod's default applies, and so
+  // should the Playwright fallback.
+  const explicitKeys = new Set(
+    loaded && typeof loaded === 'object'
+      ? Object.entries(loaded as Record<string, unknown>)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key)
+      : [],
+  )
+  return { config: parsed.data, filepath, explicitKeys }
 }

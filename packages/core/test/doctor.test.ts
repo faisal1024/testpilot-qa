@@ -63,11 +63,111 @@ describe('runDoctor', () => {
     expect(checkById(report, 'test-directory')?.status).toBe('pass')
   })
 
+  it('skips AI guidance checks on a project that has not adopted TestPilot', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"someone-elses-repo"}\n')
+    mkdirSync(join(dir, 'tests'))
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(report, 'ai-guidance')).toBeUndefined()
+    // Nothing in the report mentions guidance files for a repo that never asked for them.
+    expect(report.nextActions.join(' ')).not.toContain('add ai')
+
+    const strict = await runDoctor({ cwd: dir, nodeVersion: NODE_OK, strictGuidance: true })
+    expect(checkById(strict, 'ai-guidance')?.status).toBe('warn')
+  })
+
+  it('names the Playwright config when testDir came from it', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    mkdirSync(join(dir, 'e2e'))
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    const check = checkById(report, 'test-directory')
+    expect(check?.status).toBe('pass')
+    expect(check?.message).toContain('playwright.config.ts')
+    expect(check?.details?.source).toBe('playwright-config')
+    // The label must name what was scanned, not the unused built-in `testDir`.
+    expect(check?.message).toContain('"e2e"')
+    expect(check?.details?.testDir).toBe('e2e')
+  })
+
+  it('tells a bare project that its testDir is only a built-in default', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    const check = checkById(await runDoctor({ cwd: dir, nodeVersion: NODE_OK }), 'test-directory')
+    expect(check?.status).toBe('warn')
+    expect(check?.message).toContain('built-in default')
+    expect(check?.remediation).toContain('testpilot.config.ts')
+  })
+
+  it('does not claim a test directory exists when the config failed to load', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'testpilot.config.ts'), 'export default { include: [123] }\n')
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(report, 'config')?.status).toBe('fail')
+    // Nothing was resolved, so there is no directory to pronounce on.
+    expect(checkById(report, 'test-directory')).toBeUndefined()
+  })
+
+  it('names only the roots that are actually missing', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { projects: [{ testDir: './a' }, { testDir: './nope' }] }\n",
+    )
+    mkdirSync(join(dir, 'a'))
+    const check = checkById(await runDoctor({ cwd: dir, nodeVersion: NODE_OK }), 'test-directory')
+    expect(check?.status).toBe('warn')
+    expect(check?.message).toContain('nope')
+    expect(check?.message).not.toContain('"a, nope"')
+    expect(check?.details?.missing).toEqual([join(dir, 'nope')])
+  })
+
+  it('tells a repo with several Playwright configs to pick one, not to add one', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    for (const name of ['pkg-a', 'pkg-b']) {
+      mkdirSync(join(dir, name), { recursive: true })
+      writeFileSync(join(dir, name, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    }
+    const check = checkById(
+      await runDoctor({ cwd: dir, nodeVersion: NODE_OK }),
+      'playwright-config',
+    )
+    expect(check?.message).toContain('Several Playwright configs found')
+    expect(check?.remediation).toContain('pick one')
+  })
+
+  it('honors --no-playwright-discovery, so it still predicts analyze', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    mkdirSync(join(dir, 'e2e'))
+    const adopted = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    expect(checkById(adopted, 'test-directory')?.status).toBe('pass')
+
+    const opted = await runDoctor({
+      cwd: dir,
+      nodeVersion: NODE_OK,
+      disablePlaywrightFallback: true,
+    })
+    // Without the fallback, `analyze` would look in `tests/` and fail — so must doctor.
+    expect(checkById(opted, 'test-directory')?.status).toBe('warn')
+  })
+
+  it('finds a Playwright config kept in a sub-directory, like discovery does', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'e2e', 'specs'), { recursive: true })
+    writeFileSync(
+      join(dir, 'e2e', 'playwright.config.ts'),
+      "export default { testDir: './specs' }\n",
+    )
+    const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
+    // Previously: "No Playwright config found" one line above "falls back to e2e/playwright.config.ts".
+    expect(checkById(report, 'playwright-config')?.status).toBe('pass')
+    expect(checkById(report, 'test-directory')?.details?.testDir).toBe(join('e2e', 'specs'))
+  })
+
   it('passes a complete, healthy project', async () => {
     writeHealthyProject()
     const report = await runDoctor({ cwd: dir, nodeVersion: NODE_OK })
 
-    expect(report.schemaVersion).toBe('1.0')
+    expect(report.schemaVersion).toBe('1.1')
     expect(report.command).toBe('doctor')
     expect(report.status).toBe('pass')
     expect(report.checks.every((check) => check.status === 'pass')).toBe(true)

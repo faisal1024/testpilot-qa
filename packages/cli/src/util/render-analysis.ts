@@ -18,6 +18,13 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
   const { summary, score, findings, warnings, parseErrors, baseline } = report
   const lines: string[] = []
 
+  // The success path needs disclosure too: a wrong-but-unflagged adoption is
+  // invisible if we only speak up when something went wrong.
+  if (report.discovery?.playwrightConfigPath) {
+    lines.push(
+      `Scanned ${report.discovery.roots.join(', ')} (from ${report.discovery.playwrightConfigPath})`,
+    )
+  }
   for (const warning of warnings) {
     lines.push(`⚠ ${warning.message}`)
   }

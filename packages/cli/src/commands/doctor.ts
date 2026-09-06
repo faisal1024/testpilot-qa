@@ -5,12 +5,21 @@ import { ExitCode } from '../util/exit-codes.js'
 import { readGlobalOptions } from '../util/global-options.js'
 import { renderDoctorText } from '../util/render-doctor.js'
 
-export async function doctorCommand(_options: unknown, command: Command): Promise<void> {
+interface DoctorOptions {
+  strictGuidance?: boolean
+}
+
+export async function doctorCommand(options: DoctorOptions, command: Command): Promise<void> {
   const globals = readGlobalOptions(command)
 
   let report: Awaited<ReturnType<typeof runDoctor>>
   try {
-    report = await runDoctor({ cwd: globals.cwd, configPath: globals.configPath })
+    report = await runDoctor({
+      cwd: globals.cwd,
+      configPath: globals.configPath,
+      strictGuidance: options.strictGuidance === true,
+      disablePlaywrightFallback: globals.playwrightDiscovery === false,
+    })
   } catch (error) {
     if (!globals.quiet) {
       console.error(

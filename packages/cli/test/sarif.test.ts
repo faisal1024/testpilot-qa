@@ -148,4 +148,18 @@ describe('toSarif', () => {
     expect(uriOf(toSarif(report, { cwd: '/repo' }))).toBe('packages/web/tests/login.spec.ts')
     expect(uriOf(toSarif(report, { cwd: '/repo/packages/web/src' }))).toBe('../tests/login.spec.ts')
   })
+
+  it('publishes a zero-file run as an unsuccessful invocation, not a clean scan', () => {
+    // `analyze` writes SARIF before failing so `upload-sarif … if: always()` works; an
+    // empty result set with no signal is indistinguishable from a genuinely clean scan.
+    const report = {
+      findings: [],
+      rootDir: '/repo',
+      summary: { filesAnalyzed: 0 },
+      warnings: [{ code: 'no-files-matched', message: 'No test files matched.' }],
+    } as unknown as AnalysisReport
+    const invocation = toSarif(report).runs[0]?.invocations?.[0]
+    expect(invocation?.executionSuccessful).toBe(false)
+    expect(invocation?.toolExecutionNotifications[0]?.descriptor.id).toBe('no-files-matched')
+  })
 })

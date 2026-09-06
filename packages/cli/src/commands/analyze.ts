@@ -11,7 +11,7 @@ import { toHtml } from '../util/html-report.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeJsonFile, writeTextFile } from '../util/output.js'
 import { renderAnalysisText } from '../util/render-analysis.js'
-import { resolveConfigOrExit, resolveRootDir } from '../util/resolve-config.js'
+import { resolveDiscoveryOrExit } from '../util/resolve-config.js'
 import { toSarif } from '../util/sarif.js'
 
 type ReporterFormat = 'table' | 'json' | 'sarif' | 'html'
@@ -53,12 +53,15 @@ export async function analyzeCommand(
     fail(globals, '--update-baseline requires --baseline <path>.', ExitCode.USAGE)
   }
 
-  const { config, filepath } = await resolveConfigOrExit(globals)
+  const resolved = await resolveDiscoveryOrExit(globals, patterns)
+  const { config, filepath, discovery } = resolved
   const report = await analyze({
     cwd: globals.cwd,
     config,
     patterns: patterns.length > 0 ? patterns : undefined,
-    rootDir: resolveRootDir(globals.cwd, filepath),
+    rootDir: resolved.rootDir,
+    scopes: resolved.scopes,
+    discovery,
   })
   const noFilesMatched = report.summary.filesAnalyzed === 0
   if (globals.verbose && !globals.quiet) {
@@ -66,7 +69,7 @@ export async function analyzeCommand(
   }
   // An empty baseline would grandfather nothing and hide the discovery problem.
   if (noFilesMatched && options.updateBaseline) {
-    failNoFilesMatched(globals, patterns, config, filepath)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
 
   // --- Baseline ---
@@ -117,7 +120,7 @@ export async function analyzeCommand(
   // The human table/HTML would just print a meaningless 100 (A), so those fail first.
   const machineReadable = reporter === 'json' || reporter === 'sarif'
   if (noFilesMatched && !machineReadable) {
-    failNoFilesMatched(globals, patterns, config, filepath)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
   const sarifReport = newFindings === undefined ? report : { ...report, findings: newFindings }
   if (options.output) {
@@ -157,7 +160,7 @@ export async function analyzeCommand(
   }
 
   if (noFilesMatched) {
-    failNoFilesMatched(globals, patterns, config, filepath)
+    failNoFilesMatched(globals, patterns, resolved, filepath, resolved.rootDir)
   }
 
   // --- Gating ---

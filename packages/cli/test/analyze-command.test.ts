@@ -133,6 +133,177 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(report.findings.map((f: { ruleId: string }) => f.ruleId)).toContain('no-hard-wait')
   })
 
+  it('finds a suite the built-in globs would miss, via playwright.config.ts', async () => {
+    // The cal.com / immich shape: `*.e2e.ts` under `e2e/`, no testpilot.config.ts.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }\n",
+    )
+    mkdirSync(join(dir, 'e2e'))
+    writeFileSync(join(dir, 'e2e', 'login.e2e.ts'), "page.locator('//button')\n")
+
+    const { stdout, exitCode } = await runAnalyze(['--json'])
+    expect(exitCode).toBeUndefined()
+    const report = JSON.parse(stdout)
+    expect(report.summary.filesAnalyzed).toBe(1)
+    expect(report.findings[0].file).toBe('e2e/login.e2e.ts')
+    expect(report.discovery).toEqual({
+      testDir: 'playwright-config',
+      include: 'playwright-config',
+      exclude: 'default',
+      roots: [join(dir, 'e2e')],
+      playwrightConfigPath: join(dir, 'playwright.config.ts'),
+      playwrightConfigIgnored: null,
+      playwrightConfigPartial: null,
+    })
+  })
+
+  it('reports built-in defaults in the envelope when nothing else supplied them', async () => {
+    const { stdout } = await runAnalyze(['--json'])
+    expect(JSON.parse(stdout).discovery).toEqual({
+      testDir: 'default',
+      include: 'default',
+      exclude: 'default',
+      roots: [join(dir, 'tests')],
+      playwrightConfigPath: null,
+      playwrightConfigIgnored: null,
+      playwrightConfigPartial: null,
+    })
+  })
+
+  it('explains where discovery settings came from under --verbose', async () => {
+    const { stderr } = await runAnalyze(['--verbose'])
+    expect(stderr).toContain('discovery: testDir "tests" (built-in default)')
+    expect(stderr).toContain('(built-in default)')
+  })
+
+  it("says on stderr when another tool's config chose the files", async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }\n",
+    )
+    mkdirSync(join(dir, 'e2e'))
+    writeFileSync(join(dir, 'e2e', 'a.e2e.ts'), "page.locator('//button')\n")
+    const { stderr, exitCode } = await runAnalyze([])
+    expect(exitCode).toBeUndefined()
+    expect(stderr).toContain('Scanning e2e from')
+    expect(stderr).toContain('playwright.config.ts')
+  })
+
+  it('can be told not to consult the Playwright config', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: 'e2e' }\n")
+    mkdirSync(join(dir, 'e2e'))
+    const { stdout } = await runAnalyze(['--json', '--no-playwright-discovery'])
+    const report = JSON.parse(stdout)
+    expect(report.discovery.testDir).toBe('default')
+    expect(report.summary.filesAnalyzed).toBe(1) // the original tests/a.spec.ts
+  })
+
+  it('names the Playwright config it could not use when nothing matched', async () => {
+    rmSync(join(dir, 'tests'), { recursive: true, force: true })
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { testDir: process.env.DIR ?? 'e2e' }\n",
+    )
+    const { stderr, exitCode } = await runAnalyze([])
+    expect(exitCode).toBe(3)
+    expect(stderr).toContain('but not used for discovery')
+    expect(stderr).toContain('not a literal value')
+  })
+
+  it('never analyzes node_modules, even when the config replaces exclude', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { testDir: '.', exclude: ['**/nope/**'] }\n",
+    )
+    mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'dep', 'a.spec.ts'), "page.locator('//button')\n")
+    const { stdout } = await runAnalyze(['--json'])
+    const report = JSON.parse(stdout)
+    expect(report.findings.every((f: { file: string }) => !f.file.includes('node_modules'))).toBe(
+      true,
+    )
+  })
+
+  it('keeps rootDir stable and emits a file URI when a Playwright testDir escapes it', async () => {
+    // `rootDir` must stay a pure function of repo layout: deriving it from the
+    // scanned roots made baseline identities shift whenever a config gained an
+    // unrelated project. A file outside the project is reported honestly with `..`,
+    // and SARIF — where `..` is rejected by code scanning — falls back to a file URI.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'repo'), { recursive: true })
+    mkdirSync(join(dir, 'shared'), { recursive: true })
+    writeFileSync(join(dir, 'shared', 'a.spec.ts'), "page.locator('//button')\n")
+    writeFileSync(
+      join(dir, 'repo', 'playwright.config.ts'),
+      "export default { testDir: '../shared' }\n",
+    )
+    writeFileSync(join(dir, 'repo', 'package.json'), '{"name":"inner"}\n')
+
+    const { stdout } = await runAnalyze(['--json', '--cwd', join(dir, 'repo')])
+    const report = JSON.parse(stdout)
+    expect(report.rootDir).toBe(join(dir, 'repo'))
+    expect(report.findings[0].file).toBe('../shared/a.spec.ts')
+
+    const sarifRun = await runAnalyze(['--reporter', 'sarif', '--cwd', join(dir, 'repo')])
+    const uri = JSON.parse(sarifRun.stdout).runs[0].results[0].locations[0].physicalLocation
+      .artifactLocation.uri
+    expect(uri.startsWith('file://')).toBe(true)
+    expect(uri).not.toContain('/../')
+  })
+
+  it('keeps baseline identities stable when an unrelated project root is added', async () => {
+    // Adding a project that scans elsewhere must not rewrite existing findings'
+    // paths — that turned every baselined finding into a regression.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "page.locator('//button')\n")
+    const pw = join(dir, 'playwright.config.ts')
+    writeFileSync(pw, "export default { projects: [{ testDir: './e2e' }] }\n")
+    const before = JSON.parse((await runAnalyze(['--json'])).stdout).findings[0].file
+
+    mkdirSync(join(dir, 'legacy'), { recursive: true })
+    writeFileSync(join(dir, 'legacy', 'b.spec.ts'), "page.locator('//a')\n")
+    writeFileSync(
+      pw,
+      "export default { projects: [{ testDir: './e2e' }, { testDir: './legacy' }] }\n",
+    )
+    const after = JSON.parse((await runAnalyze(['--json'])).stdout)
+    expect(after.findings.map((f: { file: string }) => f.file)).toContain(before)
+    expect(before).toBe('e2e/a.spec.ts')
+  })
+
+  it('names the scanned roots and their source in the human report', async () => {
+    // The success path needs disclosure too: an adoption that is wrong but unflagged
+    // is invisible if we only speak up when something went wrong.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './e2e' }\n")
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "page.locator('//button')\n")
+    const { stdout } = await runAnalyze([])
+    expect(stdout).toContain('Scanned')
+    expect(stdout).toContain('playwright.config.ts')
+  })
+
+  it('warns when a declared test root does not exist', async () => {
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { projects: [{ testDir: './e2e' }, { testDir: './e2e-api' }] }\n",
+    )
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "page.getByRole('button')\n")
+    const { stdout } = await runAnalyze(['--json'])
+    const report = JSON.parse(stdout)
+    // Scoring a clean grade over half the declared roots is a partial scan.
+    expect(report.warnings.map((w: { code: string }) => w.code)).toContain('test-root-missing')
+  })
+
   it('analyzes an explicitly named file inside an excluded directory', async () => {
     mkdirSync(join(dir, 'dist', 'e2e'), { recursive: true })
     writeFileSync(join(dir, 'dist', 'e2e', 'a.spec.js'), "page.locator('//button')\n")

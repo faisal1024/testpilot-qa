@@ -139,12 +139,15 @@ when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware
 and **[docs/rules](docs/rules/README.md)** for every rule with bad → better examples.
 
 Test files are found via `testDir` + `include` (+ `exclude`) from `testpilot.config.ts` (defaults:
-`tests/`, `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}`, ignoring `node_modules`, `dist`,
+`tests/`, `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}`, ignoring `node_modules`, `dist`,
 `build`, `coverage`, `test-results`, and `playwright-report` — JavaScript suites and `*.e2e.ts` naming
 work out of the box), or via explicit patterns (`npx testpilot-qa analyze "e2e/**/*.spec.ts"`), which
 are honored as written even inside an excluded directory. `testDir` is relative to the config file (or
 the project root when you have no config), so running from a sub-directory of a monorepo still finds
-the suite. **A run that matches no files fails** (exit
+the suite. **No `testpilot.config.ts`?** TestPilot reads `testDir`/`testMatch`/`testIgnore` from your
+`playwright.config.*` (including `projects[]` and RegExp matchers) so it analyzes the suite Playwright
+runs. That config is **parsed, never executed** — `analyze` stays static and offline. It says on stderr
+when it does this; `--no-playwright-discovery` turns it off. **A run that matches no files fails** (exit
 `3` for config discovery, `2` for patterns) instead of reporting an empty 100/A — so a wrong `testDir`
 can't turn into a green CI gate.
 

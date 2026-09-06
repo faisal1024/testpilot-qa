@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.4')
+    expect(report.schemaVersion).toBe('1.6')
     expect(report.summary).toEqual({
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
@@ -89,8 +89,11 @@ describe('analyze — Tier 1 rule set', () => {
     const report = await analyze({ cwd: dir, config: config() })
     expect(report.summary.filesAnalyzed).toBe(1)
 
+    // A user-supplied `exclude` replaces the defaults — but never the node_modules
+    // guard, or `fix --write` could rewrite dependency code.
     const custom = await analyze({ cwd: dir, config: config({ exclude: ['**/dist/**'] }) })
-    expect(custom.summary.filesAnalyzed).toBe(3)
+    expect(custom.summary.filesAnalyzed).toBe(2)
+    expect(custom.findings.every((finding) => !finding.file.includes('node_modules'))).toBe(true)
   })
 
   it('honors an explicitly named path or glob even inside an excluded directory', async () => {

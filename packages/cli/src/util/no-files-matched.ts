@@ -1,5 +1,10 @@
 import { resolve } from 'node:path'
-import { type TestPilotConfig, isDirectory } from '@testpilot/core'
+import {
+  type ResolvedDiscovery,
+  describeRoots,
+  formatDiscoverySource,
+  isDirectory,
+} from '@testpilot/core'
 import { ExitCode } from './exit-codes.js'
 import { fail } from './fail.js'
 import type { GlobalOptions } from './global-options.js'
@@ -17,11 +22,22 @@ import type { GlobalOptions } from './global-options.js'
 export function failNoFilesMatched(
   globals: GlobalOptions,
   patterns: string[],
-  config: TestPilotConfig,
+  resolved: ResolvedDiscovery,
   configPath: string | null,
+  rootDir: string,
 ): never {
-  const source = configPath ?? 'the built-in defaults (no config file found)'
-  const includeHint = `include ${JSON.stringify(config.include)} (exclude ${JSON.stringify(config.exclude)}) from ${source}`
+  const { config, discovery } = resolved
+  // Name the real source AND the real selectors. Printing `config.include` here
+  // showed the user a glob that never ran, attributed to a file it isn't in.
+  const selectors = [
+    ...new Set(resolved.scopes.flatMap((scope) => [...scope.includeGlobs, ...scope.matchGlobs])),
+    ...new Set(
+      resolved.scopes.flatMap((scope) =>
+        scope.matchRegex.map((pattern) => `/${pattern.source}/${pattern.flags}`),
+      ),
+    ),
+  ]
+  const includeHint = `include ${JSON.stringify(selectors)} ${formatDiscoverySource(discovery, 'include')} (exclude ${formatDiscoverySource(discovery, 'exclude')})`
   if (patterns.length > 0) {
     const allDirectories = patterns.every((pattern) => isDirectory(resolve(globals.cwd, pattern)))
     if (allDirectories) {
@@ -43,7 +59,12 @@ export function failNoFilesMatched(
   fail(
     globals,
     [
-      `No test files matched ${includeHint} under testDir "${config.testDir}".`,
+      `No test files matched ${includeHint} under "${describeRoots(discovery.roots, rootDir)}" (${formatDiscoverySource(discovery, 'testDir')}${configPath ? `, config ${configPath}` : ''}).`,
+      ...(discovery.playwrightConfigIgnored
+        ? [
+            `A Playwright config was found at ${discovery.playwrightConfigIgnored.path} but not used for discovery: ${discovery.playwrightConfigIgnored.reason}.`,
+          ]
+        : []),
       'Set testDir/include in testpilot.config.ts to point at your suite, or pass explicit patterns: testpilot analyze "e2e/**/*.spec.ts".',
     ].join('\n'),
     ExitCode.CONFIG,

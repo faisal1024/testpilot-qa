@@ -1,3 +1,4 @@
+import type { ConfigDiscovery } from '../config/discovery.js'
 /**
  * Shared analysis contract.
  *
@@ -19,7 +20,7 @@ export interface Finding {
   category: RuleCategory
   severity: FindingSeverity
   message: string
-  /** Path relative to the analysis cwd, using POSIX separators (stable across machines). */
+  /** Path relative to `AnalysisReport.rootDir`, using POSIX separators (stable across machines). */
   file: string
   /** 1-based line. */
   line: number
@@ -34,7 +35,12 @@ export interface Finding {
 
 /** A non-fatal problem detected while analyzing (e.g. an unknown rule id in config). */
 export interface AnalysisWarning {
-  code: 'unknown-rule' | 'no-files-matched'
+  code:
+    | 'unknown-rule'
+    | 'no-files-matched'
+    | 'playwright-config-partial'
+    | 'playwright-config-ignored'
+    | 'test-root-missing'
   message: string
   ruleId?: string
 }
@@ -103,6 +109,8 @@ export interface AnalysisReport {
    * patterns. Consumers that need repo-relative paths (SARIF) re-resolve from here.
    */
   rootDir: string
+  /** How the analyzed files were selected (config, Playwright config, or defaults). */
+  discovery: ConfigDiscovery
   summary: AnalysisSummary
   score: QualityScore
   findings: Finding[]
@@ -114,9 +122,10 @@ export interface AnalysisReport {
 
 /**
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
- * 1.4 `rootDir` + `no-files-matched` warning code.
+ * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings
+ * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`).
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.4'
+export const ANALYSIS_SCHEMA_VERSION = '1.6'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

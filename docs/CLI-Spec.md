@@ -39,6 +39,7 @@
 | `--quiet`, `-q` | Errors only. |
 | `--verbose` | Debug logging. |
 | `--no-color` | Disable ANSI color. |
+| `--no-playwright-discovery` | Do not read `testDir`/`testMatch` from `playwright.config.*`. |
 | `--version`, `-v` | Print version. |
 | `--help`, `-h` | Contextual help (works on every subcommand). |
 
@@ -296,6 +297,11 @@ envelope:
 }
 ```
 
+The `ai-guidance` check runs only on a project that has a `testpilot.config.ts` (or with
+`--strict-guidance`), so `doctor` on a repository you are merely evaluating does not report missing
+guidance files it was never asked for. A `playwright-discovery` check appears only when a Playwright
+config was found and could not be used for discovery.
+
 **Exit codes:** `0` when no checks fail (warnings are not hard problems); `3` when the config is
 invalid; `4` for environment/project setup problems (e.g. missing Playwright or `package.json`);
 `5` only on an unexpected internal error. (Config failure takes precedence → `3`.)
@@ -383,7 +389,7 @@ import { defineConfig } from 'testpilot-qa'
 
 export default defineConfig({
   testDir: 'tests',
-  include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']
+  include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']
   // default: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/test-results/**', '**/playwright-report/**']
   // Setting this REPLACES the defaults — repeat the ones you still want.
   exclude: ['**/node_modules/**', '**/dist/**'],
@@ -407,13 +413,22 @@ export default defineConfig({
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.4`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.6`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.4",
+  "schemaVersion": "1.6",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
+  "discovery": {
+    "testDir": "playwright-config",
+    "include": "playwright-config",
+    "exclude": "default",
+    "roots": ["/abs/path/to/e2e"],
+    "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
+    "playwrightConfigIgnored": null,
+    "playwrightConfigPartial": null
+  },
   "summary": {
     "filesAnalyzed": 3,
     "filesWithParseErrors": 0,
@@ -446,19 +461,27 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     }
   ],
   "warnings": [
-    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." }
+    { "code": "unknown-rule", "ruleId": "made-up", "message": "Unknown rule \"made-up\" in config — ignored." },
+    { "code": "playwright-config-partial", "message": "…/playwright.config.ts was used for test discovery, but part of it could not be read: …" }
   ],
   "parseErrors": [{ "file": "tests/broken.spec.ts", "message": "..." }],
   "baseline": { "path": "testpilot-baseline.json", "newFindings": 1, "baselinedFindings": 8 }
 }
 ```
 
-`rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
+`discovery` (1.5) says where each file-selection setting came from —
+`testpilot-config` | `playwright-config` | `mixed` | `default` — plus the Playwright config that supplied them
+(`playwrightConfigPath`) or the one that was found and could not be used
+(`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
+scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
+can represent, so every message that names a test directory renders these. `rootDir` (1.4) is the absolute directory that `findings[].file` / `parseErrors[].file` are relative
 to: the config file's directory (or the project root when there is no config file) for config-driven
 discovery, `--cwd` for explicit patterns. It is the one machine-specific field in the envelope — the
 findings, score, and baseline identities are not — so snapshot comparisons across machines should
 ignore it.
-`warnings[].code` is `unknown-rule` or `no-files-matched` (1.4). On a **zero-file run** the `--json`
+`warnings[].code` is `unknown-rule`, `no-files-matched` (1.4), or — new in **1.6** —
+`playwright-config-partial` / `playwright-config-ignored`, so a discovery problem reaches the table,
+the HTML report, and SARIF (as `invocations[].toolExecutionNotifications`), not just stderr. On a **zero-file run** the `--json`
 and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
 no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
 still have something to read; the table and HTML reporters print only the error.
@@ -504,7 +527,7 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
 printing what was searched (a **directory** argument that matches nothing is a `3` too — it is
 expanded with the config's `include`). The default `include` is
-`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']`, and the default `exclude` skips
+`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']`, and the default `exclude` skips
 `node_modules`, `dist`, `build`, `coverage`, `test-results`, and `playwright-report`. `exclude` applies
 wherever `include` chose the files (config-driven discovery and directory arguments); a glob or path
 you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still works.
@@ -512,6 +535,64 @@ you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still
 `testDir` is resolved relative to the directory of the loaded `testpilot.config.ts` — or, when there is
 no config file, the **project root** (nearest `package.json`), which is the same base `doctor` checks —
 so running from a sub-directory of a monorepo still finds the suite.
+
+### Playwright-config fallback
+
+When `testpilot.config.ts` does not set `testDir` (or does not exist), TestPilot reads `testDir`,
+`testMatch`, and `testIgnore` from the project's `playwright.config.*` — including entries under
+`projects[]`, and `RegExp` matchers, which are applied to absolute paths exactly as Playwright applies
+them. If the root has no Playwright config, one first-level sub-directory is checked (real suites keep
+it in `e2e/`); an ambiguous result adopts nothing.
+
+- **Every** `projects[]` entry becomes its own scope: a root plus the `testMatch`/`testIgnore` that
+  apply **to it**, inheriting the top-level values it doesn't set — including projects that declare no
+  selectors at all, as in Playwright's documented `setup` pattern. One project's `testIgnore` can
+  never delete another project's files. A project whose `testDir` is computed is skipped rather than
+  silently scanned at its parent's root.
+- An explicit `include` outranks Playwright's `testMatch`, exactly as an explicit `testDir` does.
+  `exclude` and `testIgnore` are **both** applied — they are not competing definitions of one thing,
+  and adding one exclusion never means "also run the suite Playwright skips". The provenance is then
+  reported as `mixed`.
+- Playwright's `testMatch`/`testIgnore` — globs **and** RegExps, with their flags — are matched
+  against the **absolute** path, as Playwright matches them. TestPilot's own `include`/`exclude` keep
+  their documented root-relative meaning.
+- A config in a **sub-directory** that declares no `testDir` contributes that directory (Playwright's
+  default test root) when it demonstrably holds test files — so a minimal `e2e/playwright.config.ts`
+  points discovery at `e2e/`, while an `examples/` config does not hijack it. A bare config at the
+  project root is reported rather than adopted.
+- `defineConfig(base, override)` is merged **per key with later arguments winning**, as Playwright
+  merges them. A layer that could not be read is reported, and no test root is synthesized from a
+  partly-read config — defaulting to the config's own directory would scan the whole project.
+- Only `defineConfig`/`mergeConfig` calls are unwrapped. A project-local wrapper
+  (`makeConfig({...})`) can rewrite what it is given, so its argument is reported as unreadable
+  rather than trusted.
+- Anything the parse can't resolve — a computed value, a spread, a `projects` array built by a
+  function — is reported. The config is still used for what *was* readable, and `discovery`
+  distinguishes "partially read" (`playwrightConfigPartial`) from "not used" (`playwrightConfigIgnored`).
+- `node_modules` is **always** skipped, whatever `exclude` says.
+- The config is **parsed, never executed.** `analyze` is static and offline, and is routinely pointed
+  at a repository the user is only evaluating. A value that isn't a literal (`testDir: process.env.DIR
+  ?? 'e2e'`) is reported as unusable rather than guessed at, and named in the zero-file error and by
+  `doctor`.
+- `testDir` and `testMatch` are adopted **as a pair** — taking one without the other produces a
+  selection neither tool would make.
+- An explicit TestPilot `testDir` always wins; `testIgnore` and `exclude` are both applied.
+- Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
+**Known limitations.** A partial read always **widens**, never narrows: when part of a config is
+invisible (a spread, a `projects` array built by a function), discovery falls back to the config's own
+directory — the superset the hidden entries can only be inside — so the score may include files
+Playwright does not run. That case is always reported as `playwright-config-partial`. Where Playwright
+declares `testDir` and no `testMatch`, TestPilot's default `include` is a superset of Playwright's
+default `testMatch` (it also picks up `*.e2e.ts`, `*.e2e-spec.ts`, and JS suffixes); provenance then
+reads `default`. And `doctor` checks that the resolved roots *exist*, not that they contain matching
+files, so an empty test directory passes `doctor` and still exits `3` under `analyze`.
+
+- `--no-playwright-discovery` turns the fallback off, for `analyze`, `fix`, and `doctor` alike.
+  Explicit CLI patterns skip it automatically, as does an explicit `testDir` in `testpilot.config.ts`.
+- `rootDir` is a pure function of repo layout, never of the roots discovery resolves — it is the
+  baseline identity anchor, so adding an unrelated `projects[]` entry can't rewrite existing findings'
+  paths. A test root outside the project is reported honestly with `../`, and the SARIF reporter emits
+  an absolute `file://` URI for it (code scanning rejects `..` and would drop the whole upload).
 
 ---
 

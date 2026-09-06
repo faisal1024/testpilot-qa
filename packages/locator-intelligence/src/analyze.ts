@@ -4,14 +4,17 @@ import {
   ANALYSIS_SCHEMA_VERSION,
   type AnalysisReport,
   type AnalysisWarning,
+  type ConfigDiscovery,
+  DEFAULT_DISCOVERY,
   type Finding,
   type FindingSeverity,
   type ParseError,
   type TestPilotConfig,
+  isDirectory,
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
-import { discoveryBase, resolveTestFiles } from './resolve-files.js'
+import { type FileScope, discoveryBase, resolveTestFiles } from './resolve-files.js'
 import { builtinRuleIds, builtinRules } from './rules/index.js'
 import type { Rule } from './rules/types.js'
 import { computeScore } from './score.js'
@@ -29,6 +32,10 @@ export interface AnalyzeOptions {
    * project root when there is no config file. Defaults to `cwd`.
    */
   rootDir?: string
+  /** How the files were selected; surfaced verbatim in the report. */
+  discovery?: ConfigDiscovery
+  /** Directories to scan with their selectors (see `resolveDiscovery`). */
+  scopes?: FileScope[]
 }
 
 interface EnabledRule {
@@ -84,17 +91,45 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const files = await resolveTestFiles(
-    options.cwd,
-    options.patterns,
-    options.config,
-    options.rootDir,
-  )
+  const files = await resolveTestFiles({
+    cwd: options.cwd,
+    patterns: options.patterns,
+    config: options.config,
+    rootDir: options.rootDir,
+    scopes: options.scopes,
+  })
   // Paths are reported relative to the same base discovery used (see discoveryBase).
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
   const { rules, warnings } = resolveRules(options.config)
+  // Discovery problems belong in the report, not only on stderr: the HTML report is
+  // what gets shared and SARIF is what the gate publishes, and neither should show a
+  // confident grade over a config we admit we only half-read.
+  if (options.discovery?.playwrightConfigPartial) {
+    const { path, reason } = options.discovery.playwrightConfigPartial
+    warnings.push({
+      code: 'playwright-config-partial',
+      message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may not match what Playwright runs.`,
+    })
+  }
+  // A declared root that does not exist contributes nothing. Without this, a config
+  // naming two roots where one is missing scores a clean grade over half of them.
+  for (const root of options.discovery?.roots ?? []) {
+    if (!isDirectory(root)) {
+      warnings.push({
+        code: 'test-root-missing',
+        message: `Test directory ${toPosix(relative(reportBase, root)) || root} does not exist, so nothing was analyzed under it.`,
+      })
+    }
+  }
+  if (options.discovery?.playwrightConfigIgnored) {
+    const { path, reason } = options.discovery.playwrightConfigIgnored
+    warnings.push({
+      code: 'playwright-config-ignored',
+      message: `${path} was not used for test discovery: ${reason}.`,
+    })
+  }
   if (files.length === 0) {
     // A run that matched nothing must never look like a clean pass — a
     // TypeScript-only glob on a JavaScript suite would otherwise score 100/A.
@@ -102,7 +137,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       code: 'no-files-matched',
       message: usingPatterns
         ? `No test files matched ${options.patterns?.join(', ')}.`
-        : `No test files matched include ${JSON.stringify(options.config.include)} (exclude ${JSON.stringify(options.config.exclude)}) under testDir "${options.config.testDir}".`,
+        : `No test files matched under ${describeScanned(options, reportBase)}.`,
     })
   }
 
@@ -168,6 +203,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
     command: 'analyze',
     rootDir: reportBase,
+    discovery: options.discovery ?? DEFAULT_DISCOVERY,
     summary: {
       filesAnalyzed: files.length,
       filesWithParseErrors: parseErrors.length,
@@ -179,6 +215,27 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     warnings,
     parseErrors,
   }
+}
+
+/** Names what was actually scanned — never `config.testDir`, which discovery may not have used. */
+function describeScanned(options: AnalyzeOptions, base: string): string {
+  const roots = options.discovery?.roots ?? []
+  const selectors = [
+    ...new Set(
+      (options.scopes ?? []).flatMap((scope) => [...scope.includeGlobs, ...scope.matchGlobs]),
+    ),
+    ...new Set(
+      (options.scopes ?? []).flatMap((scope) =>
+        scope.matchRegex.map((pattern) => `/${pattern.source}/${pattern.flags}`),
+      ),
+    ),
+  ]
+  const where =
+    roots.length > 0
+      ? roots.map((root) => toPosix(relative(base, root)) || '.').join(', ')
+      : `testDir "${options.config.testDir}"`
+  const include = selectors.length > 0 ? selectors : options.config.include
+  return `${where} (include ${JSON.stringify(include)})`
 }
 
 function errorMessage(error: unknown): string {
