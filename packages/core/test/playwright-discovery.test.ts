@@ -392,6 +392,12 @@ describe('use.testIdAttribute — what getByTestId() will actually query', () =>
     expect(attributeOf("export default { testDir: './e2e', use: { [KEY]: 'data-qa' } }\n")).toBe(
       'unresolved',
     )
+    // ...and when the computed key is one level up, where it could be `use`
+    // itself. `hasSpread` was checked at both levels; this one was not.
+    expect(attributeOf("export default { testDir: './e2e', [USE]: { a: 1 } }\n")).toBe('unresolved')
+    expect(
+      attributeOf("export default { testDir: './e2e', projects: [{ [USE]: { a: 1 } }] }\n"),
+    ).toBe('unresolved')
   })
 
   it('is unresolved when it is set but cannot be read', () => {

@@ -177,22 +177,28 @@ function leavesTheSubtree(part: SelectorPart): boolean {
   }
   // A list: any arm that steps sideways is enough.
   return (part.css ?? []).some((arm) => {
+    // A part that IS the scope (`>> :scope`) targets the same element, so
+    // "on an ancestor" is false there too.
+    if (arm.compounds.length === 1 && isScopeHead(arm.compounds[0])) {
+      return true
+    }
     const first = arm.combinators[0]
-    return first !== undefined && !SCOPING_COMBINATORS.has(first) && isBareScope(arm.compounds[0])
+    return first !== undefined && !SCOPING_COMBINATORS.has(first) && isScopeHead(arm.compounds[0])
   })
 }
 
-/** The synthetic `:scope` the tokenizer puts in front of a leading combinator. */
-function isBareScope(compound: CompoundSelector | undefined): boolean {
-  return (
-    compound !== undefined &&
-    compound.tag === undefined &&
-    compound.id === undefined &&
-    compound.classes.length === 0 &&
-    compound.attributes.length === 0 &&
-    compound.pseudos.length === 1 &&
-    compound.pseudos[0]?.name === 'scope'
-  )
+/**
+ * True when this compound selects the scope element.
+ *
+ * The question is "is this the scope", not "is it spelled `:scope` and nothing
+ * else". Playwright parses `>> + div`, `>> :scope + div` and `>> *:scope + div`
+ * to the same thing — `*:scope` is just the implied universal selector written
+ * out — and `:scope:hover + div` still steps sideways from the scope. Matching
+ * only the tokenizer's synthetic bare `:scope` gave those spellings opposite
+ * answers, which is the ninth instance of the same split.
+ */
+function isScopeHead(compound: CompoundSelector | undefined): boolean {
+  return compound?.pseudos.some((pseudo) => pseudo.name === 'scope') === true
 }
 
 /** The one selector in a part, or `null` when the part is a list (or unparsed). */

@@ -205,6 +205,18 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> ~ div'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div >> span'))).toBeNull()
+    // Every spelling of "the scope". Playwright parses `+ div`, `:scope + div`
+    // and `*:scope + div` identically — `*:scope` is the implied universal
+    // selector written out — so matching only the tokenizer's synthetic bare
+    // `:scope` gave them opposite answers. Ninth instance of that split.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope ~ div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope:hover + div'))).toBeNull()
+    // A part that IS the scope targets the same element, not a descendant.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope'))).toBeNull()
+    // A child step from the scope is still a scope.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope > div'))).not.toBeNull()
     // A descendant or child step is still a scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> div'))).not.toBeNull()
     expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> > div'))).not.toBeNull()

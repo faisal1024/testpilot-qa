@@ -121,12 +121,16 @@ export const preferSemanticLocator: Rule = {
     // telling `[data-viewer-content] [data-testid="ocr-box"]` to "add a
     // data-testid" is advice it has already taken. Ten corpus call sites land
     // here — nine of them the ones Phase 11b moved to this rule.
+    //
+    // It deliberately does NOT point at `prefer-get-by-test-id`: this branch is
+    // only reached when that rule declined, so naming it would send the reader
+    // to a rule that has nothing to say about their selector.
     const hasTestId = attributes.some((attribute) => testIds.includes(attribute.name))
     return {
       message:
         'This locator() selector has no semantic handle — no role, label, or ARIA attribute.',
       suggestion: hasTestId
-        ? 'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText() where the element has one; otherwise this test id is the right handle — see prefer-get-by-test-id for expressing it as getByTestId().'
+        ? 'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText() where the element has one. This selector already carries a test id, which is the right fallback when it does not.'
         : 'Prefer getByRole(), getByLabel(), getByPlaceholder() or getByText(); add a data-testid and use getByTestId() when there is no semantic handle to use.',
     }
   },

@@ -316,7 +316,7 @@ function readLocatorOptions(arg: AstNode | undefined): LocatorContext['options']
 
 /**
  * True when a call site takes a selector whose *text* the analyzer never had —
- * an interpolated template literal, a variable, an `as string`. Nothing can
+ * not a static string, most often an interpolated template literal or a variable. Nothing can
  * read those, so no rule ran on them at all.
  *
  * Deliberately **not** "the tokenizer abstained". A selector the tokenizer

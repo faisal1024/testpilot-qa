@@ -321,6 +321,7 @@ interface RawSelectors {
 /** Markers that read as prose already and must not gain "is not a literal value". */
 const PROSE_MARKERS = new Set([
   'a spread from another object',
+  'a computed key',
   'additional defineConfig() arguments',
   'a config layer that could not be read',
 ])
@@ -434,11 +435,17 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const readSelectors = (object: Node, isProject = false): RawSelectors => {
     const spread = hasSpread(object)
     if (spread) unresolved.push('a spread from another object')
+    // A computed key here can *be* `use` — or `tag`. `hasSpread` is applied at
+    // both this level and inside `use`; the computed-key check was applied only
+    // inside `use`, four lines apart in the same function. Pushing a marker
+    // makes `mayDeclareTags` widen on it too, so the two keys agree.
+    const computed = hasComputedKey(object)
+    if (computed) unresolved.push('a computed key')
     const use = propertyValue(object, 'use')
     // A spread at this level can carry `use` entirely, so the attribute is
     // unknown — not "unset, so the default applies". Same for a `use` that is
     // not an object literal.
-    let own: string | 'unresolved' | null = spread ? 'unresolved' : null
+    let own: string | 'unresolved' | null = spread || computed ? 'unresolved' : null
     if (use?.type === 'ObjectExpression') {
       if (hasSpread(use)) own = 'unresolved'
       // A computed key can *be* `testIdAttribute`. `readOwnOptions` in the
