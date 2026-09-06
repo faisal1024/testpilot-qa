@@ -81,8 +81,16 @@ export function effectiveSelectors(resolved: ResolvedDiscovery): {
   regexes: string[]
 } {
   return {
-    globs: [...new Set(resolved.scopes.flatMap((scope) => scope.includeGlobs))],
-    regexes: [...new Set(resolved.scopes.flatMap((scope) => scope.matchRegex))],
+    globs: [
+      ...new Set(resolved.scopes.flatMap((scope) => [...scope.includeGlobs, ...scope.matchGlobs])),
+    ],
+    regexes: [
+      ...new Set(
+        resolved.scopes.flatMap((scope) =>
+          scope.matchRegex.map((pattern) => `${pattern.source}/${pattern.flags}`),
+        ),
+      ),
+    ],
   }
 }
 
@@ -94,7 +102,7 @@ export function effectiveSelectors(resolved: ResolvedDiscovery): {
 export function describeDiscovery(resolved: ResolvedDiscovery, rootDir: string): string {
   const { discovery } = resolved
   const { globs, regexes } = effectiveSelectors(resolved)
-  const selectors = [...globs, ...regexes.map((source) => `/${source}/`)]
+  const selectors = [...globs, ...regexes.map((r) => `/${r.replace(/\/([a-z]*)$/, '/$1')}`)]
   const parts = [
     `testDir "${describeRoots(discovery.roots, rootDir)}" (${formatDiscoverySource(discovery, 'testDir')})`,
     `include ${JSON.stringify(selectors)} (${formatDiscoverySource(discovery, 'include')})`,
@@ -128,9 +136,12 @@ function announceDiscovery(
       `[testpilot] Scanning ${describeRoots(discovery.roots, rootDir)} from ${discovery.playwrightConfigPath} (no testpilot.config.ts setting for testDir).`,
     )
   }
+  if (discovery.playwrightConfigPartial) {
+    const { path, reason } = discovery.playwrightConfigPartial
+    console.error(`[testpilot] Partially read ${path}: ${reason}.`)
+  }
   if (discovery.playwrightConfigIgnored) {
     const { path, reason } = discovery.playwrightConfigIgnored
-    const verb = discovery.playwrightConfigPath ? 'Partially read' : 'Ignored'
-    console.error(`[testpilot] ${verb} ${path} for discovery: ${reason}.`)
+    console.error(`[testpilot] Ignored ${path} for discovery: ${reason}.`)
   }
 }

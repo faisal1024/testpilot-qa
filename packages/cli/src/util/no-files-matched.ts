@@ -30,8 +30,12 @@ export function failNoFilesMatched(
   // Name the real source AND the real selectors. Printing `config.include` here
   // showed the user a glob that never ran, attributed to a file it isn't in.
   const selectors = [
-    ...new Set(resolved.scopes.flatMap((scope) => scope.includeGlobs)),
-    ...new Set(resolved.scopes.flatMap((scope) => scope.matchRegex.map((r) => `/${r}/`))),
+    ...new Set(resolved.scopes.flatMap((scope) => [...scope.includeGlobs, ...scope.matchGlobs])),
+    ...new Set(
+      resolved.scopes.flatMap((scope) =>
+        scope.matchRegex.map((pattern) => `/${pattern.source}/${pattern.flags}`),
+      ),
+    ),
   ]
   const includeHint = `include ${JSON.stringify(selectors)} ${formatDiscoverySource(discovery, 'include')} (exclude ${formatDiscoverySource(discovery, 'exclude')})`
   if (patterns.length > 0) {

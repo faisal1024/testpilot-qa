@@ -50,6 +50,7 @@ export {
 } from './config/playwright-config.js'
 export {
   type DiscoveryScope,
+  type RegexPattern,
   describeRoots,
   findPlaywrightConfigNearby,
   type ResolveDiscoveryOptions,

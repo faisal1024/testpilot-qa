@@ -96,7 +96,7 @@ function artifactUri(report: AnalysisReport, file: string, cwd: string | undefin
   // valid checkout-relative URI; code scanning rejects one and drops the upload. An
   // absolute file URI is at least well-formed. A path that merely escapes `--cwd`
   // (running from a sub-directory) is fine and stays relative, as documented.
-  if (file.startsWith('..') || isAbsolute(file)) {
+  if (file.startsWith('../') || file === '..' || isAbsolute(file)) {
     return pathToFileURL(absolute).href
   }
   return cwd ? relative(cwd, absolute).split(sep).join('/') || file : file

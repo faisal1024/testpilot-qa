@@ -1,6 +1,14 @@
 import { resolve } from 'node:path'
-import { type TestPilotConfig, isDirectory } from '@testpilot/core'
+import {
+  type DiscoveryScope,
+  type RegexPattern,
+  type TestPilotConfig,
+  isDirectory,
+} from '@testpilot/core'
+import picomatch from 'picomatch'
 import { glob } from 'tinyglobby'
+
+const toPosix = (path: string): string => path.split('\\').join('/')
 
 /** Never analyze dependencies, whatever the config says. */
 const ALWAYS_IGNORED = ['**/node_modules/**']
@@ -9,13 +17,7 @@ const ALWAYS_IGNORED = ['**/node_modules/**']
 const ANY_SOURCE_FILE = ['**/*.{ts,tsx,js,jsx,mjs,cjs}']
 
 /** One directory to scan with the selectors that apply to it (see `resolveDiscovery`). */
-export interface FileScope {
-  root: string
-  includeGlobs: string[]
-  matchRegex: string[]
-  excludeGlobs: string[]
-  ignoreRegex: string[]
-}
+export type FileScope = DiscoveryScope
 
 export interface ResolveFilesOptions {
   cwd: string
@@ -64,13 +66,15 @@ export function discoveryBase(
   return usingPatterns ? cwd : (rootDir ?? cwd)
 }
 
-function compile(sources: string[] | undefined): RegExp[] {
+function compile(patterns: RegexPattern[] | undefined): RegExp[] {
   const out: RegExp[] = []
-  for (const source of sources ?? []) {
+  for (const pattern of patterns ?? []) {
     try {
-      out.push(new RegExp(source))
+      // Flags matter: Playwright's `/…/i` matchers select files a case-sensitive
+      // compile would miss.
+      out.push(new RegExp(pattern.source, pattern.flags))
     } catch {
-      // A pattern we cannot compile simply selects nothing extra.
+      // A pattern we cannot compile selects nothing extra.
     }
   }
   return out
@@ -119,6 +123,7 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
         {
           root: resolve(discoveryBase(cwd, patterns, options.rootDir), config.testDir),
           includeGlobs: config.include,
+          matchGlobs: [],
           matchRegex: [],
           excludeGlobs: config.exclude,
           ignoreRegex: [],
@@ -129,9 +134,19 @@ export async function resolveTestFiles(options: ResolveFilesOptions): Promise<st
     const ignoreRegex = compile(scope.ignoreRegex)
     const matchRegex = compile(scope.matchRegex)
     const found = [...(await run(scope.root, scope.includeGlobs, scope.excludeGlobs))]
-    if (matchRegex.length > 0) {
+    if (matchRegex.length > 0 || scope.matchGlobs.length > 0) {
+      // Playwright matches `testMatch` against the absolute path, so these are applied
+      // to the enumerated candidates rather than rooted at `scope.root`.
+      const matchGlob =
+        scope.matchGlobs.length > 0 ? picomatch(scope.matchGlobs, { dot: true }) : null
       const candidates = await run(scope.root, ANY_SOURCE_FILE, scope.excludeGlobs)
-      found.push(...candidates.filter((file) => matchRegex.some((re) => re.test(file))))
+      found.push(
+        ...candidates.filter(
+          (file) =>
+            matchRegex.some((re) => re.test(file)) ||
+            (matchGlob ? matchGlob(toPosix(file)) : false),
+        ),
+      )
     }
     // A scope's ignores apply only to that scope's files, as Playwright scopes them.
     matches.push(

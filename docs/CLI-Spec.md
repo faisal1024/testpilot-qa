@@ -426,7 +426,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "exclude": "default",
     "roots": ["/abs/path/to/e2e"],
     "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
-    "playwrightConfigIgnored": null
+    "playwrightConfigIgnored": null,
+    "playwrightConfigPartial": null
   },
   "summary": {
     "filesAnalyzed": 3,
@@ -468,7 +469,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 ```
 
 `discovery` (1.5) says where each file-selection setting came from —
-`testpilot-config` | `playwright-config` | `default` — plus the Playwright config that supplied them
+`testpilot-config` | `playwright-config` | `mixed` | `default` — plus the Playwright config that supplied them
 (`playwrightConfigPath`) or the one that was found and could not be used
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
@@ -545,8 +546,16 @@ it in `e2e/`); an ambiguous result adopts nothing.
   selectors at all, as in Playwright's documented `setup` pattern. One project's `testIgnore` can
   never delete another project's files. A project whose `testDir` is computed is skipped rather than
   silently scanned at its parent's root.
-- An explicit `include` in `testpilot.config.ts` outranks Playwright's `testMatch`, exactly as an
-  explicit `testDir` does.
+- An explicit `include` or `exclude` in `testpilot.config.ts` outranks Playwright's `testMatch` /
+  `testIgnore`, exactly as an explicit `testDir` does.
+- Playwright's `testMatch`/`testIgnore` — globs **and** RegExps, with their flags — are matched
+  against the **absolute** path, as Playwright matches them. TestPilot's own `include` keeps its
+  documented root-relative meaning.
+- A config that declares no `testDir` still contributes its **own directory**, which is Playwright's
+  default test root — so a minimal `e2e/playwright.config.ts` points discovery at `e2e/`.
+- Anything the parse can't resolve — a computed value, a spread, a `projects` array built by a
+  function — is reported. The config is still used for what *was* readable, and `discovery`
+  distinguishes "partially read" (`playwrightConfigPartial`) from "not used" (`playwrightConfigIgnored`).
 - `node_modules` is **always** skipped, whatever `exclude` says.
 - The config is **parsed, never executed.** `analyze` is static and offline, and is routinely pointed
   at a repository the user is only evaluating. A value that isn't a literal (`testDir: process.env.DIR

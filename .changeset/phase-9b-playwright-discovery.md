@@ -20,7 +20,16 @@ projects that never adopted TestPilot.
   the setup files alone and printed a clean score over a fraction of the tests. One project's
   `testIgnore` can no longer delete another project's files, and a project whose `testDir` is computed
   is skipped rather than silently scanned at its parent's root.
-- **An explicit `include` outranks Playwright's `testMatch`**, exactly as an explicit `testDir` does.
+- **An explicit `include` or `exclude` outranks Playwright's `testMatch`/`testIgnore`**, exactly as an
+  explicit `testDir` does — a Playwright glob silently dropping files while every message credited
+  `testpilot.config` was the worst of both.
+- **Playwright's matchers are applied the way Playwright applies them:** globs and RegExps (with their
+  flags) match against the **absolute** path. TestPilot's own `include` keeps its root-relative
+  meaning. A config that declares no `testDir` still contributes its own directory, which is
+  Playwright's default test root.
+- **Nothing is dropped in silence.** A `projects` array built by a function, or one containing a
+  spread, is still used for the entries that *are* readable — with the base test root kept, since the
+  hidden entries inherit it — and the report distinguishes "partially read" from "not used".
 - **The Playwright config is parsed, never executed.** `analyze` is advertised as static and offline
   and is routinely pointed at a repository you're only evaluating; running that repo's config could
   write to stdout (corrupting `--json`), call `process.exit` (colliding with the gate-failure exit

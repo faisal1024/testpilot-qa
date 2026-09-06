@@ -22,8 +22,11 @@ import { findProjectRoot, isDirectory, resolvePlaywrightBin } from '../project/d
 
 /**
  * Bumped on changes to the doctor report shape.
- * 1.1: `checks` is variable-length (`ai-guidance` is omitted on a project without a
- * `testpilot.config.ts` unless `--strict-guidance`); `test-directory` gained `details`.
+ * 1.1: `checks` is variable-length — `ai-guidance` is omitted on a project without a
+ * `testpilot.config.ts` (unless `--strict-guidance`), `test-directory`/`include-globs`
+ * are omitted when the config failed to load, and `playwright-discovery` appears only
+ * when a Playwright config was partially read or could not be used. `test-directory`
+ * gained `details`.
  */
 export const DOCTOR_SCHEMA_VERSION = '1.1'
 
@@ -210,20 +213,41 @@ function checkTestDirectory(
  * discovery — otherwise the user is left wondering why their suite is invisible.
  */
 function checkPlaywrightDiscovery(discovery: ConfigDiscovery): DoctorCheck {
+  // "Was not used" and "was used, but part of it was unreadable" are different
+  // problems; conflating them sends the user to fix one they don't have.
+  const partial = discovery.playwrightConfigPartial
   const ignored = discovery.playwrightConfigIgnored
+  const detail = partial ?? ignored
   return {
     id: 'playwright-discovery',
     title: 'Playwright config discovery',
     category: 'config',
     status: 'warn',
-    message: `${ignored?.path} was not used for test discovery: ${ignored?.reason}.`,
-    remediation:
-      'Set `testDir` (and `include`) explicitly in testpilot.config.ts — TestPilot reads the Playwright config statically and cannot evaluate computed values.',
-    details: { playwrightConfigPath: ignored?.path, reason: ignored?.reason },
+    message: partial
+      ? `${partial.path} was used for test discovery, but part of it could not be read: ${partial.reason}.`
+      : `${ignored?.path} was not used for test discovery: ${ignored?.reason}.`,
+    remediation: partial
+      ? 'Set `testDir`/`include` explicitly in testpilot.config.ts if the discovered file set is wrong — TestPilot reads the Playwright config statically and cannot evaluate computed values.'
+      : 'Set `testDir` (and `include`) explicitly in testpilot.config.ts — TestPilot reads the Playwright config statically and cannot evaluate computed values.',
+    details: {
+      playwrightConfigPath: detail?.path,
+      reason: detail?.reason,
+      partial: Boolean(partial),
+    },
   }
 }
 
-function checkIncludeGlobs(include: string[]): DoctorCheck {
+function checkIncludeGlobs(include: string[], discovery: ConfigDiscovery): DoctorCheck {
+  // When Playwright supplied the selectors, `config.include` is not what runs.
+  if (discovery.include === 'playwright-config') {
+    return {
+      id: 'include-globs',
+      title: 'Include patterns',
+      category: 'config',
+      status: 'pass',
+      message: `Test selection comes from ${discovery.playwrightConfigPath}.`,
+    }
+  }
   const usable =
     Array.isArray(include) &&
     include.length > 0 &&
@@ -425,11 +449,17 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
     checkPlaywrightInstalled(resolvePlaywrightBin(projectRoot)),
     checkPlaywrightConfig(playwrightConfigPath, ambiguousConfigs),
     configCheck,
+    // A config that failed to load selects nothing — there is no directory and no
+    // include list to judge, and grading the built-in defaults would be misleading.
     ...(configCheck.status === 'fail'
-      ? [] // A config that failed to load selects nothing; there is no directory to judge.
-      : [checkTestDirectory(missingRoots, discovery, configDir ?? projectRoot)]),
-    checkIncludeGlobs(config.include),
-    ...(discovery.playwrightConfigIgnored ? [checkPlaywrightDiscovery(discovery)] : []),
+      ? []
+      : [
+          checkTestDirectory(missingRoots, discovery, configDir ?? projectRoot),
+          checkIncludeGlobs(config.include, discovery),
+        ]),
+    ...(discovery.playwrightConfigIgnored || discovery.playwrightConfigPartial
+      ? [checkPlaywrightDiscovery(discovery)]
+      : []),
     checkProjectStructure(
       configFilePresent,
       playwrightConfigPath !== null || ambiguousConfigs.length > 0,

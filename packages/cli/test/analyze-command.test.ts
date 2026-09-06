@@ -155,6 +155,7 @@ describe('analyze — nothing matched is never a pass', () => {
       roots: [join(dir, 'e2e')],
       playwrightConfigPath: join(dir, 'playwright.config.ts'),
       playwrightConfigIgnored: null,
+      playwrightConfigPartial: null,
     })
   })
 
@@ -167,6 +168,7 @@ describe('analyze — nothing matched is never a pass', () => {
       roots: [join(dir, 'tests')],
       playwrightConfigPath: null,
       playwrightConfigIgnored: null,
+      playwrightConfigPartial: null,
     })
   })
 

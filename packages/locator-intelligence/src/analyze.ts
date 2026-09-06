@@ -193,8 +193,14 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
 function describeScanned(options: AnalyzeOptions, base: string): string {
   const roots = options.discovery?.roots ?? []
   const selectors = [
-    ...new Set((options.scopes ?? []).flatMap((scope) => scope.includeGlobs)),
-    ...new Set((options.scopes ?? []).flatMap((scope) => scope.matchRegex.map((r) => `/${r}/`))),
+    ...new Set(
+      (options.scopes ?? []).flatMap((scope) => [...scope.includeGlobs, ...scope.matchGlobs]),
+    ),
+    ...new Set(
+      (options.scopes ?? []).flatMap((scope) =>
+        scope.matchRegex.map((pattern) => `/${pattern.source}/${pattern.flags}`),
+      ),
+    ),
   ]
   const where =
     roots.length > 0

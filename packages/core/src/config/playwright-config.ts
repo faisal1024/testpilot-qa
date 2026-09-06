@@ -184,8 +184,8 @@ function exportedConfigObject(root: Node): Node | null {
 interface RawSelectors {
   /** `null` = not declared (inherit); `'unresolved'` = declared but not a literal. */
   testDir: string | null | 'unresolved'
-  match: PathPattern[] | null
-  ignore: PathPattern[] | null
+  match: PathPattern[] | null | 'unresolved'
+  ignore: PathPattern[] | null | 'unresolved'
 }
 
 /**
@@ -203,6 +203,13 @@ interface RawSelectors {
  * object) is reported in `unresolved` rather than guessed at, so callers can
  * tell the user why their suite wasn't found.
  */
+/** "testDir is not a literal value" / "testDir and projects are not literal values". */
+export function describeUnresolved(keys: string[]): string {
+  return keys.length === 1
+    ? `${keys[0]} is not a literal value`
+    : `${keys.join(' and ')} are not literal values`
+}
+
 export function readPlaywrightTestSettings(configPath: string): PlaywrightConfigRead {
   let source: string
   try {
@@ -253,8 +260,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       const node = propertyValue(object, key)
       if (!node) continue
       const value = patterns(node)
-      if (value === null) unresolved.push(key)
-      else result[field] = value
+      if (value === null) {
+        // Inheriting the parent's selectors here would analyze a file set this
+        // project never selected — a partial false green with no total miss to catch.
+        unresolved.push(key)
+        result[field] = 'unresolved'
+      } else {
+        result[field] = value
+      }
     }
     return result
   }
@@ -267,33 +280,47 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   // it to that directory. A project inherits any selector it doesn't set itself.
   const toScope = (raw: RawSelectors): PlaywrightScope | null => {
     const testDir = raw.testDir ?? base.testDir ?? '.'
-    if (testDir === 'unresolved') return null
-    return {
-      root: resolve(configDir, testDir),
-      match: raw.match ?? base.match ?? [],
-      ignore: raw.ignore ?? base.ignore ?? [],
+    const match = raw.match ?? base.match ?? []
+    const ignore = raw.ignore ?? base.ignore ?? []
+    if (testDir === 'unresolved' || match === 'unresolved' || ignore === 'unresolved') {
+      return null
     }
+    return { root: resolve(configDir, testDir), match, ignore }
   }
 
   const projectSelectors: RawSelectors[] = []
+  let projectsPartial = false
   const projects = propertyValue(config, 'projects')
-  if (projects?.type === 'ArrayExpression') {
-    for (const raw of (projects.elements as unknown[]) ?? []) {
-      const project = asNode(raw)
-      if (project?.type === 'ObjectExpression') projectSelectors.push(readSelectors(project))
+  if (projects) {
+    if (projects.type !== 'ArrayExpression') {
+      // `projects: makeProjects()` — we cannot see the entries at all.
+      projectsPartial = true
+    } else {
+      for (const raw of (projects.elements as unknown[]) ?? []) {
+        const project = asNode(raw)
+        if (project?.type === 'ObjectExpression') projectSelectors.push(readSelectors(project))
+        // A spread inside the array hides entries that may inherit the base root.
+        else projectsPartial = true
+      }
     }
   }
+  if (projectsPartial) unresolved.push('projects')
 
   // **Every** project becomes a scope, not only those declaring a selector.
   // Playwright's documented auth pattern — one `setup` project with a testMatch
   // beside browser projects with none — would otherwise analyze the setup files
   // alone and report a clean score over a fraction of the suite.
-  const candidates =
+  // Entries we cannot see would inherit the base root, so the base scope has to stay
+  // in play — dropping it analyzed only the projects that happened to be literal.
+  const useProjects =
     projectSelectors.length > 0 && (declares(base) || projectSelectors.some(declares))
-      ? projectSelectors
-      : declares(base)
-        ? [base]
-        : []
+  const candidates: RawSelectors[] = useProjects
+    ? projectsPartial && declares(base)
+      ? [base, ...projectSelectors]
+      : projectSelectors
+    : declares(base) || projectsPartial
+      ? [base]
+      : []
 
   const seen = new Set<string>()
   const scopes: PlaywrightScope[] = []
@@ -309,7 +336,7 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const unique = [...new Set(unresolved)]
   if (scopes.length === 0) {
     return unique.length > 0
-      ? { status: 'unreadable', reason: `${unique.join(' and ')} is not a literal value` }
+      ? { status: 'unreadable', reason: describeUnresolved(unique) }
       : { status: 'no-settings' }
   }
   return { status: 'ok', settings: { scopes }, unresolved: unique }

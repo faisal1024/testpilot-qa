@@ -1,5 +1,5 @@
 /** Where a discovery setting (`testDir` / `include` / `exclude`) actually came from. */
-export type DiscoverySource = 'testpilot-config' | 'playwright-config' | 'default'
+export type DiscoverySource = 'testpilot-config' | 'playwright-config' | 'mixed' | 'default'
 
 /**
  * How the files to analyze were selected. Reported by `analyze` (in the JSON
@@ -21,12 +21,17 @@ export interface ConfigDiscovery {
   /** Playwright config that actually supplied a setting, or `null`. */
   playwrightConfigPath: string | null
   /**
-   * Set when a Playwright config was found but nothing usable could be taken from
-   * it (computed values, a spread, an unparseable file, an ambiguous location).
-   * Never silently ignored: the reason is surfaced in the zero-file error, by
-   * `doctor`, and in the report.
+   * Set when a Playwright config was found and **nothing** could be taken from it
+   * (an unparseable file, an ambiguous location, no readable `testDir`). Never
+   * silently ignored: the reason is surfaced in the zero-file error and by `doctor`.
    */
   playwrightConfigIgnored: { path: string; reason: string } | null
+  /**
+   * Set when a Playwright config **was** used but part of it could not be read.
+   * Distinct from {@link playwrightConfigIgnored}: telling a user their config "was
+   * not used" on a run that used it sends them to fix a problem they don't have.
+   */
+  playwrightConfigPartial: { path: string; reason: string } | null
 }
 
 export const DEFAULT_DISCOVERY: ConfigDiscovery = {
@@ -36,6 +41,7 @@ export const DEFAULT_DISCOVERY: ConfigDiscovery = {
   roots: [],
   playwrightConfigPath: null,
   playwrightConfigIgnored: null,
+  playwrightConfigPartial: null,
 }
 
 /** Human-readable provenance for one setting — the single source of this wording. */
@@ -46,6 +52,8 @@ export function formatDiscoverySource(
   switch (discovery[key]) {
     case 'playwright-config':
       return `from ${discovery.playwrightConfigPath ?? 'the Playwright config'}`
+    case 'mixed':
+      return `partly from ${discovery.playwrightConfigPath ?? 'the Playwright config'}, partly built-in default`
     case 'testpilot-config':
       return 'from testpilot.config'
     default:

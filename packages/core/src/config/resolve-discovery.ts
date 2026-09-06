@@ -1,9 +1,13 @@
 import { readdirSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { findPlaywrightConfig, isDirectory } from '../project/discovery.js'
 import { type ConfigDiscovery, DEFAULT_DISCOVERY } from './discovery.js'
 import type { LoadConfigResult } from './load-config.js'
-import { type PathPattern, readPlaywrightTestSettings } from './playwright-config.js'
+import {
+  type PathPattern,
+  describeUnresolved,
+  readPlaywrightTestSettings,
+} from './playwright-config.js'
 import type { TestPilotConfig } from './schema.js'
 
 /** Directories never worth scanning for a nested Playwright config. */
@@ -21,15 +25,27 @@ const SKIP_DIRS = new Set([
  * `testMatch`/`testIgnore` per project, so these travel together — a union would
  * let one project's `testIgnore` delete another project's files.
  */
+/** A Playwright RegExp selector, preserved with its flags. */
+export interface RegexPattern {
+  source: string
+  flags: string
+}
+
 export interface DiscoveryScope {
   /** Absolute directory to scan. */
   root: string
-  /** Glob selectors. Empty means "selected by `matchRegex` alone". */
+  /** TestPilot's own globs, resolved **relative to `root`** (documented semantics). */
   includeGlobs: string[]
-  /** RegExp selectors, matched against the absolute path as Playwright matches them. */
-  matchRegex: string[]
+  /**
+   * Playwright `testMatch` globs. Playwright matches these against the **absolute**
+   * path, so they are applied that way and not rooted at `root` — a pattern naming a
+   * segment at or above `testDir` matched nothing when it was.
+   */
+  matchGlobs: string[]
+  /** Playwright RegExp `testMatch`, also matched against the absolute path. */
+  matchRegex: RegexPattern[]
   excludeGlobs: string[]
-  ignoreRegex: string[]
+  ignoreRegex: RegexPattern[]
 }
 
 export interface ResolvedDiscovery {
@@ -93,12 +109,12 @@ function normalizeAdoptedGlob(pattern: string): string {
   return `**/${cleaned}`
 }
 
-function splitPatterns(patterns: PathPattern[]): { globs: string[]; regexes: string[] } {
+function splitPatterns(patterns: PathPattern[]): { globs: string[]; regexes: RegexPattern[] } {
   const globs: string[] = []
-  const regexes: string[] = []
+  const regexes: RegexPattern[] = []
   for (const pattern of patterns) {
     if (pattern.kind === 'glob') globs.push(normalizeAdoptedGlob(pattern.value))
-    else regexes.push(pattern.source)
+    else regexes.push({ source: pattern.source, flags: pattern.flags })
   }
   return { globs, regexes }
 }
@@ -108,6 +124,7 @@ function ownScope(config: TestPilotConfig, rootDir: string): DiscoveryScope {
   return {
     root: resolve(rootDir, config.testDir),
     includeGlobs: config.include,
+    matchGlobs: [],
     matchRegex: [],
     excludeGlobs: config.exclude,
     ignoreRegex: [],
@@ -163,7 +180,20 @@ export function resolveDiscovery(
   const configPath = located.path
   const read = readPlaywrightTestSettings(configPath)
   if (read.status === 'no-settings') {
-    // A Playwright config that simply doesn't set testDir/testMatch is unremarkable.
+    // Playwright's `testDir` defaults to the config file's own directory. For a config
+    // kept in a sub-directory that IS the suite location, and ignoring it silently sent
+    // us back to `tests/` — scoring whatever happened to be there.
+    const configDir = dirname(configPath)
+    if (configDir !== resolve(options.rootDir)) {
+      discovery.testDir = 'playwright-config'
+      discovery.roots = [configDir]
+      discovery.playwrightConfigPath = configPath
+      return {
+        config,
+        discovery,
+        scopes: [{ ...ownScope(config, options.rootDir), root: configDir }],
+      }
+    }
     return withoutFallback()
   }
   if (read.status === 'unreadable') {
@@ -172,46 +202,52 @@ export function resolveDiscovery(
   }
 
   const scopes: DiscoveryScope[] = []
-  // An explicit `include` is the user's choice and outranks Playwright's `testMatch`,
-  // exactly as an explicit `testDir` does.
+  // An explicit setting is the user's choice and outranks Playwright's, consistently
+  // for `testDir`, `include`, and `exclude` alike.
   const includeIsOurs = discovery.include === 'default'
+  const excludeIsOurs = discovery.exclude === 'default'
+  let adoptedInclude = false
   let adoptedIgnore = false
+  const seen = new Set<string>()
   for (const scope of read.settings.scopes) {
     const match = splitPatterns(scope.match)
-    const ignore = splitPatterns(scope.ignore)
+    const ignore = excludeIsOurs ? splitPatterns(scope.ignore) : { globs: [], regexes: [] }
+    const takeMatch = includeIsOurs && (match.globs.length > 0 || match.regexes.length > 0)
+    if (takeMatch) adoptedInclude = true
     if (ignore.globs.length > 0 || ignore.regexes.length > 0) adoptedIgnore = true
-    scopes.push({
+    const next: DiscoveryScope = {
       root: scope.root,
-      // Fall back to our own globs when Playwright selects purely by RegExp, so a
+      // Our own globs still apply when Playwright selects purely by RegExp, so a
       // scope always has a selector and `config.include` never has to be emptied.
-      includeGlobs:
-        includeIsOurs && (match.globs.length > 0 || match.regexes.length > 0)
-          ? match.globs
-          : config.include,
-      matchRegex: includeIsOurs ? match.regexes : [],
+      includeGlobs: takeMatch ? [] : config.include,
+      matchGlobs: takeMatch ? match.globs : [],
+      matchRegex: takeMatch ? match.regexes : [],
       excludeGlobs: [...config.exclude, ...ignore.globs],
       ignoreRegex: ignore.regexes,
-    })
+    }
+    // Identical scopes would each trigger their own glob pass over the same tree.
+    const key = JSON.stringify(next)
+    if (seen.has(key)) continue
+    seen.add(key)
+    scopes.push(next)
   }
 
   discovery.testDir = 'playwright-config'
   discovery.roots = [...new Set(scopes.map((scope) => scope.root))]
-  // Identical scopes would each trigger their own glob pass over the same tree.
   discovery.playwrightConfigPath = configPath
-  if (
-    includeIsOurs &&
-    scopes.some((scope) => scope.matchRegex.length > 0 || scope.includeGlobs !== config.include)
-  ) {
-    discovery.include = 'playwright-config'
+  if (adoptedInclude) {
+    // Some scopes may still use our own globs (Playwright declared none for them).
+    discovery.include = scopes.some((scope) => scope.includeGlobs.length > 0)
+      ? 'mixed'
+      : 'playwright-config'
   }
-  // Only claim Playwright chose `exclude` when the user did not set one themselves.
-  if (adoptedIgnore && discovery.exclude === 'default') {
-    discovery.exclude = 'playwright-config'
-  }
+  if (adoptedIgnore) discovery.exclude = 'playwright-config'
   if (read.unresolved.length > 0) {
-    discovery.playwrightConfigIgnored = {
+    // The config *was* used — saying it "was not used" would send the user to fix a
+    // problem they don't have.
+    discovery.playwrightConfigPartial = {
       path: configPath,
-      reason: `${read.unresolved.join(' and ')} is not a literal value`,
+      reason: describeUnresolved(read.unresolved),
     }
   }
   return { config, discovery, scopes }
