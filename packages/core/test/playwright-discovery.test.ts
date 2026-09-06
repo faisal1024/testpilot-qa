@@ -118,6 +118,21 @@ export default { testDir: './web', projects: [...sharedProjects, { name: 'api', 
     expect(read.unresolved).toContain('projects')
   })
 
+  it('widens (never narrows) when a projects[] entry hides keys behind a spread', () => {
+    // The entry may carry its own testDir; falling back to the config directory is the
+    // superset it can only be inside. The direction matters — narrowing would be a
+    // silent partial scan — so pin it.
+    const path = writeFile(
+      'playwright.config.ts',
+      "import { shared } from './shared'\nexport default { testMatch: '**/*.spec.ts', projects: [{ name: 'a', ...shared }] }\n",
+    )
+    const read = readSettings(path)
+    expect(read.status).toBe('ok')
+    if (read.status !== 'ok') return
+    expect(read.settings.scopes.map((scope) => scope.root)).toEqual([dir])
+    expect(read.unresolved).toContain('a spread from another object')
+  })
+
   it('discloses a projects list it cannot see at all', () => {
     const path = writeFile(
       'playwright.config.ts',

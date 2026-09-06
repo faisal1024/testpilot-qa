@@ -268,6 +268,7 @@ interface RawSelectors {
 const PROSE_MARKERS = new Set([
   'a spread from another object',
   'additional defineConfig() arguments',
+  'a config layer that could not be read',
 ])
 
 /** "testDir is not a literal value" / "testDir and a spread from another object". */

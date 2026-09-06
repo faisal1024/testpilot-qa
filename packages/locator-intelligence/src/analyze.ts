@@ -10,6 +10,7 @@ import {
   type FindingSeverity,
   type ParseError,
   type TestPilotConfig,
+  isDirectory,
 } from '@testpilot/core'
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
@@ -111,6 +112,16 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       code: 'playwright-config-partial',
       message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may not match what Playwright runs.`,
     })
+  }
+  // A declared root that does not exist contributes nothing. Without this, a config
+  // naming two roots where one is missing scores a clean grade over half of them.
+  for (const root of options.discovery?.roots ?? []) {
+    if (!isDirectory(root)) {
+      warnings.push({
+        code: 'test-root-missing',
+        message: `Test directory ${toPosix(relative(reportBase, root)) || root} does not exist, so nothing was analyzed under it.`,
+      })
+    }
   }
   if (options.discovery?.playwrightConfigIgnored) {
     const { path, reason } = options.discovery.playwrightConfigIgnored

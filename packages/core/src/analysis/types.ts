@@ -40,6 +40,7 @@ export interface AnalysisWarning {
     | 'no-files-matched'
     | 'playwright-config-partial'
     | 'playwright-config-ignored'
+    | 'test-root-missing'
   message: string
   ruleId?: string
 }
@@ -121,7 +122,8 @@ export interface AnalysisReport {
 
 /**
  * Bumped on report-shape changes. 1.1 warnings/parseErrors; 1.2 score; 1.3 optional baseline;
- * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings.
+ * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings
+ * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`).
  */
 export const ANALYSIS_SCHEMA_VERSION = '1.6'
 

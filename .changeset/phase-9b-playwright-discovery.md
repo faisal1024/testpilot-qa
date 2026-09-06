@@ -60,6 +60,8 @@ projects that never adopted TestPilot.
   and the HTML report name the directories scanned and the config they came from, so an adoption that
   is wrong-but-unflagged is visible in the artifacts a team actually reads. `fix --json` carries
   `discovery` and the same warnings — it is the write path and must be at least as loud as `analyze`.
+- **A declared test root that does not exist is reported** (`test-root-missing`), so a config naming
+  two roots where one is absent can no longer score a clean grade over half of them.
 - **A zero-file run publishes an unsuccessful SARIF invocation** with the `no-files-matched`
   notification, instead of a result set indistinguishable from a clean scan.
 - **A `playwrightConfig` you set explicitly is honored**: if it points at a file that does not exist,
@@ -77,3 +79,9 @@ projects that never adopted TestPilot.
   directories discovery actually resolved (and only the ones actually missing), gained `details`, and
   is omitted entirely when the config failed to load. A repo with several Playwright configs is told
   to pick one rather than to add one.
+
+**Known limitations** (documented in `docs/CLI-Spec.md`): a partial read always widens rather than
+narrows, so the score may include files Playwright does not run — always flagged
+`playwright-config-partial`; TestPilot's default `include` is a superset of Playwright's default
+`testMatch`; and `doctor` verifies that the resolved roots exist, not that they contain matching
+files, so an empty test directory passes `doctor` and still exits `3` under `analyze`.

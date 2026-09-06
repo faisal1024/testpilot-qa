@@ -81,6 +81,26 @@ describe('fix — nothing matched', () => {
   })
 })
 
+describe('fix — discovery disclosure', () => {
+  it('carries discovery and warnings in its JSON, like analyze', async () => {
+    // `fix` is the write path: it must be at least as loud about a file set chosen by
+    // a half-read or mis-adopted Playwright config.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "export default { testDir: './e2e', projects: makeProjects() }\n",
+    )
+    mkdirSync(join(dir, 'e2e'), { recursive: true })
+    writeFileSync(join(dir, 'e2e', 'a.spec.ts'), "await page.locator('text=Save').click()\n")
+    const { stdout } = await runFix([], ['--json', '--quiet'])
+    const report = JSON.parse(stdout)
+    expect(report.discovery.playwrightConfigPath).toBe(join(dir, 'playwright.config.ts'))
+    expect(report.warnings.map((w: { code: string }) => w.code)).toContain(
+      'playwright-config-partial',
+    )
+  })
+})
+
 describe('fix — path base agrees with analyze', () => {
   it('uses the same base as analyze when a Playwright config supplied the root', async () => {
     writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')

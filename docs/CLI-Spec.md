@@ -578,6 +578,15 @@ it in `e2e/`); an ambiguous result adopts nothing.
   selection neither tool would make.
 - An explicit TestPilot `testDir` always wins; `testIgnore` and `exclude` are both applied.
 - Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
+**Known limitations.** A partial read always **widens**, never narrows: when part of a config is
+invisible (a spread, a `projects` array built by a function), discovery falls back to the config's own
+directory — the superset the hidden entries can only be inside — so the score may include files
+Playwright does not run. That case is always reported as `playwright-config-partial`. Where Playwright
+declares `testDir` and no `testMatch`, TestPilot's default `include` is a superset of Playwright's
+default `testMatch` (it also picks up `*.e2e.ts`, `*.e2e-spec.ts`, and JS suffixes); provenance then
+reads `default`. And `doctor` checks that the resolved roots *exist*, not that they contain matching
+files, so an empty test directory passes `doctor` and still exits `3` under `analyze`.
+
 - `--no-playwright-discovery` turns the fallback off, for `analyze`, `fix`, and `doctor` alike.
   Explicit CLI patterns skip it automatically, as does an explicit `testDir` in `testpilot.config.ts`.
 - `rootDir` is a pure function of repo layout, never of the roots discovery resolves — it is the

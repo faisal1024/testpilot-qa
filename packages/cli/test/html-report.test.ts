@@ -23,7 +23,15 @@ function report(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
     schemaVersion: '1.6',
     command: 'analyze',
     rootDir: '/repo',
-    discovery: { testDir: 'default', include: 'default', playwrightConfigPath: null },
+    discovery: {
+      testDir: 'default',
+      include: 'default',
+      exclude: 'default',
+      roots: [],
+      playwrightConfigPath: null,
+      playwrightConfigIgnored: null,
+      playwrightConfigPartial: null,
+    },
     summary: {
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
@@ -189,5 +197,23 @@ describe('toHtml', () => {
     // b.spec.ts is seen first, so its group comes first.
     expect(html.indexOf('tests/b.spec.ts')).toBeLessThan(html.indexOf('tests/a.spec.ts'))
     expect(html).toContain('Findings (3)')
+  })
+
+  it('names the scanned roots when a Playwright config chose them', () => {
+    const html = toHtml(
+      report({
+        discovery: {
+          testDir: 'playwright-config',
+          include: 'playwright-config',
+          exclude: 'default',
+          roots: ['/repo/e2e'],
+          playwrightConfigPath: '/repo/playwright.config.ts',
+          playwrightConfigIgnored: null,
+          playwrightConfigPartial: null,
+        },
+      }),
+    )
+    expect(html).toContain('/repo/e2e')
+    expect(html).toContain('/repo/playwright.config.ts')
   })
 })
