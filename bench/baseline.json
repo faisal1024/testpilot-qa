@@ -1,0 +1,131 @@
+{
+  "recordedAt": "2026-09-06",
+  "nodeMajor": 22,
+  "reason": "Phase 9e: baseline recorded after review — the root-discovery probe is contained, so an unmeasurable probe records null rather than a 0 produced by anchoring on the TestPilot repo.",
+  "corpusRefs": {
+    "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
+    "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
+    "Ghost": "26746d30ce30e3a2a3e69c77f5d460ea6992bfc3",
+    "documenso": "2cac63a000e22422bdea449f68b8025e709aa73a",
+    "mattermost": "502cf7e3e5379ce054bee24e279ec1779911aa38"
+  },
+  "results": [
+    {
+      "name": "cal.com",
+      "exitCode": 0,
+      "filesAnalyzed": 61,
+      "parseErrors": 0,
+      "findings": 833,
+      "score": 68,
+      "grade": "D",
+      "callSites": 1326,
+      "byRule": {
+        "no-css-class-selector": 19,
+        "no-hard-wait": 16,
+        "no-nth-child": 113,
+        "no-xpath": 1,
+        "prefer-user-facing-locator": 684
+      },
+      "warnings": {},
+      "discovery": {
+        "testDir": "playwright-config",
+        "include": "playwright-config"
+      },
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false
+    },
+    {
+      "name": "immich",
+      "exitCode": 0,
+      "filesAnalyzed": 21,
+      "parseErrors": 0,
+      "findings": 76,
+      "score": 89,
+      "grade": "B",
+      "callSites": 352,
+      "byRule": {
+        "no-css-class-selector": 1,
+        "no-hard-wait": 3,
+        "no-nth-child": 6,
+        "no-xpath": 3,
+        "prefer-user-facing-locator": 63
+      },
+      "warnings": {},
+      "discovery": {
+        "testDir": "playwright-config",
+        "include": "playwright-config"
+      },
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false
+    },
+    {
+      "name": "Ghost",
+      "exitCode": 0,
+      "filesAnalyzed": 94,
+      "parseErrors": 0,
+      "findings": 2,
+      "score": 98,
+      "grade": "A",
+      "callSites": 95,
+      "byRule": {
+        "no-nth-child": 2
+      },
+      "warnings": {},
+      "discovery": {
+        "testDir": "playwright-config",
+        "include": "playwright-config"
+      },
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false
+    },
+    {
+      "name": "documenso",
+      "exitCode": 0,
+      "filesAnalyzed": 127,
+      "parseErrors": 0,
+      "findings": 619,
+      "score": 89,
+      "grade": "B",
+      "callSites": 3774,
+      "byRule": {
+        "no-css-class-selector": 43,
+        "no-hard-wait": 112,
+        "no-nth-child": 126,
+        "no-xpath": 3,
+        "prefer-user-facing-locator": 335
+      },
+      "warnings": {},
+      "discovery": {
+        "testDir": "playwright-config",
+        "include": "playwright-config"
+      },
+      "filesFromRepoRoot": 0,
+      "rootOutsideCheckout": false
+    },
+    {
+      "name": "mattermost",
+      "exitCode": 0,
+      "filesAnalyzed": 298,
+      "parseErrors": 0,
+      "findings": 1544,
+      "score": 66,
+      "grade": "D",
+      "callSites": 2954,
+      "byRule": {
+        "no-css-class-selector": 444,
+        "no-deep-css-chain": 4,
+        "no-hard-wait": 172,
+        "no-nth-child": 29,
+        "no-xpath": 4,
+        "prefer-user-facing-locator": 891
+      },
+      "warnings": {},
+      "discovery": {
+        "testDir": "playwright-config",
+        "include": "mixed"
+      },
+      "filesFromRepoRoot": null,
+      "rootOutsideCheckout": false
+    }
+  ]
+}

@@ -6,3 +6,7 @@ node_modules/
 dist/
 coverage/
 *.log
+
+# Cached corpus checkouts for `pnpm bench`
+.bench-cache/
+bench/results.json
