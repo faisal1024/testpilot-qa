@@ -37,13 +37,22 @@ function queriedBy(attribute: string, resolved: RuleOptions['resolvedTestIdAttri
     : attribute === (resolved ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE)
 }
 
-/** How to say "and here is what your config must say for that to be true". */
+/**
+ * How to say "and here is what your config must say for that to be true".
+ *
+ * Distinguishes the three states rather than collapsing them: a config that
+ * was read and sets nothing really does mean `data-testid`, while a config
+ * that could not be read means we do not know — and stating the default there
+ * is a claim about a file we failed to open.
+ */
 function configCaveat(attribute: string, resolved: RuleOptions['resolvedTestIdAttribute']): string {
-  const actual = resolved === undefined || resolved === 'unresolved' ? null : resolved
-  const queried = actual ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE
-  return ` getByTestId() queries only \`${queried}\`${
-    actual === null ? " (Playwright's default)" : ''
-  }, not \`${attribute}\` — set \`use: { testIdAttribute: '${attribute}' }\` in your Playwright config, or locate by the attribute it already declares.`
+  const unknown = resolved === undefined || resolved === 'unresolved'
+  const queried = unknown
+    ? `the \`testIdAttribute\` your Playwright config declares (default \`${PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`), which could not be read here`
+    : `\`${resolved ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE}\`${
+        resolved === null ? " (Playwright's default)" : ''
+      }`
+  return ` getByTestId() queries only ${queried}, not \`${attribute}\` — set \`use: { testIdAttribute: '${attribute}' }\` in your Playwright config, or locate by the attribute it already declares.`
 }
 
 /** The configured test-id attribute names, or the defaults. */

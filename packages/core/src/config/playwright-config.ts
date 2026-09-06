@@ -413,26 +413,32 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   // Collected across the config and every project. `use.testIdAttribute` is on
   // both `TestConfig` and `TestProject`, so unlike `tag` it must be read from
   // projects too — and if they disagree there is no single answer.
-  const testIdAttributes = new Set<string | 'unresolved'>()
+  // Config level and per-project are kept apart because a project that does
+  // not declare one *inherits* the config's — or, if that is unset too,
+  // Playwright's `data-testid`. Folding both into one set made
+  // `projects: [{ use: { testIdAttribute: 'data-qa' } }, {}]` look like a
+  // single answer of `data-qa`, which is false for the second project.
+  let configTestIdAttribute: string | 'unresolved' | null = null
+  const projectTestIdAttributes: Array<string | 'unresolved' | null> = []
   const readSelectors = (object: Node, isProject = false): RawSelectors => {
-    if (hasSpread(object)) {
-      unresolved.push('a spread from another object')
-      // A spread at this level can carry `use` entirely, so the attribute is
-      // unknown — not "unset, so the default applies".
-      testIdAttributes.add('unresolved')
-    }
+    const spread = hasSpread(object)
+    if (spread) unresolved.push('a spread from another object')
     const use = propertyValue(object, 'use')
+    // A spread at this level can carry `use` entirely, so the attribute is
+    // unknown — not "unset, so the default applies". Same for a `use` that is
+    // not an object literal.
+    let own: string | 'unresolved' | null = spread ? 'unresolved' : null
     if (use?.type === 'ObjectExpression') {
-      if (hasSpread(use)) {
-        testIdAttributes.add('unresolved')
-      }
+      if (hasSpread(use)) own = 'unresolved'
       const attribute = propertyValue(use, 'testIdAttribute')
-      if (attribute) {
-        testIdAttributes.add(staticString(attribute) ?? 'unresolved')
-      }
+      if (attribute) own = staticString(attribute) ?? 'unresolved'
     } else if (use) {
-      // `use` is there but not an object literal — it may set the attribute.
-      testIdAttributes.add('unresolved')
+      own = 'unresolved'
+    }
+    if (isProject) {
+      projectTestIdAttributes.push(own)
+    } else if (own !== null) {
+      configTestIdAttribute = own
     }
     // `tag` is on `TestConfig` only — `TestProject` has no such key in
     // Playwright 1.63, so reading one from a project entry would report a
@@ -561,12 +567,20 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const unique = [...new Set(unresolved)]
   // One answer or none. Two projects with different test-id attributes have no
   // single answer, and a rule must not pick one of them.
+  // A project that declares nothing inherits the config's value, so resolve
+  // each project against it before asking whether they agree. `projects:
+  // makeProjects()` hides entries that may declare their own, which is the
+  // same "unknown" as a spread.
+  const effective = projectsPartial
+    ? ['unresolved' as const]
+    : projectTestIdAttributes.map((own) => own ?? configTestIdAttribute)
+  const attributeCandidates = new Set<string | 'unresolved' | null>(
+    effective.length > 0 ? effective : [configTestIdAttribute],
+  )
   const testIdAttribute: string | null | 'unresolved' =
-    testIdAttributes.size === 0
-      ? null
-      : testIdAttributes.size === 1
-        ? ([...testIdAttributes][0] as string | 'unresolved')
-        : 'unresolved'
+    attributeCandidates.size === 1
+      ? ([...attributeCandidates][0] as string | null | 'unresolved')
+      : 'unresolved'
   // `declaresTags` rides on every branch: Playwright defaults `testDir` to the
   // config's own directory, so `{ tag: '@e2e', projects: [...] }` with no
   // testDir is an ordinary config that yields no scopes — and dropping the flag

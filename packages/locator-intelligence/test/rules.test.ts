@@ -185,12 +185,26 @@ describe('prefer-get-by-test-id', () => {
     // "any descendant".
     expect(preferGetByTestId.evaluate(css('+ [data-testid="row"]'))).toBeNull()
     expect(preferGetByTestId.evaluate(css('> [data-testid="row"]'))).toBeNull()
+    // ...including on the `scope` path, which the first version of this guard
+    // missed entirely because it sat inside the target-compound branch. These
+    // still offered "scope with getByTestId(a)" while dropping what came
+    // before, and `'#modal >> …'` and `'#modal …'` still disagreed.
+    expect(preferGetByTestId.evaluate(css('#modal [data-testid="save"] .child'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('#modal > [data-testid="a"] > b'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('+ [data-testid="a"] b'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('> [data-testid="a"] > b'))).toBeNull()
+    // The two spellings of one locator now agree.
+    expect(preferGetByTestId.evaluate(css('#modal >> [data-testid="save"] .child'))).toBeNull()
     // Still fires where nothing precedes it, including under a getBy* parent —
     // there the chain preserves the scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
     expect(
       preferGetByTestId.evaluate(ctx({ ...css('[data-testid="row"]'), parentApi: 'getByRole' })),
     ).not.toBeNull()
+    // ...and the scope answer is still available when the test id leads.
+    expect(preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))?.message).toContain(
+      'ancestor',
+    )
   })
 
   it('only names getByTestId() for the attribute Playwright will actually query', () => {
@@ -218,8 +232,14 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-testid="s"]'), unknown)?.suggestion).toBe(
       'Use getByTestId("s") instead.',
     )
+    // ...and says so, rather than asserting a default over a file it could not
+    // open. This is the only place `null` and `'unresolved'` differ, so it is
+    // what stops the distinction from being unobservable machinery.
     expect(preferGetByTestId.evaluate(css('[data-test="s"]'), unknown)?.suggestion).toContain(
-      'queries only `data-testid`',
+      'which could not be read here',
+    )
+    expect(preferGetByTestId.evaluate(css('[data-test="s"]'), stock)?.suggestion).toContain(
+      "queries only `data-testid` (Playwright's default)",
     )
   })
 

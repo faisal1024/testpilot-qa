@@ -532,9 +532,12 @@ function splitChain(selector: string): {
     if ((char === '"' || char === "'") && (atPartHead || brackets > 0 || parens > 0)) {
       try {
         readString(cursor)
-      } catch {
+      } catch (error) {
         failed = true
-        reason = 'unterminated string'
+        // The real reason: `readString` now also rejects invalid escapes, and
+        // reporting "unterminated string" for `[a="\D800"]` is the same false
+        // statement this file already calls out for a stray `>>`.
+        reason = error instanceof SelectorSyntaxError ? error.message : 'unterminated string'
         break
       }
       continue

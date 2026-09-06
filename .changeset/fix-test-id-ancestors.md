@@ -7,7 +7,8 @@
 `prefer-get-by-test-id` stops naming rewrites that select a different element, and learns what
 `getByTestId()` actually queries.
 
-**An ancestor before the test id was silently dropped.** `locator('#login-modal [data-testid="save"]')`
+**An ancestor before the test id was silently dropped**, on both the "use it directly" and the
+"scope with it" paths. `locator('#login-modal [data-testid="save"]')`
 was answered *"Use `getByTestId('save')` instead"* — which searches the whole document. The identical
 locator written `'#login-modal >> [data-testid="save"]'` correctly abstained, so the two spellings of
 one selector gave opposite answers. A leading combinator (`'> [data-testid=x]'`) and a same-compound
@@ -18,7 +19,8 @@ they are now `prefer-semantic-locator` `info` rather than a wrong `warn`.
 **`getByTestId()` queries exactly one attribute** — `use.testIdAttribute` from your Playwright
 config, which defaults to `data-testid`. Suggesting it for `[data-test="x"]` or `[data-test-id="x"]`
 on a stock config named a locator that selects nothing. TestPilot now **reads `use.testIdAttribute`**
-(config and `projects[]`, treating a spread or an unreadable value as unknown) and qualifies the
+(config and `projects[]`, resolving each project against the config it inherits from, and treating a
+spread, an unreadable value, or projects that disagree as unknown) and qualifies the
 suggestion when the selector's attribute is not the one Playwright will query. New report field:
 `discovery.playwrightTestIdAttribute`.
 

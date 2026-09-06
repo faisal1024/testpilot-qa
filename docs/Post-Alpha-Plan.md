@@ -314,7 +314,7 @@ false-positive rate < 5% per rule.
   Reasons the 297 no longer fire, counted **independently — a call site can appear in more than one
   row, so these do not partition**: 253 composed with a `has`/`hasText` option (167 of them through
   `.filter()`), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-  `:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable. Three earlier
+  `:has()`/`:has-text()`, 1 a test id whose call passed its own `hasText` option, 0 unreadable. Three earlier
   drafts of this paragraph were wrong, each caught by a reviewer recounting independently: a
   first-match classification (84/27/21/12) published as a partition; "168 `.filter()` cases" where
   every way of counting gives 167; and 252 here, which did not absorb the removal that round 4's own

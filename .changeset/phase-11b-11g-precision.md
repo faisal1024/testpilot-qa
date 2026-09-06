@@ -43,7 +43,7 @@ Measured on the corpus: **1973 findings became 1676**. Reasons the 297 no longer
 independently — **a call site can appear in more than one row**, so these do not partition:
 253 composed with a `has`/`hasText` option (167 of them via `.filter()`, which the rules could not
 previously see), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
-`:has()`/`:has-text()`, 1 a test id with no `getByTestId()` form, 0 unreadable.
+`:has()`/`:has-text()`, 1 a test id whose call passed its own `hasText` option, 0 unreadable.
 
 Scores rise (cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged)
 from re-grading 1174 findings `warn`→`info` plus those removals; `callSites` is identical on all

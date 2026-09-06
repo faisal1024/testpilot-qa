@@ -339,6 +339,52 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
   })
 })
 
+describe('use.testIdAttribute — what getByTestId() will actually query', () => {
+  const attributeOf = (source: string) =>
+    readSettings(writeFile('playwright.config.ts', source)).testIdAttribute
+
+  it('reads it from the config and from a project', () => {
+    expect(
+      attributeOf("export default { testDir: './e2e', use: { testIdAttribute: 'data-qa' } }\n"),
+    ).toBe('data-qa')
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', projects: [{ use: { testIdAttribute: 'data-qa' } }] }\n",
+      ),
+    ).toBe('data-qa')
+  })
+
+  it(`is null when nothing sets it — Playwright's default applies, which is knowledge`, () => {
+    expect(attributeOf("export default { testDir: './e2e' }\n")).toBeNull()
+  })
+
+  it('is unresolved when a project that declares none would inherit a different value', () => {
+    // The second project inherits the config level — unset, so `data-testid`.
+    // Folding both into one set answered `data-qa`, which is false there.
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', projects: [{ use: { testIdAttribute: 'data-qa' } }, {}] }\n",
+      ),
+    ).toBe('unresolved')
+    // ...but a project inheriting an explicit config-level value agrees with it.
+    expect(
+      attributeOf(
+        "export default { testDir: './e2e', use: { testIdAttribute: 'data-qa' }, projects: [{ use: { testIdAttribute: 'data-qa' } }, {}] }\n",
+      ),
+    ).toBe('data-qa')
+  })
+
+  it('is unresolved when it is set but cannot be read', () => {
+    expect(
+      attributeOf("export default { testDir: './e2e', use: { testIdAttribute: NAME } }\n"),
+    ).toBe('unresolved')
+    expect(attributeOf("export default { testDir: './e2e', use: base.use }\n")).toBe('unresolved')
+    expect(attributeOf("export default { testDir: './e2e', projects: makeProjects() }\n")).toBe(
+      'unresolved',
+    )
+  })
+})
+
 it('reports a spread as unresolved instead of reading the config as empty', () => {
   // The standard shared-base monorepo shape: keys we cannot see must not look absent.
   const path = writeFile(

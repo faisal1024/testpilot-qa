@@ -585,7 +585,12 @@ function optionsFor(
     const configured = config.ruleOptions?.['prefer-get-by-test-id']?.testIdAttributes
     return {
       ...(configured === undefined ? {} : { testIdAttributes: configured }),
-      resolvedTestIdAttribute: discovery?.playwrightTestIdAttribute ?? 'unresolved',
+      // NOT `?? 'unresolved'`: `null` means "the config sets none, so
+      // Playwright's default applies", which is knowledge. Collapsing it left
+      // the whole null-vs-unknown distinction with no observable behaviour,
+      // and so nothing to catch it regressing.
+      resolvedTestIdAttribute:
+        discovery === undefined ? 'unresolved' : discovery.playwrightTestIdAttribute,
     }
   }
   return undefined

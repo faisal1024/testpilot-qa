@@ -92,20 +92,22 @@ export function testIdReplacement(
   // `same-element` answer can come from.
   const found = findIn(arm.compounds, names)
   if (found) {
-    // An earlier `>>` part is an ancestor this rule would silently drop.
-    if (parsed.parts.length > 1) {
+    // Anything before the test id's own compound is an ancestor this rule
+    // would silently drop — an earlier `>>` part, or an earlier compound in
+    // this same selector. `'#modal >> [data-testid=x]'` and
+    // `'#modal [data-testid=x]'` are one locator, and neither is
+    // `getByTestId('x')`, which searches the whole document. All nine of
+    // immich's findings were the second spelling.
+    //
+    // ONE check, before the branches. The first version of this guard sat
+    // inside the target-compound branch below, so it never covered `scope`:
+    // `'#modal [data-testid=x] .child'` still offered a rewrite that dropped
+    // `#modal`, and the two spellings still disagreed. That was the sixth
+    // round of this defect, produced by the fix for the fifth.
+    if (parsed.parts.length > 1 || found.index > 0) {
       return null
     }
     if (found.index === arm.compounds.length - 1) {
-      // ...and so is an earlier compound in this same selector. The `>>`
-      // spelling has been guarded since the round-3 fix twenty lines below;
-      // the CSS spelling of the identical locator was not, so the two gave
-      // opposite answers for the same selector. All nine of immich's findings
-      // were this: `[data-viewer-content] [data-testid="ocr-box"]` answered
-      // "use getByTestId('ocr-box')", which searches the whole document.
-      if (arm.compounds.length > 1) {
-        return null
-      }
       return {
         kind: isOnlyHandle(target) ? 'direct' : 'same-element',
         attribute: found.match.name,
