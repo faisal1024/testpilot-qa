@@ -694,8 +694,8 @@ still have something to read; the table and HTML reporters print only the error.
 **1.11 is the first `analyze` schema bump that is not purely additive.** `score.score` and
 `score.grade` — and the same two fields on every entry of `score.subScores` — are now
 `number | null` / `Grade | null`. They are `null` when there is at least one locator call-site and
-**not one of them** had a statically readable selector (every selector is an interpolated template
-literal, a variable, an `as string`). Zero call-sites is a different case and still scores `100`/`A`.
+**not one of them** had a statically readable selector (no selector is a static string — most often an
+interpolated template literal or a variable, but any expression counts). Zero call-sites is a different case and still scores `100`/`A`.
 
 A consumer written as `if (report.score.score < 80) fail()` **passes** on `null` — a false green in
 the field this tool exists to protect. Check explicitly:

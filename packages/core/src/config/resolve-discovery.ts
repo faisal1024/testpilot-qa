@@ -253,13 +253,22 @@ function declaresTagsIn(rootDir: string, hint: string): boolean {
  * and this must not pick one either.
  */
 function testIdAttributeIn(rootDir: string, hint: string): string | null | 'unresolved' {
-  const located = findPlaywrightConfigNearby(rootDir, hint)
-  if (!located) {
-    return null
+  // The *narrow* lookup, the same one `declaresTagsIn` and `testpilot run` use:
+  // it names the config that will actually run these tests. Round 7 switched
+  // this to `findPlaywrightConfigNearby` to cover a repo whose config lives in
+  // `e2e/`, but that repo reaches discovery's main path, not this helper —
+  // this one is only called on the branches where a sub-directory config was
+  // *not* adopted, and there `examples/playwright.config.ts` governs its own
+  // tests, not ours. Reading it would be the same over-reach one key over.
+  const path = findPlaywrightConfig(rootDir, hint)
+  if (path) {
+    return readPlaywrightTestSettings(path).testIdAttribute
   }
-  return 'ambiguous' in located
-    ? 'unresolved'
-    : readPlaywrightTestSettings(located.path).testIdAttribute
+  // Nothing at the root, but something one level down: it may or may not be the
+  // config that runs these tests, and we did not adopt it. That is "unknown" —
+  // not `null`, which would assert Playwright's default over a file we can see
+  // and chose not to read.
+  return findPlaywrightConfigNearby(rootDir, hint) ? 'unresolved' : null
 }
 
 export function resolveDiscovery(
