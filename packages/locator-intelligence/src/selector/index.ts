@@ -1,4 +1,4 @@
-export { tokenizeSelector, type TokenizeOptions } from './tokenize.js'
+export { tokenizeSelector } from './tokenize.js'
 export type {
   AttributeSelector,
   Combinator,

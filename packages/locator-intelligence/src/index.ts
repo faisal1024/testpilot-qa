@@ -41,7 +41,6 @@ export {
   type PseudoSelector,
   type SelectorPart,
   tokenizeSelector,
-  type TokenizeOptions,
 } from './selector/index.js'
 export { classTokens, cssSelectors, usesEngine } from './selector/query.js'
 export { renderRuleDoc, renderRuleIndex } from './rule-docs.js'

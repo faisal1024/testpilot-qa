@@ -34,9 +34,7 @@ describe('the three inputs every regex got wrong', () => {
     // `/\.[a-zA-Z_-]/` matched the `.pdf` inside the value.
     const parsed = compound('[href=".pdf"]')
     expect(parsed?.classes).toEqual([])
-    expect(parsed?.attributes).toEqual([
-      { name: 'href', operator: '=', value: '.pdf', caseInsensitive: false },
-    ])
+    expect(parsed?.attributes).toEqual([{ name: 'href', operator: '=', value: '.pdf' }])
   })
 
   it('keeps an escaped dot inside one class name', () => {
@@ -197,7 +195,6 @@ describe('never guesses', () => {
     ['[a="oops]', 'unterminated string'],
     [':has(a', 'unbalanced parentheses'],
     ['a,', 'trailing comma'],
-    ['> a', 'leading combinator'],
     ['', 'empty'],
     ['.', 'lone dot'],
     ['#', 'lone hash'],
@@ -207,19 +204,33 @@ describe('never guesses', () => {
     expect(parsed.parts.every((part) => part.css === undefined)).toBe(true)
   })
 
+  it.each([
+    ['> button', 'child'],
+    ['+ div', 'adjacent'],
+    ['~ p', 'sibling'],
+  ])('accepts the relative selector %j, which Playwright does', (selector, combinator) => {
+    // CSS L4 relative selectors have an implicit `:scope` head. cal.com's page
+    // objects use `:has(> ${sel})`; refusing them was an over-abstention.
+    const parsed = tokenizeSelector(selector)
+    expect(parsed.unparsed).toEqual([])
+    expect(parsed.parts[0]?.css?.[0]?.combinators).toEqual([combinator])
+  })
+
+  it('accepts a relative selector inside :has()', () => {
+    expect(tokenizeSelector('.card:has(> .icon)').unparsed).toEqual([])
+  })
+
   it('never throws, whatever it is given', () => {
     for (const selector of ['[[[', '((((', '"""', '\\', 'a >> [', '::', ',,,']) {
       expect(() => tokenizeSelector(selector)).not.toThrow()
     }
   })
 
-  it('marks a truncated template prefix', () => {
-    const parsed = tokenizeSelector('.item-', { truncated: true })
-    expect(parsed.truncated).toBe(true)
-  })
-
-  it('leaves truncated false by default', () => {
-    expect(tokenizeSelector('div').truncated).toBe(false)
+  it('reports an unterminated string rather than swallowing the remainder', () => {
+    // `text=It's here >> .btn`: the apostrophe used to open a string that never
+    // closed, folding the whole selector into one part with unparsed empty.
+    const parsed = tokenizeSelector('"unclosed >> .btn')
+    expect(parsed.unparsed.length).toBeGreaterThan(0)
   })
 })
 
@@ -236,3 +247,77 @@ describe('real selectors from the corpus', () => {
     expect(tokenizeSelector(selector).unparsed).toEqual([])
   })
 })
+
+describe("Playwright's own functional pseudo-classes", () => {
+  it.each([
+    ['input:right-of(.label)', 'label'],
+    ['button:left-of(.x)', 'x'],
+    ['div:above(.hdr)', 'hdr'],
+    ['div:below(.hdr)', 'hdr'],
+    ['input:near(.lbl)', 'lbl'],
+    ['input:near(.lbl, 50)', 'lbl'],
+    ['div:light(.card)', 'card'],
+  ])('reads the selector argument of %s', (selector, expected) => {
+    // Read as opaque text these reported "no classes" with a clean parse —
+    // a silent false negative, and the exact defect :has() had.
+    expect(classesOf(selector)).toEqual([expected])
+  })
+
+  it.each([':has-text("a.b")', ':text("a.b")', ':text-is("a.b")', ':text-matches("a.b")'])(
+    'does not read %s as a selector',
+    (selector) => {
+      expect(classesOf(`div${selector}`)).toEqual([])
+      expect(tokenizeSelector(`div${selector}`).unparsed).toEqual([])
+    },
+  )
+
+  it.each([':nth-child(2n+1)', ':nth-of-type(2)', ':lang(en)', ':dir(ltr)'])(
+    'accepts the non-selector argument of %s',
+    (selector) => {
+      expect(tokenizeSelector(`div${selector}`).unparsed).toEqual([])
+    },
+  )
+
+  it('abstains on an argument-bearing pseudo it does not recognize', () => {
+    // It could hold a selector or text; guessing "text" reports a clean parse
+    // over something we never read.
+    expect(tokenizeSelector('div:mystery(.a)').unparsed.length).toBeGreaterThan(0)
+  })
+})
+
+describe('CSS escapes', () => {
+  it.each([
+    ['.\\31 abc', '1abc'],
+    ['.\\41 bc', 'Abc'],
+    ['.\\3A hover', ':hover'],
+    ['.\\2c x', ',x'],
+    ['.mt-1\\.5', 'mt-1.5'],
+  ])('decodes %s to the class %j', (selector, expected) => {
+    // `\\31 ` is what CSS.escape() emits for a name starting with a digit, so
+    // this is reachable. Copying the next character produced a class named "31"
+    // and invented a descendant compound out of the rest.
+    expect(classesOf(selector)).toEqual([expected])
+  })
+
+  it('does not invent a descendant step out of an escape terminator', () => {
+    expect(tokenizeSelector('.\\41 bc').parts[0]?.css?.[0]?.combinators).toEqual([])
+  })
+
+  it('abstains on an invalid escape', () => {
+    expect(tokenizeSelector('.\\0 a').unparsed.length).toBeGreaterThan(0)
+  })
+})
+
+function classesOf(selector: string): string[] {
+  const parsed = tokenizeSelector(selector)
+  return (parsed.parts[0]?.css ?? []).flatMap((complex) =>
+    complex.compounds.flatMap((compound) => [
+      ...compound.classes,
+      ...compound.pseudos.flatMap((pseudo) =>
+        (pseudo.selectors ?? []).flatMap((nested) =>
+          nested.compounds.flatMap((inner) => inner.classes),
+        ),
+      ),
+    ]),
+  )
+}

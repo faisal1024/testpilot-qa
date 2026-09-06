@@ -35,6 +35,9 @@ const ENGINE_ALIASES: Record<string, SelectorPart['engine']> = {
   'data-test': 'test-id',
   _react: 'react',
   _vue: 'vue',
+  nth: 'other',
+  visible: 'other',
+  layout: 'other',
 }
 
 /** An engine prefix is `name=` at the very start, with a bare identifier name. */
@@ -75,16 +78,38 @@ class SelectorSyntaxError extends Error {}
  * `.mt-1\.5` is one Tailwind class, not `mt-1` followed by a `.5` class — the
  * distinction the old regex could not make.
  */
+function readEscape(cursor: Cursor): string {
+  cursor.take() // '\\'
+  if (cursor.done) {
+    throw new SelectorSyntaxError('trailing backslash')
+  }
+  // CSS: a backslash followed by 1-6 hex digits is a code point, and one
+  // optional whitespace character terminates it. Copying the next character
+  // instead turned `.\\31 abc` (what CSS.escape emits for a name starting with
+  // a digit) into a class literally named "31" plus an invented descendant.
+  if (!/[0-9a-fA-F]/.test(cursor.peek())) {
+    return cursor.take()
+  }
+  let hex = ''
+  while (hex.length < 6 && /[0-9a-fA-F]/.test(cursor.peek())) {
+    hex += cursor.take()
+  }
+  if (/\s/.test(cursor.peek())) {
+    cursor.take()
+  }
+  const code = Number.parseInt(hex, 16)
+  if (!Number.isFinite(code) || code === 0 || code > 0x10ffff) {
+    throw new SelectorSyntaxError('invalid escape')
+  }
+  return String.fromCodePoint(code)
+}
+
 function readIdentifier(cursor: Cursor): string {
   let out = ''
   while (!cursor.done) {
     const char = cursor.peek()
     if (char === '\\') {
-      cursor.take()
-      if (cursor.done) {
-        throw new SelectorSyntaxError('trailing backslash')
-      }
-      out += cursor.take()
+      out += readEscape(cursor)
       continue
     }
     if (!IDENTIFIER_CHAR.test(char)) {
@@ -123,7 +148,9 @@ function readString(cursor: Cursor): string {
 function readAttribute(cursor: Cursor): AttributeSelector {
   cursor.take() // '['
   cursor.skipSpaces()
-  const name = readIdentifier(cursor)
+  // Lowercased here, once: four rules each remembering to do it is four
+  // chances to forget. Class names stay case-sensitive (HTML standards mode).
+  const name = readIdentifier(cursor).toLowerCase()
   cursor.skipSpaces()
   if (cursor.peek() === ']') {
     cursor.take()
@@ -143,7 +170,7 @@ function readAttribute(cursor: Cursor): AttributeSelector {
   const value =
     quote === '"' || quote === "'" ? readString(cursor) : readUnquotedAttributeValue(cursor)
   cursor.skipSpaces()
-  let caseInsensitive = false
+  let caseInsensitive: boolean | undefined
   if (/[iIsS]/.test(cursor.peek()) && cursor.peek(1) === ']') {
     caseInsensitive = cursor.take().toLowerCase() === 'i'
   }
@@ -152,7 +179,9 @@ function readAttribute(cursor: Cursor): AttributeSelector {
     throw new SelectorSyntaxError('unterminated attribute selector')
   }
   cursor.take()
-  return { name, operator, value, caseInsensitive }
+  return caseInsensitive === undefined
+    ? { name, operator, value }
+    : { name, operator, value, caseInsensitive }
 }
 
 function readUnquotedAttributeValue(cursor: Cursor): string {
@@ -204,10 +233,45 @@ function readArgument(cursor: Cursor): string {
 /**
  * Pseudo-classes whose argument is itself a selector list.
  *
- * `:has-text()`, `:text()` and friends take *text*, not a selector, so they are
- * deliberately absent — parsing `:has-text("a.b")` as CSS would invent a class.
+ * Includes Playwright's positional ones (`:right-of`, `:near`, …): their
+ * argument is a real selector, and reading it as opaque text made
+ * `input:right-of(.label)` report "no classes" with a clean parse — the exact
+ * silent-wrong-answer this module forbids.
  */
-const SELECTOR_PSEUDOS = new Set(['has', 'not', 'is', 'where', 'matches', '-webkit-any'])
+const SELECTOR_PSEUDOS = new Set([
+  'has',
+  'not',
+  'is',
+  'where',
+  'matches',
+  '-webkit-any',
+  'light',
+  'above',
+  'below',
+  'right-of',
+  'left-of',
+])
+
+/** Selector list followed by a trailing numeric argument. */
+const SELECTOR_THEN_NUMBER_PSEUDOS = new Set(['nth-match', 'near'])
+
+/** Pseudo-classes whose argument is text, a number or a keyword — never a selector. */
+const NON_SELECTOR_PSEUDOS = new Set([
+  'has-text',
+  'text',
+  'text-is',
+  'text-matches',
+  'nth-child',
+  'nth-last-child',
+  'nth-of-type',
+  'nth-last-of-type',
+  'lang',
+  'dir',
+  'part',
+  'slotted',
+  'host',
+  'host-context',
+])
 
 function readPseudo(cursor: Cursor): PseudoSelector {
   cursor.take() // ':'
@@ -215,31 +279,32 @@ function readPseudo(cursor: Cursor): PseudoSelector {
   if (element) {
     cursor.take()
   }
-  const name = readIdentifier(cursor)
+  const name = readIdentifier(cursor).toLowerCase()
   if (cursor.peek() !== '(') {
     return { name, element }
   }
   const argument = readArgument(cursor)
-  const lower = name.toLowerCase()
-  if (SELECTOR_PSEUDOS.has(lower)) {
+  if (SELECTOR_PSEUDOS.has(name)) {
     // Throws on an unreadable argument, so the whole selector lands in
     // `unparsed` — we cannot say a selector has no classes when part of it is
     // unreadable.
     return { name, argument, selectors: readSelectorList(argument), element }
   }
-  if (lower === 'nth-match') {
-    // `:nth-match(<selector list>, <n>)` — the index is not a selector.
+  if (SELECTOR_THEN_NUMBER_PSEUDOS.has(name)) {
+    // `:nth-match(<selectors>, <n>)`, `:near(<selectors>, <distance>)` — the
+    // trailing number is not a selector, and may be absent.
     const cut = argument.lastIndexOf(',')
-    if (cut > 0) {
-      return {
-        name,
-        argument,
-        selectors: readSelectorList(argument.slice(0, cut)),
-        element,
-      }
-    }
+    const head =
+      cut > 0 && /^\s*[\d.]+\s*$/.test(argument.slice(cut + 1)) ? argument.slice(0, cut) : argument
+    return { name, argument, selectors: readSelectorList(head), element }
   }
-  return { name, argument, element }
+  if (NON_SELECTOR_PSEUDOS.has(name)) {
+    return { name, argument, element }
+  }
+  // An argument-bearing pseudo we do not recognize could hold a selector or
+  // could hold text. Guessing "text" reports a clean parse over something we
+  // did not read; abstaining is the only honest answer.
+  throw new SelectorSyntaxError(`unrecognized functional pseudo-class ":${name}()"`)
 }
 
 function emptyCompound(): CompoundSelector {
@@ -313,7 +378,11 @@ function readComplex(cursor: Cursor): ComplexSelector {
       if (!isEmptyCompound(current)) {
         flush()
       } else if (compounds.length === 0) {
-        throw new SelectorSyntaxError('selector begins with a combinator')
+        // `> .child` / `:has(> .child)` — a relative selector with an implicit
+        // `:scope`. Playwright accepts these, and cal.com's page objects use
+        // one; refusing to parse it was the tokenizer's only over-abstention.
+        current.pseudos.push({ name: 'scope', element: false })
+        flush()
       }
       pendingCombinator = char === '>' ? 'child' : char === '+' ? 'adjacent' : 'sibling'
       continue
@@ -346,7 +415,7 @@ function readComplex(cursor: Cursor): ComplexSelector {
       if (current.tag !== undefined || current.classes.length > 0 || current.id !== undefined) {
         throw new SelectorSyntaxError('unexpected identifier in compound')
       }
-      current.tag = readIdentifier(cursor)
+      current.tag = readIdentifier(cursor).toLowerCase()
       continue
     }
     throw new SelectorSyntaxError(`unexpected character "${char}"`)
@@ -388,19 +457,26 @@ function readSelectorList(text: string): ComplexSelector[] {
 }
 
 /** Splits on top-level `>>`, respecting strings, brackets and parentheses. */
-function splitChain(selector: string): string[] {
+function splitChain(selector: string): { parts: string[]; failed: boolean } {
   const parts: string[] = []
   const cursor = new Cursor(selector)
   let start = 0
   let brackets = 0
   let parens = 0
+  let failed = false
   while (!cursor.done) {
     const char = cursor.peek()
-    if (char === '"' || char === "'") {
+    // A quote delimits a string only where one can start: at the head of the
+    // part, or inside brackets/parens. Treating every quote as a delimiter made
+    // the apostrophe in `text=It's here >> .btn` open a string that never
+    // closed, swallowing the rest of the selector into one part — and reporting
+    // nothing, which is precisely the silent-wrong-answer this module forbids.
+    const atPartHead = cursor.index === start || selector.slice(start, cursor.index).trim() === ''
+    if ((char === '"' || char === "'") && (atPartHead || brackets > 0 || parens > 0)) {
       try {
         readString(cursor)
       } catch {
-        // An unterminated string cannot be split safely; treat the rest as one part.
+        failed = true
         break
       }
       continue
@@ -419,7 +495,14 @@ function splitChain(selector: string): string[] {
     cursor.take()
   }
   parts.push(selector.slice(start))
-  return parts.map((part) => part.trim()).filter((part) => part !== '')
+  const trimmed = parts.map((part) => part.trim())
+  // An empty part means a stray or doubled `>>` (`>> .a`, `a >> >> b`), which
+  // Playwright rejects outright. Dropping it silently would report a finding on
+  // a selector that cannot run.
+  return {
+    parts: trimmed.filter((part) => part !== ''),
+    failed: failed || trimmed.some((part) => part === ''),
+  }
 }
 
 /** Classifies an unprefixed part the way Playwright does. */
@@ -431,15 +514,6 @@ function defaultEngine(body: string): SelectorPart['engine'] {
   return 'css'
 }
 
-export interface TokenizeOptions {
-  /**
-   * True when the input is the static prefix of a template literal. The parse
-   * is still attempted, but `truncated` is set so a rule cannot conclude
-   * anything from what is *missing*.
-   */
-  truncated?: boolean
-}
-
 /**
  * Parses a Playwright selector into engine-tagged parts, with the CSS ones
  * tokenized.
@@ -447,15 +521,19 @@ export interface TokenizeOptions {
  * Never throws: anything unclear lands in `unparsed`, and the corresponding
  * part carries `css: undefined`.
  */
-export function tokenizeSelector(selector: string, options: TokenizeOptions = {}): ParsedSelector {
+export function tokenizeSelector(selector: string): ParsedSelector {
   const unparsed: string[] = []
   const parts: SelectorPart[] = []
 
-  const chain = splitChain(selector)
+  const { parts: chain, failed: chainFailed } = splitChain(selector)
+  if (chainFailed) {
+    // A remainder we could not split is a remainder we did not read.
+    unparsed.push('unterminated string')
+  }
   if (chain.length === 0) {
     // An empty (or whitespace-only) selector parses to nothing, which a rule
     // must not read as "a selector with no classes in it".
-    return { parts: [], truncated: options.truncated === true, unparsed: ['empty selector'] }
+    return { parts: [], unparsed: ['empty selector'] }
   }
 
   for (const raw of chain) {
@@ -486,7 +564,7 @@ export function tokenizeSelector(selector: string, options: TokenizeOptions = {}
     parts.push(part)
   }
 
-  return { parts, truncated: options.truncated === true, unparsed }
+  return { parts, unparsed }
 }
 
 /**

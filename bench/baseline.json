@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11a/11c: selector tokenizer replaces the no-css-class-selector regex. Removes 29 false positives across cal.com/documenso/mattermost (a dot inside a quoted attribute value such as [name=\"meta.subject\"], and text=/regex/ parts that are not CSS at all), and recovers 1 true positive the regex reached only by accident (a class nested in :has()). filesAnalyzed/callSites/parseErrors unchanged.",
+  "reason": "Phase 11a/11c: a selector tokenizer replaces the no-css-class-selector regex. Measured rule-vs-rule over the analyzed set: 29 findings removed (cal.com -6, documenso -12, mattermost -11), 0 added. Every removal is a genuine false positive \u2014 a dot inside a quoted attribute value (`input[name=\"meta.subject\"]`, `p[data-testid=\"...+seats@cal.com\"]`, `#admin\\.access_control\\....`). filesAnalyzed, callSites and parseErrors are unchanged, so the evidence gate is untouched. Note: an earlier version of this reason claimed a true positive was recovered and that text=/regex/ findings were removed. Both were wrong. Nothing was recovered relative to main \u2014 the old regex already matched the one :has()-nested class, and my first tokenizer missed it; I fixed my own regression and mis-described it as a recovery. The old rule gated on selectorEngine==='css', so it never fired on a text= part and none could be removed.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",

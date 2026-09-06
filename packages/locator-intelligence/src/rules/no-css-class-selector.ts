@@ -27,9 +27,10 @@ export const noCssClassSelector: Rule = {
       return null
     }
     return {
-      message: `CSS class selector${classes.length > 1 ? 's' : ''} (${classes
-        .map((name) => `.${name}`)
-        .join(', ')}) are coupled to styling and change frequently.`,
+      message:
+        classes.length > 1
+          ? `CSS class selectors (${classes.map((name) => `.${name}`).join(', ')}) are coupled to styling and change frequently.`
+          : `The CSS class selector .${classes[0]} is coupled to styling and changes frequently.`,
       suggestion: 'Prefer getByRole() or getByTestId() over class-based selectors.',
     }
   },

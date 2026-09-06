@@ -15,7 +15,11 @@ export interface AttributeSelector {
   operator?: string
   /** The value with quotes removed and escapes resolved. */
   value?: string
-  /** True for the `i`/`s` flag after the value. */
+  /**
+   * `true` for the `i` flag, `false` for the explicit `s` flag, absent when
+   * neither was written — so "no flag" and "explicitly case-sensitive" stay
+   * distinguishable.
+   */
   caseInsensitive?: boolean
 }
 
@@ -79,12 +83,6 @@ export interface SelectorPart {
 
 export interface ParsedSelector {
   parts: SelectorPart[]
-  /**
-   * True when the input was the static prefix of a template literal, so the
-   * real selector continues beyond what we can see. A rule must not conclude
-   * anything from the *absence* of something in a truncated selector.
-   */
-  truncated: boolean
   /**
    * Set when some part could not be parsed — an unbalanced bracket, an
    * unterminated string. The part is still present with `css: undefined`, and

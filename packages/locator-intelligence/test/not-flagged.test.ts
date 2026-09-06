@@ -41,6 +41,15 @@ describe('docs "Does not fire on" examples', () => {
     expect(withExamples.length).toBeGreaterThan(0)
   })
 
+  it('every declared list is non-empty, so no rule is silently untested', () => {
+    // An emptied `notFlagged` array yields an empty `describe` that passes.
+    for (const explanation of Object.values(ruleExplanations)) {
+      if (explanation.notFlagged !== undefined) {
+        expect(explanation.notFlagged.length, explanation.id).toBeGreaterThan(0)
+      }
+    }
+  })
+
   for (const explanation of withExamples) {
     describe(explanation.id, () => {
       const rule = getRule(explanation.id)
