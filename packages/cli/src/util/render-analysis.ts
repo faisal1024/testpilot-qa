@@ -34,7 +34,7 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
 
   if (summary.helperFiles) {
     lines.push(
-      `Including ${summary.helperFiles} page object/helper file(s), marked [helper] — Playwright does not run these.`,
+      `Including ${summary.helperFiles} page object/helper file(s), marked [helper] — Playwright's testMatch does not select these as test files.`,
     )
   }
   lines.push(

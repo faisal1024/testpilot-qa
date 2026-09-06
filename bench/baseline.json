@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 9f: cal.com and Ghost now report helpers-not-analyzed. Not a loss — it is the disclosure that their scores cover the tests only, which was previously silent. Ghost's 98 A is measured over 95 of its 768 call sites.",
+  "reason": "Phase 9f: records helpersNotAnalyzed as a number per repo (cal.com 11, Ghost 73, documenso 8, mattermost 12, immich 0). The warning-count row could not tell 73 unanalyzed page objects from 1, so the disclosure could regress while staying green.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -13,6 +13,7 @@
     {
       "name": "cal.com",
       "exitCode": 0,
+      "helpersNotAnalyzed": 11,
       "withHelpers": {
         "filesAnalyzed": 72,
         "helperFiles": 11
@@ -43,6 +44,7 @@
     {
       "name": "immich",
       "exitCode": 0,
+      "helpersNotAnalyzed": 0,
       "withHelpers": {
         "filesAnalyzed": 21,
         "helperFiles": 0
@@ -71,6 +73,7 @@
     {
       "name": "Ghost",
       "exitCode": 0,
+      "helpersNotAnalyzed": 73,
       "withHelpers": {
         "filesAnalyzed": 167,
         "helperFiles": 73
@@ -97,6 +100,7 @@
     {
       "name": "documenso",
       "exitCode": 0,
+      "helpersNotAnalyzed": 8,
       "withHelpers": {
         "filesAnalyzed": 135,
         "helperFiles": 8
@@ -127,6 +131,7 @@
     {
       "name": "mattermost",
       "exitCode": 0,
+      "helpersNotAnalyzed": 12,
       "withHelpers": {
         "filesAnalyzed": 310,
         "helperFiles": 12

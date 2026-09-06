@@ -261,6 +261,73 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
       }
     })
 
+    it('discloses page objects a narrowed includeHelpers left out', async () => {
+      // Worse than silence: the run reported "1 helper file included" while three page
+      // objects with real findings went unmentioned.
+      write('e2e/a.spec.ts')
+      playwrightFile('fixtures/f.ts')
+      playwrightFile('page-objects/one.ts')
+      playwrightFile('page-objects/two.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/fixtures/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.helpers.size).toBe(1)
+      expect(found.helpersNotAnalyzed).toBe(2)
+      expect(found.helpersNotAnalyzedFiles.map((f) => relative(dir, f)).sort()).toEqual([
+        join('page-objects', 'one.ts'),
+        join('page-objects', 'two.ts'),
+      ])
+    })
+
+    it('does not count editor history or cache copies as page objects', async () => {
+      // The probe's walk used to include dot-directories, which the patterns never
+      // needed — it only reached `.history/` and inflated the number it asks to be
+      // trusted.
+      write('e2e/a.spec.ts')
+      playwrightFile('page-objects/real.ts')
+      playwrightFile('.history/page-objects/real_2024.ts')
+      playwrightFile('.cache/pages/gen.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({ root: join(dir, 'e2e'), includeGlobs: defaultConfig.include, helperRoot: dir }),
+        ],
+      })
+      expect(found.helpersNotAnalyzed).toBe(1)
+    })
+
+    it('counts nothing once the helper layer is being analyzed', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('page-objects/one.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: defaultConfig,
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['**/page-objects/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect(found.helpers.size).toBe(1)
+      expect(found.helpersNotAnalyzed).toBe(0)
+    })
+
     it('never scans helpers when the suite itself was not found', async () => {
       // Otherwise a wrong testDir stops being a hard failure and starts scoring the
       // helper layer alone — turning a red gate green.

@@ -134,6 +134,10 @@ findings list is worth reading top to bottom; after **12**, the number is worth 
 
 Goal: **`analyze` can never report a score for files it did not open — and it finds the suite.**
 
+Delivered, with one honest qualification: a page-object layer in a *conventional* directory is
+disclosed, and one somewhere unconventional is not. Making that evidence-based rather than
+name-based is a Phase 11 follow-up; the README says so plainly rather than implying coverage.
+
 - ✅ **#71** — fail (exit 2/3) on zero matched files (`--json`/SARIF still emitted first, so
   agents and `upload-sarif` have something to read); default include
   `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}` plus a default `exclude` for build output;

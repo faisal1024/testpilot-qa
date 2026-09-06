@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from 'node:fs'
+import { closeSync, openSync, readSync, realpathSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import {
   DEFAULT_HELPER_PATTERNS,
@@ -37,24 +37,40 @@ const SHARED_WITH_TESTING_LIBRARY =
 
 const TESTING_LIBRARY = /@testing-library\/|\bscreen\s*\.\s*getBy/
 
-/** Keeps a symlinked helper directory from taking analysis (and `fix --write`) outside. */
-function withinRoot(file: string, root: string): boolean {
+function realpathOrNull(path: string): string | null {
   try {
-    const real = realpathSync(file)
-    const base = realpathSync(root)
-    return real === base || real.startsWith(`${base}${sep}`)
+    return realpathSync(path)
   } catch {
-    return false
+    return null
   }
 }
 
+/**
+ * Keeps a symlinked helper directory from taking analysis (and `fix --write`) outside.
+ * `base` is resolved once by the caller: doing it per file cost 800ms on a 30k-candidate
+ * tree.
+ */
+function withinRoot(file: string, base: string): boolean {
+  const real = realpathOrNull(file)
+  return real !== null && (real === base || real.startsWith(`${base}${sep}`))
+}
+
+/** Every signal is an import or a call that appears early in a file, or not at all. */
+const SNIFF_BYTES = 64 * 1024
+
 function usesPlaywright(file: string): boolean {
+  let handle: number | undefined
   try {
-    const code = readFileSync(file, 'utf8')
+    handle = openSync(file, 'r')
+    const buffer = Buffer.alloc(SNIFF_BYTES)
+    const read = readSync(handle, buffer, 0, SNIFF_BYTES, 0)
+    const code = buffer.toString('utf8', 0, read)
     if (PLAYWRIGHT_UNIQUE.test(code)) return true
     return SHARED_WITH_TESTING_LIBRARY.test(code) && !TESTING_LIBRARY.test(code)
   } catch {
     return false
+  } finally {
+    if (handle !== undefined) closeSync(handle)
   }
 }
 
@@ -163,6 +179,8 @@ export interface ResolvedFiles {
    * and a score that omits them silently is a score of the wrong thing.
    */
   helpersNotAnalyzed: number
+  /** The paths behind that count, so the number can be checked rather than trusted. */
+  helpersNotAnalyzedFiles: string[]
   /** Absolute paths within `files` that came from `helperGlobs`. */
   helpers: Set<string>
   /**
@@ -204,6 +222,7 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       helpers: new Set(),
       helperCandidatesRejected: 0,
       helpersNotAnalyzed: 0,
+      helpersNotAnalyzedFiles: [],
     }
   }
 
@@ -267,53 +286,48 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
   const helpers = new Set<string>()
   let helperCandidatesRejected = 0
   let helpersNotAnalyzed = 0
+  const helpersNotAnalyzedFiles: string[] = []
   const helperScope = scopes.find((scope) => scope.helperGlobs.length > 0)
 
-  // When helper analysis is off, look anyway — but only to count. Most suites keep
-  // most of their locators in page objects (Ghost: 673 of 768 call sites), so a score
-  // that omits them without saying so is a confident number about the wrong files.
-  if (!helperScope && testFiles.size > 0) {
-    const probeScope = scopes[0]
-    if (probeScope) {
-      const isHelper = picomatch(DEFAULT_HELPER_PATTERNS, { dot: true })
-      const candidates = await run(
-        probeScope.helperRoot,
-        ANY_SOURCE_FILE,
-        probeScope.excludeGlobs,
-        true,
-      )
-      for (const file of candidates) {
-        if (testFiles.has(file) || !isHelper(toPosix(file))) continue
-        if (withinRoot(file, probeScope.helperRoot) && usesPlaywright(file)) {
-          helpersNotAnalyzed += 1
-        }
-      }
-    }
-  }
-
-  if (helperScope && testFiles.size > 0) {
-    const isHelper = picomatch(helperScope.helperGlobs, { dot: true })
-    const candidates = await run(
-      helperScope.helperRoot,
-      ANY_SOURCE_FILE,
-      helperScope.excludeGlobs,
-      true,
+  const probeScope = helperScope ?? scopes[0]
+  if (probeScope && testFiles.size > 0) {
+    // One pass over the union of what the user asked for and where page objects
+    // conventionally live. A narrowed `includeHelpers` must not silence the
+    // disclosure — that made the report claim coverage it did not have, which is
+    // worse than the silence this warning exists to end.
+    const analysing = helperScope !== undefined
+    const analysed = picomatch(helperScope?.helperGlobs ?? [], { dot: true })
+    const anyHelper = picomatch(
+      [...new Set([...DEFAULT_HELPER_PATTERNS, ...(helperScope?.helperGlobs ?? [])])],
+      { dot: true },
     )
+    // No `dot: true` on the walk: the patterns have no dotted segment, so it only
+    // reaches editor history and cache copies (`.history/`, `.cache/`) and inflates
+    // the very count this warning is asking to be trusted.
+    const candidates = await run(probeScope.helperRoot, ANY_SOURCE_FILE, probeScope.excludeGlobs)
+    const projectRoot = realpathOrNull(probeScope.helperRoot)
     for (const file of candidates) {
       // Membership as a test always wins: a spec that happens to live under
       // `fixtures/` is still a test, and demoting its findings would hide them.
-      if (testFiles.has(file) || !isHelper(toPosix(file))) continue
+      if (testFiles.has(file) || !anyHelper(toPosix(file))) continue
       // A symlink can point anywhere; `fix --write` follows it. The helper scan
       // widened the root from `testDir` to the whole project, so this is the one
       // remaining route out of the checkout.
-      if (!withinRoot(file, helperScope.helperRoot)) {
-        helperCandidatesRejected += 1
+      if (!projectRoot || !withinRoot(file, projectRoot)) {
+        if (analysing) helperCandidatesRejected += 1
         continue
       }
       // Directory names alone are not evidence: `pages/` is Next.js's routes and
       // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
-      if (usesPlaywright(file)) helpers.add(file)
-      else helperCandidatesRejected += 1
+      if (!usesPlaywright(file)) {
+        if (analysing && analysed(toPosix(file))) helperCandidatesRejected += 1
+        continue
+      }
+      if (analysing && analysed(toPosix(file))) helpers.add(file)
+      else {
+        helpersNotAnalyzed += 1
+        helpersNotAnalyzedFiles.push(file)
+      }
     }
   }
 
@@ -322,5 +336,6 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
     helpers,
     helperCandidatesRejected,
     helpersNotAnalyzed,
+    helpersNotAnalyzedFiles: helpersNotAnalyzedFiles.sort(),
   }
 }

@@ -21,6 +21,7 @@ Global flags (usable on any command):
   --json                     Output machine-readable JSON.
   --config <path>            Path to testpilot.config.ts.
   --cwd <path>               Run as if in this directory.
+  -y, --yes                  Skip confirmation prompts.
   -q, --quiet                Only print errors.
   --verbose                  Explain what was discovered and why.
   --no-color                 Disable ANSI color.

@@ -54,7 +54,7 @@ export async function fixCommand(
   const write = options.write === true
 
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
-  const { files, helpers } = await resolveFiles({
+  const { files, helpers, helpersNotAnalyzed } = await resolveFiles({
     cwd: globals.cwd,
     patterns: explicitPatterns,
     config,
@@ -111,6 +111,13 @@ export async function fixCommand(
     }
   }
 
+  if (helpersNotAnalyzed > 0 && !globals.quiet && !globals.json) {
+    // `fix` rewrites tests while leaving the layer that holds most of the locators
+    // untouched — the same gap `analyze` now discloses, with a write attached.
+    console.error(
+      `[testpilot] ${helpersNotAnalyzed} page object/fixture file(s) were not considered. Add --with-helpers to fix those too.`,
+    )
+  }
   report(results, diffs, write, skipped, globals, resolved)
 }
 

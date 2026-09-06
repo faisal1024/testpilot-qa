@@ -17,6 +17,7 @@
 
 /** Metrics rendered in the diff table. `elapsedMs`/`grade` are excluded on purpose. */
 export const COMPARED_METRICS = [
+  'helpersNotAnalyzed',
   'filesAnalyzed',
   'parseErrors',
   'findings',
@@ -30,6 +31,9 @@ export const COMPARED_METRICS = [
  * These, not `findings`, are the gate.
  */
 export const EVIDENCE_METRICS = {
+  // The disclosure regressing is signal loss like any other: it means we stopped
+  // seeing a page-object layer we used to see.
+  helpersNotAnalyzed: 'decrease',
   filesAnalyzed: 'decrease',
   callSites: 'decrease',
   parseErrors: 'increase',
@@ -43,19 +47,14 @@ import picomatch from 'picomatch'
 const warningCounts = (result) => result?.warnings ?? {}
 
 /**
- * Warnings that mean the *checkout* is wrong — a missing test root, a config we could
- * not read. Recording one enshrines a harness bug as the expected state.
+ * Warnings that describe the *repository* — it has a page-object layer we did not
+ * analyze — are legitimate properties of the corpus and may be recorded.
  *
- * Warnings about the repository itself (it has a page-object layer we did not analyze)
- * are legitimate properties of the corpus and may be recorded.
+ * Everything else describes the *checkout* being wrong, and recording one enshrines a
+ * harness bug as the expected state. The list is an allowlist on purpose: a new warning
+ * code must be considered rather than inherited as acceptable.
  */
-const HARNESS_WARNINGS = new Set([
-  'no-files-matched',
-  'test-root-missing',
-  'playwright-config-partial',
-  'playwright-config-ignored',
-  'unknown-rule',
-])
+const RECORDABLE_WARNINGS = new Set(['helpers-not-analyzed', 'helpers-not-recognized'])
 
 /**
  * Rows describing how one repo's measurement moved: `{ metric, before, after }`.
@@ -167,7 +166,9 @@ export function validateResults(results, { recording = true } = {}) {
     // *tool* regressing, and it must reach the diff table and the gate rather than
     // aborting with a message that blames the checkout.
     if (recording) {
-      const codes = Object.keys(warningCounts(result)).filter((code) => HARNESS_WARNINGS.has(code))
+      const codes = Object.keys(warningCounts(result)).filter(
+        (code) => !RECORDABLE_WARNINGS.has(code),
+      )
       if (codes.length > 0) {
         problems.push(
           `${result.name}: the run reported ${codes.join(', ')} — fix the checkout rather than recording the warning as expected`,

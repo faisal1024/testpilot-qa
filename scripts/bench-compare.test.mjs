@@ -83,6 +83,14 @@ describe('bench comparison', () => {
       expect(formatDiff([failing], [measurement()]).signalLoss).toBe(false)
     })
 
+    it('flags the page-object disclosure regressing', () => {
+      // Recorded as a count, not as "the warning fired": a probe that drops from 73
+      // files to 1 still fires, and a warning-count row would stay green.
+      const before = measurement({ helpersNotAnalyzed: 73 })
+      const after = measurement({ helpersNotAnalyzed: 1 })
+      expect(formatDiff([before], [after]).signalLoss).toBe(true)
+    })
+
     it('flags default discovery finding fewer files', () => {
       const before = measurement({ filesFromRepoRoot: 61 })
       const after = measurement({ filesFromRepoRoot: 0 })
@@ -188,6 +196,14 @@ describe('bench comparison', () => {
       expect(formatDiff([measurement()], [result]).signalLoss).toBe(true)
     })
 
+    it('refuses to record an unrecognized warning code, rather than inheriting it', () => {
+      // The recording rule is an allowlist: a warning added later must be considered,
+      // not silently accepted as the expected state.
+      expect(validateResults([measurement({ warnings: { 'some-future-code': 1 } })])[0]).toContain(
+        'some-future-code',
+      )
+    })
+
     it('records a warning about the repository, but not one about the checkout', () => {
       // `helpers-not-analyzed` says the repo has a page-object layer we did not
       // analyze — a property of the corpus. `test-root-missing` says our checkout is
@@ -243,6 +259,7 @@ describe('bench comparison', () => {
 
   it('pins the compared metric set, so dropping one is a deliberate act', () => {
     expect(COMPARED_METRICS).toEqual([
+      'helpersNotAnalyzed',
       'filesAnalyzed',
       'parseErrors',
       'findings',

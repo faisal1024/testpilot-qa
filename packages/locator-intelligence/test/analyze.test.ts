@@ -47,6 +47,7 @@ describe('analyze — Tier 1 rule set', () => {
     expect(report.schemaVersion).toBe('1.7')
     expect(report.summary).toEqual({
       helperFiles: 0,
+      helpersNotAnalyzed: 0,
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
       findings: 9,

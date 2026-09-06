@@ -200,6 +200,15 @@ const NOTIFICATION_DESCRIPTORS = [
     id: 'playwright-config-ignored',
     shortDescription: { text: 'The Playwright config was not used for discovery.' },
   },
+  { id: 'test-root-missing', shortDescription: { text: 'A declared test root does not exist.' } },
+  {
+    id: 'helpers-not-analyzed',
+    shortDescription: { text: 'Page objects exist that were not analyzed.' },
+  },
+  {
+    id: 'helpers-not-recognized',
+    shortDescription: { text: 'Helper files matched but show no sign of using Playwright.' },
+  },
 ]
 
 function driver(rules: SarifReportingDescriptor[]): SarifDriver {
