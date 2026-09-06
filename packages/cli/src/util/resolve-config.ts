@@ -1,5 +1,7 @@
 import { dirname } from 'node:path'
 import {
+  type AnalysisWarning,
+  type ConfigDiscovery,
   ConfigError,
   type LoadConfigResult,
   type ResolvedDiscovery,
@@ -144,4 +146,27 @@ function announceDiscovery(
     const { path, reason } = discovery.playwrightConfigIgnored
     console.error(`[testpilot] Ignored ${path} for discovery: ${reason}.`)
   }
+}
+
+/**
+ * The discovery problems `analyze` reports as warnings, so `fix` — the write path —
+ * can carry the same signal in its own envelope.
+ */
+export function discoveryWarnings(discovery: ConfigDiscovery): AnalysisWarning[] {
+  const warnings: AnalysisWarning[] = []
+  if (discovery.playwrightConfigPartial) {
+    const { path, reason } = discovery.playwrightConfigPartial
+    warnings.push({
+      code: 'playwright-config-partial',
+      message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may not match what Playwright runs.`,
+    })
+  }
+  if (discovery.playwrightConfigIgnored) {
+    const { path, reason } = discovery.playwrightConfigIgnored
+    warnings.push({
+      code: 'playwright-config-ignored',
+      message: `${path} was not used for test discovery: ${reason}.`,
+    })
+  }
+  return warnings
 }

@@ -80,10 +80,12 @@ export interface ResolveDiscoveryOptions {
 export function findPlaywrightConfigNearby(
   root: string,
   hint?: string,
+  hintIsExplicit = false,
 ): { path: string } | { ambiguous: string[] } | null {
-  // An explicit hint is a user choice: if it does not resolve, silently reading a
-  // *different* config would score the wrong tree with no way to notice.
-  if (hint && hint !== DEFAULT_PLAYWRIGHT_CONFIG) {
+  // An explicit hint is a user choice — even when it happens to equal the schema
+  // default. If it does not resolve, silently reading a *different* config would
+  // score the wrong tree with no way to notice.
+  if (hint && hintIsExplicit) {
     const hinted = resolve(root, hint)
     return existsSync(hinted) ? { path: hinted } : null
   }
@@ -131,10 +133,12 @@ function splitPatterns(patterns: PathPattern[]): { globs: string[]; regexes: Reg
 }
 
 /** Cheap evidence that a directory is a test suite: any file with a test-ish suffix. */
+const TEST_FILE_SEARCH_DEPTH = 8
+
 function holdsTestFiles(dir: string): boolean {
   const TEST_FILE = /\.(spec|test|e2e|e2e-spec|setup)\.[cm]?[jt]sx?$/
   const walk = (current: string, depth: number): boolean => {
-    if (depth > 3) return false
+    if (depth > TEST_FILE_SEARCH_DEPTH) return false
     let entries: string[]
     try {
       entries = readdirSync(current)
@@ -204,9 +208,13 @@ export function resolveDiscovery(
     return withoutFallback()
   }
 
-  const located = findPlaywrightConfigNearby(options.rootDir, config.playwrightConfig)
+  const located = findPlaywrightConfigNearby(
+    options.rootDir,
+    config.playwrightConfig,
+    loaded.explicitKeys.has('playwrightConfig'),
+  )
   if (!located) {
-    if (config.playwrightConfig !== DEFAULT_PLAYWRIGHT_CONFIG) {
+    if (loaded.explicitKeys.has('playwrightConfig')) {
       discovery.playwrightConfigIgnored = {
         path: resolve(options.rootDir, config.playwrightConfig),
         reason: 'playwrightConfig points at a file that does not exist',
@@ -246,7 +254,7 @@ export function resolveDiscovery(
       reason:
         configDir === resolve(options.rootDir)
           ? 'it declares no testDir, so Playwright would scan the whole project root'
-          : 'it declares no testDir and its directory holds no test files',
+          : `it declares no testDir and no test files were found within ${TEST_FILE_SEARCH_DEPTH} directory levels of it`,
     }
     return withoutFallback()
   }
@@ -265,7 +273,9 @@ export function resolveDiscovery(
   const seen = new Set<string>()
   for (const scope of read.settings.scopes) {
     const match = splitPatterns(scope.match)
-    const ignore = excludeIsOurs ? splitPatterns(scope.ignore) : { globs: [], regexes: [] }
+    // `exclude` and `testIgnore` are not competing definitions of one thing — a user
+    // adding one exclusion never means "and run the slow suite". Both always apply.
+    const ignore = splitPatterns(scope.ignore)
     const takeMatch = includeIsOurs && (match.globs.length > 0 || match.regexes.length > 0)
     if (takeMatch) adoptedInclude = true
     if (ignore.globs.length > 0 || ignore.regexes.length > 0) adoptedIgnore = true
@@ -296,7 +306,7 @@ export function resolveDiscovery(
       ? 'mixed'
       : 'playwright-config'
   }
-  if (adoptedIgnore) discovery.exclude = 'playwright-config'
+  if (adoptedIgnore) discovery.exclude = excludeIsOurs ? 'playwright-config' : 'mixed'
   if (read.unresolved.length > 0) {
     // The config *was* used — saying it "was not used" would send the user to fix a
     // problem they don't have.

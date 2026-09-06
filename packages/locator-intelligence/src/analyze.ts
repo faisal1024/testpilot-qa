@@ -109,7 +109,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     const { path, reason } = options.discovery.playwrightConfigPartial
     warnings.push({
       code: 'playwright-config-partial',
-      message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may be incomplete.`,
+      message: `${path} was used for test discovery, but part of it could not be read: ${reason}. The analyzed file set may not match what Playwright runs.`,
     })
   }
   if (options.discovery?.playwrightConfigIgnored) {

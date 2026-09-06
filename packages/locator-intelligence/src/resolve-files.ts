@@ -10,11 +10,18 @@ import { glob } from 'tinyglobby'
 
 const toPosix = (path: string): string => path.split('\\').join('/')
 
-/** Never analyze dependencies, whatever the config says. */
-const ALWAYS_IGNORED = ['**/node_modules/**']
+/** Never analyzed, whatever the config says: dependencies and tool caches. */
+const ALWAYS_IGNORED = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/.next/**',
+  '**/.turbo/**',
+  '**/.yarn/**',
+  '**/.venv/**',
+]
 
 /** Candidate set when a Playwright RegExp `testMatch` decides membership. */
-const ANY_SOURCE_FILE = ['**/*.{ts,tsx,js,jsx,mjs,cjs}']
+const ANY_SOURCE_FILE = ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']
 
 /** One directory to scan with the selectors that apply to it (see `resolveDiscovery`). */
 export type FileScope = DiscoveryScope

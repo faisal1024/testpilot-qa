@@ -343,7 +343,7 @@ describe('resolveDiscovery', () => {
     const resolved = await resolveIn(dir)
     expect(resolved.config.testDir).toBe('tests')
     expect(resolved.config.include).toEqual([
-      '**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}',
+      '**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}',
     ])
     expect(resolved.discovery.include).toBe('default')
     expect(resolved.discovery.roots).toEqual([join(dir, 'tests')])
@@ -435,20 +435,43 @@ describe('resolveDiscovery', () => {
     expect(resolved.discovery.playwrightConfigIgnored?.reason).toContain('does not exist')
   })
 
-  it('discloses an unreadable defineConfig() override instead of scoring the base', async () => {
-    // `defineConfig(base, override)` merges with later arguments winning; we read the
-    // first, so the override must be disclosed rather than silently dropped.
+  it('merges defineConfig layers per key, with later layers winning', () => {
     writeFile(
       'playwright.config.ts',
-      "import base from './base'\nimport { defineConfig } from '@playwright/test'\nexport default defineConfig(base, { testDir: './e2e' })\n",
+      "import { defineConfig } from '@playwright/test'\nexport default defineConfig({ testDir: './e2e' }, { testMatch: '**/*.spec.ts' })\n",
     )
     const read = readSettings(join(dir, 'playwright.config.ts'))
     expect(read.status).toBe('ok')
     if (read.status !== 'ok') return
-    // The override wins, as it does in Playwright — and the base we could not read
-    // is disclosed rather than passed off as the whole config.
+    // Taking one whole layer dropped the other's testDir and widened the scan to the
+    // project root, scoring files Playwright never runs.
     expect(read.settings.scopes[0]?.root).toBe(join(dir, 'e2e'))
-    expect(read.unresolved).toContain('additional defineConfig() arguments')
+    expect(read.settings.scopes[0]?.match).toEqual([{ kind: 'glob', value: '**/*.spec.ts' }])
+    expect(read.unresolved).toEqual([])
+  })
+
+  it('refuses to synthesize a test root when a config layer could not be read', () => {
+    // The unread layer may be the one that set testDir; defaulting to the config's
+    // own directory would scan the whole project and score unit tests.
+    writeFile(
+      'playwright.config.ts',
+      "import base from './base'\nimport { defineConfig } from '@playwright/test'\nexport default defineConfig(base, { testMatch: '**/*.smoke.ts' })\n",
+    )
+    const read = readSettings(join(dir, 'playwright.config.ts'))
+    expect(read.status).toBe('unreadable')
+  })
+
+  it('does not unwrap a call that is not a Playwright config helper', () => {
+    // `makeConfig` can rewrite what it is given; adopting its argument produced a
+    // confident score over a directory Playwright never runs.
+    writeFile(
+      'playwright.config.ts',
+      "import { makeConfig } from './tooling'\nexport default makeConfig({ testDir: './fixtures' })\n",
+    )
+    const read = readSettings(join(dir, 'playwright.config.ts'))
+    expect(read.status).toBe('unreadable')
+    if (read.status !== 'unreadable') return
+    expect(read.reason).toContain('makeConfig()')
   })
 
   it('keeps the base root when a bare base sits beside hidden project entries', async () => {
@@ -497,18 +520,18 @@ describe('resolveDiscovery', () => {
     })
   })
 
-  it('lets an explicit exclude outrank testIgnore, like testDir and include', async () => {
+  it('applies both exclude and testIgnore, and says the provenance is mixed', async () => {
     writeFile(
       'playwright.config.ts',
       "export default { testDir: 'e2e', testIgnore: '**/theirs/**' }\n",
     )
     writeFile('testpilot.config.ts', "export default { exclude: ['**/mine/**'] }\n")
     const resolved = await resolveIn(dir)
-    expect(resolved.discovery.exclude).toBe('testpilot-config')
-    // Silently unioning meant a Playwright glob dropped files while every message
-    // credited testpilot.config for the exclusion.
+    // Discarding testIgnore gated on files Playwright never runs; claiming
+    // `testpilot-config` for the union hid which glob actually dropped a file.
+    expect(resolved.discovery.exclude).toBe('mixed')
     expect(resolved.scopes[0]?.excludeGlobs).toEqual(['**/mine/**'])
-    expect(resolved.scopes[0]?.ignoreGlobs).toEqual([])
+    expect(resolved.scopes[0]?.ignoreGlobs).toEqual(['**/theirs/**'])
   })
 
   it('marks exclude as Playwright-sourced when only a RegExp testIgnore filtered', async () => {

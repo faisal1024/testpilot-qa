@@ -48,6 +48,20 @@ projects that never adopted TestPilot.
   scanned on stderr; when a Playwright config is found but can't be used, the reason appears in the
   zero-file error, in a new `doctor` check, and in the report. `--no-playwright-discovery` turns the
   fallback off for `analyze`, `fix`, and `doctor` alike.
+- **`defineConfig(base, override)` is merged per key**, later layers winning, as Playwright merges
+  them — and a config assembled from a layer we cannot read no longer synthesizes a test root, which
+  had widened the scan to the whole project and scored files Playwright never runs. Only
+  `defineConfig`/`mergeConfig` calls are unwrapped: a project-local `makeConfig({...})` can rewrite
+  what it is given, so its argument is reported rather than trusted.
+- **`exclude` and `testIgnore` both apply.** They are not competing definitions of one thing — adding
+  one exclusion never means "also run the suite Playwright skips" — and the provenance is reported as
+  `mixed` so you can see which side dropped a file.
+- **The success path is disclosed too:** when a Playwright config supplied the test roots, the table
+  and the HTML report name the directories scanned and the config they came from, so an adoption that
+  is wrong-but-unflagged is visible in the artifacts a team actually reads. `fix --json` carries
+  `discovery` and the same warnings — it is the write path and must be at least as loud as `analyze`.
+- **A zero-file run publishes an unsuccessful SARIF invocation** with the `no-files-matched`
+  notification, instead of a result set indistinguishable from a clean scan.
 - **A `playwrightConfig` you set explicitly is honored**: if it points at a file that does not exist,
   discovery stops and says so rather than silently reading a different config.
 - **Report schema `1.6`:** new top-level `discovery` — per-setting provenance

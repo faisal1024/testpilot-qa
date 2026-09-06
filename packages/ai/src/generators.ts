@@ -77,7 +77,7 @@ function cursorFile(): GeneratedFile {
     '---',
     'description: TestPilot QA + Playwright conventions for writing resilient tests',
     'globs:',
-    '  - "tests/**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}"',
+    '  - "tests/**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"',
     'alwaysApply: false',
     '---',
     '',

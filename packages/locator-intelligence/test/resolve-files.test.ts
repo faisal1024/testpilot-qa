@@ -127,6 +127,23 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
     ).toEqual(['e2e/a.spec.ts'])
   })
 
+  it('applies the user exclude and the Playwright ignore together', async () => {
+    write('e2e/keep.spec.ts')
+    write('e2e/slow/b.spec.ts')
+    write('e2e/fixtures/c.spec.ts')
+    // Discarding either one gates on files the other tool never runs.
+    expect(
+      await found([
+        scope({
+          root: join(dir, 'e2e'),
+          includeGlobs: ['**/*.spec.ts'],
+          excludeGlobs: ['**/fixtures/**'],
+          ignoreGlobs: ['**/e2e/slow/**'],
+        }),
+      ]),
+    ).toEqual(['e2e/keep.spec.ts'])
+  })
+
   it('deduplicates a file selected by several scopes', async () => {
     write('e2e/a.spec.ts')
     expect(

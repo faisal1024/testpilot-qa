@@ -139,7 +139,7 @@ when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware
 and **[docs/rules](docs/rules/README.md)** for every rule with bad → better examples.
 
 Test files are found via `testDir` + `include` (+ `exclude`) from `testpilot.config.ts` (defaults:
-`tests/`, `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}`, ignoring `node_modules`, `dist`,
+`tests/`, `**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}`, ignoring `node_modules`, `dist`,
 `build`, `coverage`, `test-results`, and `playwright-report` — JavaScript suites and `*.e2e.ts` naming
 work out of the box), or via explicit patterns (`npx testpilot-qa analyze "e2e/**/*.spec.ts"`), which
 are honored as written even inside an excluded directory. `testDir` is relative to the config file (or

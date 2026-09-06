@@ -45,7 +45,9 @@ export const configSchema = z
     playwrightConfig: z.string().default('playwright.config.ts'),
     // Every extension the parser handles and the common suffixes seen in real suites
     // (`*.e2e.ts`, `*.e2e-spec.ts`) — a JS suite must not silently match nothing.
-    include: z.array(z.string()).default(['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']),
+    include: z
+      .array(z.string())
+      .default(['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']),
     // Build output of a TS suite would otherwise be analyzed twice (and show up as
     // "new" findings against a baseline) now that `.js` is in the default include.
     exclude: z

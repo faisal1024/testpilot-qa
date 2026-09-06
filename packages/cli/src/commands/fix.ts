@@ -12,7 +12,11 @@ import { fail } from '../util/fail.js'
 import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { failNoFilesMatched } from '../util/no-files-matched.js'
 import { OutputError, writeTextFile } from '../util/output.js'
-import { resolveDiscoveryOrExit } from '../util/resolve-config.js'
+import {
+  type DiscoveryResult,
+  discoveryWarnings,
+  resolveDiscoveryOrExit,
+} from '../util/resolve-config.js'
 import { renderUnifiedDiff } from '../util/unified-diff.js'
 
 interface FixOptions {
@@ -97,7 +101,7 @@ export async function fixCommand(
     }
   }
 
-  report(results, diffs, write, skipped, globals)
+  report(results, diffs, write, skipped, globals, resolved)
 }
 
 function totalFixes(results: FileFixSummary[]): number {
@@ -110,6 +114,7 @@ function report(
   write: boolean,
   skipped: number,
   globals: GlobalOptions,
+  resolved: DiscoveryResult,
 ): void {
   if (globals.json) {
     console.log(
@@ -118,6 +123,10 @@ function report(
         dryRun: !write,
         files: results.map((r) => ({ file: r.file, written: r.written, fixes: r.fixes })),
         summary: { files: results.length, fixes: totalFixes(results), skipped },
+        // This is the write path: it must be at least as loud as `analyze` about a
+        // file set chosen by a half-read or mis-adopted Playwright config.
+        discovery: resolved.discovery,
+        warnings: discoveryWarnings(resolved.discovery),
       }),
     )
     return

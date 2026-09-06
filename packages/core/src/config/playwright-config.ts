@@ -107,41 +107,67 @@ function hasSpread(object: Node): boolean {
   )
 }
 
-/** Unwraps `defineConfig({...})`, `export default config`, and `satisfies`/`as` casts. */
-function resolveConfigObject(
+/** The only calls whose argument is, by definition, a Playwright config. */
+const CONFIG_HELPERS = new Set(['defineConfig', 'mergeConfig'])
+
+function calleeName(node: Node | null): string | null {
+  const callee = asNode(node?.callee)
+  if (callee?.type === 'Identifier') return callee.name as string
+  if (callee?.type === 'MemberExpression') {
+    const property = asNode(callee.property)
+    return property?.type === 'Identifier' ? (property.name as string) : null
+  }
+  return null
+}
+
+/**
+ * Resolves the exported value into the **ordered** config layers it is built from.
+ * `defineConfig` is variadic and merges its arguments with later ones winning, so a
+ * single object is not enough: taking one layer and calling it the config drops keys
+ * the others set, which silently widened the scanned root to the whole project.
+ *
+ * A call to anything *other* than a known Playwright helper is not unwrapped. A
+ * project-local `makeConfig({...})` can rewrite what it is given, and adopting its
+ * argument produced a confident score over a directory Playwright never runs.
+ */
+function resolveConfigLayers(
   root: Node,
   node: Node | null,
   unresolved: string[],
   depth = 0,
-): Node | null {
-  if (!node || depth > 4) return null
+): Node[] {
+  if (!node || depth > 4) return []
   switch (node.type) {
     case 'ObjectExpression':
-      return node
+      return [node]
     case 'CallExpression': {
-      // `defineConfig` is variadic and **later arguments win**, so read from the last
-      // backwards — and disclose, since the layers we skipped may set keys too.
-      const args = (node.arguments as unknown[]) ?? []
-      if (args.length > 1) unresolved.push('additional defineConfig() arguments')
-      for (let i = args.length - 1; i >= 0; i -= 1) {
-        const resolved = resolveConfigObject(root, asNode(args[i]), unresolved, depth + 1)
-        if (resolved) return resolved
+      const name = calleeName(node)
+      if (!name || !CONFIG_HELPERS.has(name)) {
+        unresolved.push(`a call to ${name ? `${name}()` : 'a function'}`)
+        return []
       }
-      return null
+      const args = (node.arguments as unknown[]) ?? []
+      return args.flatMap((argument) => {
+        const layers = resolveConfigLayers(root, asNode(argument), unresolved, depth + 1)
+        // A layer we cannot open may be the one that sets `testDir`; saying nothing
+        // would let the remaining layers pass as the whole config.
+        if (layers.length === 0) unresolved.push('a config layer that could not be read')
+        return layers
+      })
     }
     case 'TSAsExpression':
     case 'TSSatisfiesExpression':
     case 'TSNonNullExpression':
-      return resolveConfigObject(root, asNode(node.expression), unresolved, depth + 1)
+      return resolveConfigLayers(root, asNode(node.expression), unresolved, depth + 1)
     case 'Identifier':
-      return resolveConfigObject(
+      return resolveConfigLayers(
         root,
         findVariableInit(root, node.name as string),
         unresolved,
         depth + 1,
       )
     default:
-      return null
+      return []
   }
 }
 
@@ -191,12 +217,12 @@ function walk(node: Node, visit: (node: Node) => void): void {
 }
 
 /** `export default …` or CommonJS `module.exports = …` (Playwright allows `.cjs`/`.js`). */
-function exportedConfigObject(root: Node, unresolved: string[]): Node | null {
-  let result: Node | null = null
+function exportedConfigLayers(root: Node, unresolved: string[]): Node[] {
+  let result: Node[] = []
   walk(root, (node) => {
-    if (result) return
+    if (result.length > 0) return
     if (node.type === 'ExportDefaultDeclaration') {
-      result = resolveConfigObject(root, asNode(node.declaration), unresolved)
+      result = resolveConfigLayers(root, asNode(node.declaration), unresolved)
       return
     }
     if (node.type !== 'AssignmentExpression') return
@@ -210,7 +236,7 @@ function exportedConfigObject(root: Node, unresolved: string[]): Node | null {
       property?.type === 'Identifier' &&
       property.name === 'exports'
     if (isModuleExports) {
-      result = resolveConfigObject(root, asNode(node.right), unresolved)
+      result = resolveConfigLayers(root, asNode(node.right), unresolved)
     }
   })
   return result
@@ -281,8 +307,8 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   }
 
   const unresolved: string[] = []
-  const config = exportedConfigObject(root, unresolved)
-  if (!config) {
+  const layers = exportedConfigLayers(root, unresolved)
+  if (layers.length === 0) {
     return {
       status: 'unreadable',
       reason:
@@ -328,14 +354,32 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     return result
   }
 
-  const base = readSelectors(config)
+  /** Folds layers per key, later winning — `defineConfig`'s own merge semantics. */
+  const mergeSelectors = (objects: Node[]): RawSelectors => {
+    const merged: RawSelectors = { testDir: null, match: null, ignore: null }
+    for (const object of objects) {
+      const layer = readSelectors(object)
+      if (layer.testDir !== null) merged.testDir = layer.testDir
+      if (layer.match !== null) merged.match = layer.match
+      if (layer.ignore !== null) merged.ignore = layer.ignore
+    }
+    return merged
+  }
+
+  const base = mergeSelectors(layers)
   const declares = (raw: RawSelectors) =>
     raw.testDir !== null || raw.match !== null || raw.ignore !== null
 
   // Playwright resolves testDir against the config file's directory, and defaults
   // it to that directory. A project inherits any selector it doesn't set itself.
+  // Falling back to the config's own directory is only safe when we actually read the
+  // whole config: a layer we could not open may have set `testDir`, and defaulting to
+  // '.' then widens the scan to the entire project and scores files Playwright ignores.
+  const rootIsKnown = unresolved.length === 0
   const toScope = (raw: RawSelectors): PlaywrightScope | null => {
-    const testDir = raw.testDir ?? base.testDir ?? '.'
+    const declaredDir = raw.testDir ?? base.testDir
+    if (declaredDir === null && !rootIsKnown) return null
+    const testDir = declaredDir ?? '.'
     const match = raw.match ?? base.match ?? []
     const ignore = raw.ignore ?? base.ignore ?? []
     if (testDir === 'unresolved' || match === 'unresolved' || ignore === 'unresolved') {
@@ -346,7 +390,10 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
 
   const projectSelectors: RawSelectors[] = []
   let projectsPartial = false
-  const projects = propertyValue(config, 'projects')
+  const projects = layers.reduce<Node | null>(
+    (found, layer) => propertyValue(layer, 'projects') ?? found,
+    null,
+  )
   if (projects) {
     if (projects.type !== 'ArrayExpression') {
       // `projects: makeProjects()` — we cannot see the entries at all.

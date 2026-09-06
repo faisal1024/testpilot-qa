@@ -27,7 +27,7 @@ interface SarifRun {
 }
 
 interface SarifInvocation {
-  executionSuccessful: true
+  executionSuccessful: boolean
   toolExecutionNotifications: {
     level: 'warning'
     message: { text: string }
@@ -40,6 +40,8 @@ interface SarifDriver {
   informationUri: string
   version: string
   rules: SarifReportingDescriptor[]
+  /** Descriptors for `toolExecutionNotifications`, so their references resolve. */
+  notifications?: { id: string; shortDescription: { text: string } }[]
 }
 
 interface SarifReportingDescriptor {
@@ -118,13 +120,15 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   const rules: SarifReportingDescriptor[] = []
   const results: SarifResult[] = []
 
-  const notifications = (report.warnings ?? [])
-    .filter((warning) => warning.code.startsWith('playwright-config'))
-    .map((warning) => ({
-      level: 'warning' as const,
-      message: { text: warning.message },
-      descriptor: { id: warning.code },
-    }))
+  // Every warning, not just discovery ones: a `no-files-matched` run published SARIF
+  // indistinguishable from a genuinely clean scan, which is the false green this
+  // reporter exists to prevent.
+  const notifications = (report.warnings ?? []).map((warning) => ({
+    level: 'warning' as const,
+    message: { text: warning.message },
+    descriptor: { id: warning.code },
+  }))
+  const analyzedNothing = report.summary?.filesAnalyzed === 0
 
   for (const finding of report.findings) {
     let index = ruleIndex.get(finding.ruleId)
@@ -161,12 +165,17 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
       {
         tool: { driver: driver(rules) },
         results,
-        // Warnings that are not findings — a partially-read Playwright config means the
-        // analyzed file set may be incomplete, which the gate's consumer must see.
-        ...(notifications.length > 0
+        // Warnings that are not findings — a partly-read Playwright config, or a run that
+        // matched nothing — which the gate's consumer must see.
+        ...(notifications.length > 0 || analyzedNothing
           ? {
               invocations: [
-                { executionSuccessful: true as const, toolExecutionNotifications: notifications },
+                {
+                  // A run that opened no files did not successfully analyze anything —
+                  // publishing it as a success is indistinguishable from a clean scan.
+                  executionSuccessful: !analyzedNothing,
+                  toolExecutionNotifications: notifications,
+                },
               ],
             }
           : {}),
@@ -175,12 +184,26 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   }
 }
 
+const NOTIFICATION_DESCRIPTORS = [
+  { id: 'unknown-rule', shortDescription: { text: 'A configured rule id is not recognized.' } },
+  { id: 'no-files-matched', shortDescription: { text: 'No test files matched.' } },
+  {
+    id: 'playwright-config-partial',
+    shortDescription: { text: 'The Playwright config was only partly readable.' },
+  },
+  {
+    id: 'playwright-config-ignored',
+    shortDescription: { text: 'The Playwright config was not used for discovery.' },
+  },
+]
+
 function driver(rules: SarifReportingDescriptor[]): SarifDriver {
   return {
     name: 'TestPilot QA',
     informationUri: INFORMATION_URI,
     version: CLI_VERSION,
     rules,
+    notifications: NOTIFICATION_DESCRIPTORS,
   }
 }
 

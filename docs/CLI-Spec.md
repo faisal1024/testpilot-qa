@@ -389,7 +389,7 @@ import { defineConfig } from 'testpilot-qa'
 
 export default defineConfig({
   testDir: 'tests',
-  include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']
+  include: ['**/*.spec.ts'], // default: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']
   // default: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/test-results/**', '**/playwright-report/**']
   // Setting this REPLACES the defaults — repeat the ones you still want.
   exclude: ['**/node_modules/**', '**/dist/**'],
@@ -527,7 +527,7 @@ Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures)
 patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
 printing what was searched (a **directory** argument that matches nothing is a `3` too — it is
 expanded with the config's `include`). The default `include` is
-`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,js,jsx,mjs,cjs}']`, and the default `exclude` skips
+`['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']`, and the default `exclude` skips
 `node_modules`, `dist`, `build`, `coverage`, `test-results`, and `playwright-report`. `exclude` applies
 wherever `include` chose the files (config-driven discovery and directory arguments); a glob or path
 you name explicitly is honored as written, so `analyze dist/e2e/a.spec.js` still works.
@@ -549,8 +549,10 @@ it in `e2e/`); an ambiguous result adopts nothing.
   selectors at all, as in Playwright's documented `setup` pattern. One project's `testIgnore` can
   never delete another project's files. A project whose `testDir` is computed is skipped rather than
   silently scanned at its parent's root.
-- An explicit `include` or `exclude` in `testpilot.config.ts` outranks Playwright's `testMatch` /
-  `testIgnore`, exactly as an explicit `testDir` does.
+- An explicit `include` outranks Playwright's `testMatch`, exactly as an explicit `testDir` does.
+  `exclude` and `testIgnore` are **both** applied — they are not competing definitions of one thing,
+  and adding one exclusion never means "also run the suite Playwright skips". The provenance is then
+  reported as `mixed`.
 - Playwright's `testMatch`/`testIgnore` — globs **and** RegExps, with their flags — are matched
   against the **absolute** path, as Playwright matches them. TestPilot's own `include`/`exclude` keep
   their documented root-relative meaning.
@@ -558,8 +560,12 @@ it in `e2e/`); an ambiguous result adopts nothing.
   default test root) when it demonstrably holds test files — so a minimal `e2e/playwright.config.ts`
   points discovery at `e2e/`, while an `examples/` config does not hijack it. A bare config at the
   project root is reported rather than adopted.
-- `defineConfig(base, override)` is read with **later arguments winning**, as Playwright merges them,
-  and the layers that could not be read are reported.
+- `defineConfig(base, override)` is merged **per key with later arguments winning**, as Playwright
+  merges them. A layer that could not be read is reported, and no test root is synthesized from a
+  partly-read config — defaulting to the config's own directory would scan the whole project.
+- Only `defineConfig`/`mergeConfig` calls are unwrapped. A project-local wrapper
+  (`makeConfig({...})`) can rewrite what it is given, so its argument is reported as unreadable
+  rather than trusted.
 - Anything the parse can't resolve — a computed value, a spread, a `projects` array built by a
   function — is reported. The config is still used for what *was* readable, and `discovery`
   distinguishes "partially read" (`playwrightConfigPartial`) from "not used" (`playwrightConfigIgnored`).
@@ -570,7 +576,7 @@ it in `e2e/`); an ambiguous result adopts nothing.
   `doctor`.
 - `testDir` and `testMatch` are adopted **as a pair** — taking one without the other produces a
   selection neither tool would make.
-- An explicit TestPilot `testDir` always wins; `testIgnore` is appended to `exclude`.
+- An explicit TestPilot `testDir` always wins; `testIgnore` and `exclude` are both applied.
 - Whenever the fallback supplies a setting, `analyze`/`fix` say so on stderr (unless `--quiet`).
 - `--no-playwright-discovery` turns the fallback off, for `analyze`, `fix`, and `doctor` alike.
   Explicit CLI patterns skip it automatically, as does an explicit `testDir` in `testpilot.config.ts`.
