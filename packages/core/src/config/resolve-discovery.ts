@@ -239,27 +239,28 @@ function declaresTagsIn(rootDir: string, hint: string): boolean {
  * The `use.testIdAttribute` for a project, read at the same moments as
  * `declaresTagsIn`.
  *
- * `findPlaywrightConfigNearby`, **not** `findPlaywrightConfig`: the narrow
- * lookup does not descend a level, and immich and Ghost — two of the five
- * corpus repos — keep their config in `e2e/`. Missing it there returned `null`,
- * which the rule reads as the positive claim "the config sets none, so
- * `data-testid` applies" — a default asserted over a file we never opened, and
- * the same mistake one layer up from where it was last fixed.
- *
- * Genuinely finding nothing *is* `null`: Playwright's own default then applies,
- * and treating that as unknown would qualify every suggestion in every project
- * that has no Playwright config. Ambiguity is not an answer, so several
- * candidate configs are `'unresolved'` — the discovery path refuses to pick one
- * and this must not pick one either.
+ * The **narrow** lookup, the same one `declaresTagsIn` and `testpilot run`
+ * use — see the note in the body. Genuinely finding nothing *is* `null`:
+ * Playwright's own default then applies, and treating that as unknown would
+ * qualify every suggestion in every project that has no Playwright config.
  */
 function testIdAttributeIn(rootDir: string, hint: string): string | null | 'unresolved' {
-  const located = findPlaywrightConfigNearby(rootDir, hint)
-  if (!located) {
-    return null
+  // The *narrow* lookup, the same one `declaresTagsIn` and `testpilot run` use:
+  // it names the config that will actually run these tests. Round 7 switched
+  // this to `findPlaywrightConfigNearby` to cover a repo whose config lives in
+  // `e2e/`, but that repo reaches discovery's main path, not this helper —
+  // this one is only called on the branches where a sub-directory config was
+  // *not* adopted, and there `examples/playwright.config.ts` governs its own
+  // tests, not ours. Reading it would be the same over-reach one key over.
+  const path = findPlaywrightConfig(rootDir, hint)
+  if (path) {
+    return readPlaywrightTestSettings(path).testIdAttribute
   }
-  return 'ambiguous' in located
-    ? 'unresolved'
-    : readPlaywrightTestSettings(located.path).testIdAttribute
+  // Nothing at the root, but something one level down: it may or may not be the
+  // config that runs these tests, and we did not adopt it. That is "unknown" —
+  // not `null`, which would assert Playwright's default over a file we can see
+  // and chose not to read.
+  return findPlaywrightConfigNearby(rootDir, hint) ? 'unresolved' : null
 }
 
 export function resolveDiscovery(

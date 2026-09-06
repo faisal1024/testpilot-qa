@@ -75,89 +75,58 @@ export function testIdReplacement(
   if (parsed.unparsed.length > 0) {
     return null
   }
-  const last = parsed.parts.at(-1)
-  if (!last || last.engine !== 'css') {
+  // ONE part, and the test id leads it.
+  //
+  // Not "one part, plus every way a later `>>` part could step outside the
+  // subtree". That enumeration was incomplete ten times running: a sibling
+  // combinator, then `*:scope`, then `:scope:hover`, then `:is(:scope)`. The
+  // set of ways to leave is open — CSS and Playwright keep adding spellings —
+  // while the set of shapes that provably stay is small and closed. So this
+  // recognises those instead, and says nothing about anything else.
+  //
+  // `locator('[data-testid=a] >> div')` loses its finding as a result. That is
+  // the price of a rule whose entire severity rests on the replacement being
+  // right, and it is the cheaper side of the trade.
+  if (parsed.parts.length !== 1) {
     return null
   }
-  const arm = singleArm(last)
-  if (!arm) {
+  const part = parsed.parts[0]
+  if (!part || part.engine !== 'css') {
     return null
   }
-  const target = arm.compounds.at(-1)
-  if (!target) {
+  const arm = singleArm(part)
+  const target = arm?.compounds.at(-1)
+  if (!arm || !target) {
     return null
   }
-
-  // The target's own selector first: it is the only place a `direct` or
-  // `same-element` answer can come from.
   const found = findIn(arm.compounds, names)
-  if (found) {
-    // Anything before the test id's own compound is an ancestor this rule
-    // would silently drop — an earlier `>>` part, or an earlier compound in
-    // this same selector. `'#modal >> [data-testid=x]'` and
-    // `'#modal [data-testid=x]'` are one locator, and neither is
-    // `getByTestId('x')`, which searches the whole document. All nine of
-    // immich's findings were the second spelling.
-    //
-    // ONE check, before the branches. The first version of this guard sat
-    // inside the target-compound branch below, so it never covered `scope`:
-    // `'#modal [data-testid=x] .child'` still offered a rewrite that dropped
-    // `#modal`, and the two spellings still disagreed. That was the sixth
-    // round of this defect, produced by the fix for the fifth.
-    if (parsed.parts.length > 1 || found.index > 0) {
-      return null
-    }
-    if (found.index === arm.compounds.length - 1) {
-      return {
-        kind: isOnlyHandle(target) ? 'direct' : 'same-element',
-        attribute: found.match.name,
-        exactValue: exactValueOf(found.match),
-      }
-    }
-    // Every step from the match to the target must be a containment step.
-    const steps = arm.combinators.slice(found.index, arm.compounds.length - 1)
-    if (!steps.every((step) => SCOPING_COMBINATORS.has(step))) {
-      return null
-    }
-    return {
-      kind: 'scope',
-      attribute: found.match.name,
-      exactValue: exactValueOf(found.match),
-      scopeHasOtherConditions: !isOnlyHandle(arm.compounds[found.index] as CompoundSelector),
-    }
-  }
-
-  // Otherwise an earlier `>>` part, which chains as a scope. The match has to
-  // be on that part's own target — `[data-testid=a] + div >> button` scopes
-  // from the div, and the test id is that div's sibling.
-  // `xpath=..` walks UP from the scope, so a later xpath part can put the
-  // target outside the test id's subtree: in `'[data-testid=x] >> .. >> div'`
-  // the target is under x's *parent*, and calling x an ancestor is false.
-  // The rewrite would still be sound — `>>` is a chained `locator()` — but the
-  // sentence would not be, and the sentence is what this rule sells.
-  if (parsed.parts.slice(1).some((part) => part.engine === 'xpath')) {
+  // `found.index > 0` means something precedes the test id — an ancestor scope
+  // `getByTestId()` would drop. A leading combinator counts: the tokenizer
+  // models `'+ [data-testid=x]'` as `:scope + [data-testid=x]`, so the test id
+  // is at index 1 and this rejects it without needing to recognise `:scope` in
+  // any of its spellings.
+  if (!found || found.index > 0) {
     return null
   }
-  // Only the *first* part: anything before the one holding the test id is a
-  // further ancestor that `getByTestId()` would drop.
-  const first = parsed.parts[0]
-  if (parsed.parts.length > 1 && first?.engine === 'css') {
-    const earlier = singleArm(first)
-    if (!earlier) {
-      return null
-    }
-    const tail = earlier.compounds.at(-1)
-    const match = tail && matchIn(tail, names)
-    if (match && earlier.compounds.length === 1) {
-      return {
-        kind: 'scope',
-        attribute: match.name,
-        exactValue: exactValueOf(match),
-        scopeHasOtherConditions: !isOnlyHandle(tail),
-      }
+  const exactValue = exactValueOf(found.match)
+  if (found.index === arm.compounds.length - 1) {
+    return {
+      kind: isOnlyHandle(target) ? 'direct' : 'same-element',
+      attribute: found.match.name,
+      exactValue,
     }
   }
-  return null
+  // Provably an ancestor: every step from it to the target is a containment
+  // step, inside one selector, with no engine boundary to reason across.
+  if (!arm.combinators.every((step) => SCOPING_COMBINATORS.has(step))) {
+    return null
+  }
+  return {
+    kind: 'scope',
+    attribute: found.match.name,
+    exactValue,
+    scopeHasOtherConditions: !isOnlyHandle(arm.compounds[0] as CompoundSelector),
+  }
 }
 
 /** The one selector in a part, or `null` when the part is a list (or unparsed). */

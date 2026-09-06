@@ -34,9 +34,13 @@ mechanical rewrite) or `#login-form div.actions > button` (a judgement call).
   spelling (`{ has, hasNot, hasText, hasNotText }`, `.filter({ hasText })`, `:has()`, `:has-text()`,
   `:text()`), on a `locator()` narrowing a `getBy*()` parent — including through
   `.filter()`/`.first()`/`.last()`/`.nth()` — and on a test id **that
-  `prefer-get-by-test-id` actually reports**. Where that rule abstains (an ancestor before the test
-  id, a selector list, a bare presence check) this one speaks instead, so no call site falls between
-  them.
+  `prefer-get-by-test-id` actually reports**. Where that rule abstains for a *selector* reason (an
+  ancestor before the test id, a selector list, a bare presence check) this one speaks instead. The
+  one gap is a call whose own options carry a filter: `prefer-get-by-test-id` abstains on the options
+  bag while this rule still defers on the test id, so `locator('[data-testid=x]', { hasText })` is
+  reported by neither — one corpus call site, and the same one counted in the removals below. An
+  options bag neither rule can read (`locator('[data-testid=x]', opts)`) falls in the same gap; it
+  occurs zero times in the corpus.
 
 **A config or baseline written against the old id keeps working**: `prefer-user-facing-locator` maps
 to both successors and carries its severity to them, with a `deprecated-rule-id` warning. It is no
