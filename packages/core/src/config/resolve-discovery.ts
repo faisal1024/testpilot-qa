@@ -6,6 +6,7 @@ import type { LoadConfigResult } from './load-config.js'
 import {
   type PathPattern,
   describeUnresolved,
+  mayDeclareTags,
   readPlaywrightTestSettings,
 } from './playwright-config.js'
 import type { TestPilotConfig } from './schema.js'
@@ -210,6 +211,30 @@ function helperPatterns(config: TestPilotConfig, requested: boolean): string[] {
  * tool would make, and silently emptied the file set for projects scaffolded by
  * `testpilot init` (which sets `testDir` and not `include`).
  */
+/**
+ * Whether the Playwright config this project actually runs under declares a
+ * config-level `tag` — or might, in a region we could not read.
+ *
+ * Deliberately independent of whether that config's `testDir` was adopted:
+ * `testConfig.tag` applies to every test in every file either way.
+ *
+ * Resolved with `findPlaywrightConfig`, the *same* call `testpilot run` makes
+ * (`run.ts`), rather than the nearby-search discovery uses. That is the whole
+ * point: the question is "what will Playwright be given when this suite runs",
+ * so the answer has to come from the same lookup. Filtering the nearby search
+ * by directory instead looked equivalent and was not — it swallowed an explicit
+ * `playwrightConfig` hint pointing at a sub-directory, which `run` honours.
+ */
+function declaresTagsIn(rootDir: string, hint: string): boolean {
+  const path = findPlaywrightConfig(rootDir, hint)
+  if (!path) {
+    return false
+  }
+  // `mayDeclareTags`, not `declaresTags`: a key hidden behind a spread or an
+  // unparseable layer is "unknown", and for a vocabulary unknown must widen.
+  return mayDeclareTags(readPlaywrightTestSettings(path))
+}
+
 export function resolveDiscovery(
   loaded: LoadConfigResult,
   options: ResolveDiscoveryOptions,
@@ -230,7 +255,16 @@ export function resolveDiscovery(
 
   // Adoption is all-or-nothing on `testDir`, so an explicit one ends it here —
   // reading a config we could never use would only produce misleading warnings.
+  // One thing is still read: a config-level `tag`, which Playwright applies to
+  // every test in every file whatever `testDir` we use. `testpilot init` writes
+  // an explicit `testDir`, so this is the default shape of a TestPilot project,
+  // and missing it made `tags` count the wrong set and `doctor` call a correct
+  // suite a typo.
   if (options.disablePlaywrightFallback === true || discovery.testDir !== 'default') {
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
@@ -253,11 +287,18 @@ export function resolveDiscovery(
       path: located.ambiguous.join(', '),
       reason: 'several sub-directories declare a Playwright config, so none was assumed',
     }
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(
+      options.rootDir,
+      config.playwrightConfig,
+    )
     return withoutFallback()
   }
 
   const configPath = located.path
   const read = readPlaywrightTestSettings(configPath)
+  // Set before any branch returns: a `tag` key applies to every test whether or
+  // not the config also yielded scopes we could use.
+  discovery.playwrightConfigDeclaresTags = mayDeclareTags(read)
   if (read.status === 'no-settings') {
     // Playwright's `testDir` defaults to the config file's own directory, so a config
     // kept in a sub-directory usually IS the suite location — ignoring that sent us

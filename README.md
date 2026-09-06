@@ -65,7 +65,8 @@ That's it. The rest of this README goes deeper on each command.
 | Command | What it does |
 |---|---|
 | `init` | Scaffold a TypeScript Playwright project (UI + API examples + AI guidance files). |
-| `run` | Thin pass-through to your local Playwright — not a custom runner. |
+| `run` | Thin pass-through to your local Playwright — not a custom runner. Selects tests by tag (`--tag`, `--suite`). |
+| `tags` | List the tag vocabulary of your suite, with per-tag test counts. |
 | `analyze` | Statically score locator quality and flag fragile patterns. Reports as table / JSON / SARIF / HTML. |
 | `fix` | Apply safe, behavior-preserving locator rewrites. **Dry-run by default.** |
 | `add ai` | Regenerate the AI agent guidance files. **Dry-run by default.** |
@@ -226,6 +227,76 @@ so a brownfield PR isn't buried under pre-existing debt; the comprehensive `json
 stay whole and carry the baseline summary. The CLI is fully usable without GitHub — SARIF is just one
 more `--reporter`. (The Action runs the published `testpilot-qa` package via `npx`.) Keep the Action at
 your repo root, or set `upload-sarif`'s `checkout_path`/`sourceRoot`, so the file paths resolve in the PR.
+
+---
+
+## Run a subset — `--tag` and `--suite`
+
+Playwright selects tagged tests with a regex. Getting that regex right is fiddly — `--grep @smoke`
+also runs `@smoketest`, and excluding a tag needs a *second* flag, `--grep-invert`. `run` takes the
+tags and writes the regex for you:
+
+```bash
+npx testpilot-qa run --tag smoke                  # tests tagged @smoke
+npx testpilot-qa run --tag smoke,regression       # either tag
+npx testpilot-qa run --tag smoke --exclude-tag flaky
+npx testpilot-qa run --tag '!slow'                # everything except @slow
+```
+
+It stays a pass-through: `--tag smoke` compiles to `--grep "/(?<!\S)@smoke(?!\S)/"` and the compiled
+flags are printed, so you can paste them into your own CI and drop TestPilot whenever you like. Tag
+either way Playwright supports — `test('checkout @smoke', …)` or
+`test('checkout', { tag: ['@smoke'] }, …)`. Tags on a `test.describe` count for every test inside it.
+
+Selection is **exact**, which hand-written `--grep` rarely is: `--tag smoke` does not run
+`@smoketest`, `--tag team` does not run `@team:auth`, and `--tag here` does not run `@HERE` (a bare
+`--grep` string is compiled case-**insensitively** by Playwright). Multiple tags are any-of. An empty
+value or an unknown suite is an error, never a full run.
+
+**Name the sets you actually run.** In `testpilot.config.ts`:
+
+```ts
+export default defineConfig({
+  suites: {
+    smoke: ['smoke'],
+    nightly: ['regression', '!flaky'],
+    // A list is any-of; use the object form when a test must carry *all* of them.
+    hardened: { all: ['regression', 'critical'], none: ['flaky'] },
+  },
+})
+```
+
+```bash
+npx testpilot-qa run --suite nightly
+```
+
+A typo is an error, not an empty run: `--suite nighlty` exits `2` and lists the suites that exist,
+and `doctor` warns when a suite references a tag no test carries.
+
+**See what there is to select — `tags`:**
+
+```bash
+npx testpilot-qa tags
+```
+
+```
+TAG              TESTS  FILES  DECLARED
+@regression         86     14  details
+@accessibility      55     10  details
+@here                1      1  title
+
+3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
+```
+
+Static and instant — no browser, no test run. `DECLARED` separates a real vocabulary from noise:
+Playwright treats any `@word` in a title as a tag, so a test named *"turn off mentions for @here"*
+contributes `@here` whether you meant it or not. Tags written with `{ tag: [...] }` are always
+deliberate.
+
+It also says where the list is incomplete — titles built from template literals or variables, `tag`
+entries it could not read statically, and files where no `test()` was recognized at all. When the
+list is incomplete, `doctor` reports a suite tag it did not find as *unconfirmed* rather than as a
+typo.
 
 ---
 

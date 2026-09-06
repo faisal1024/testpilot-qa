@@ -26,15 +26,38 @@ export interface PlaywrightScope {
 
 export interface PlaywrightTestSettings {
   scopes: PlaywrightScope[]
+  /**
+   * True when the config (or a project) declares a `tag` key.
+   *
+   * Playwright applies `testConfig.tag` to **every test in every file**, so a
+   * statically-read vocabulary that ignores it is short by a tag nobody wrote
+   * in a test — and `doctor` would call a correct `suites` entry a typo. We do
+   * not read the values yet; knowing the key is there is enough to stop
+   * claiming the vocabulary is complete.
+   */
+  declaresTags: boolean
 }
 
 export type PlaywrightConfigRead =
   /** Settings were read. `unresolved` names things present but not statically knowable. */
-  | { status: 'ok'; settings: PlaywrightTestSettings; unresolved: string[] }
+  | {
+      status: 'ok'
+      settings: PlaywrightTestSettings
+      unresolved: string[]
+      declaresTags: boolean
+      sawConfigObject: boolean
+    }
   /** The config declares no test-selection keys. Normal; nothing to report. */
-  | { status: 'no-settings' }
+  | { status: 'no-settings'; declaresTags: boolean; unresolved: string[]; sawConfigObject: boolean }
   /** Something is there but cannot be used — the user should hear about this. */
-  | { status: 'unreadable'; reason: string }
+  | {
+      status: 'unreadable'
+      reason: string
+      declaresTags: boolean
+      unresolved: string[]
+      /** False when no config object literal was ever seen — a `tag` key is then unknowable. */
+      sawConfigObject: boolean
+    }
 
 interface Node {
   type: string
@@ -271,6 +294,31 @@ const PROSE_MARKERS = new Set([
   'a config layer that could not be read',
 ])
 
+/**
+ * Whether the config declares a `tag` — **or might, in a region we could not read**.
+ *
+ * `declaresTags` alone is a false negative whenever the key hides behind a
+ * spread (`defineConfig({ ...base, testDir })`), extra `defineConfig()`
+ * arguments, or a layer that would not parse: the answer there is "unknown",
+ * and for a tag vocabulary unknown has to widen.
+ *
+ * Only those three can conceal a key. A non-literal `testDir` makes the read
+ * unusable for *discovery* while the object itself was seen perfectly well, so
+ * it is not a reason to hedge — keying on `status` instead over-hedged exactly
+ * that ordinary case and suppressed real counts.
+ */
+export function mayDeclareTags(read: PlaywrightConfigRead): boolean {
+  if (read.declaresTags) {
+    return true
+  }
+  // Never saw the object (`export default makeConfig({...})`, an unparseable
+  // file): a `tag` key is unknowable, not absent.
+  if (!read.sawConfigObject) {
+    return true
+  }
+  return read.unresolved.some((key) => PROSE_MARKERS.has(key))
+}
+
 /** "testDir is not a literal value" / "testDir and a spread from another object". */
 export function describeUnresolved(keys: string[]): string {
   const values = keys.filter((key) => !PROSE_MARKERS.has(key))
@@ -292,7 +340,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   try {
     source = readFileSync(configPath, 'utf8')
   } catch {
-    return { status: 'unreadable', reason: 'file could not be read' }
+    return {
+      status: 'unreadable',
+      reason: 'file could not be read',
+      declaresTags: false,
+      unresolved: [],
+      // Nothing was parsed, so a `tag` key is unknowable, not absent.
+      sawConfigObject: false,
+    }
   }
 
   let root: Node
@@ -304,7 +359,13 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       jsx: false,
     }) as unknown as Node
   } catch {
-    return { status: 'unreadable', reason: 'file could not be parsed' }
+    return {
+      status: 'unreadable',
+      reason: 'file could not be parsed',
+      declaresTags: false,
+      unresolved: [],
+      sawConfigObject: false,
+    }
   }
 
   const unresolved: string[] = []
@@ -316,13 +377,24 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
         unresolved.length > 0
           ? describeUnresolved([...new Set(unresolved)])
           : 'its exported config is not a literal object',
+      declaresTags: false,
+      unresolved: [...new Set(unresolved)],
+      // `export default makeConfig({...})` — the object never became visible.
+      sawConfigObject: false,
     }
   }
 
   const configDir = dirname(configPath)
 
-  const readSelectors = (object: Node): RawSelectors => {
+  let declaresTags = false
+  const readSelectors = (object: Node, isProject = false): RawSelectors => {
     if (hasSpread(object)) unresolved.push('a spread from another object')
+    // `tag` is on `TestConfig` only — `TestProject` has no such key in
+    // Playwright 1.63, so reading one from a project entry would report a
+    // config-wide tag that does not exist.
+    if (!isProject && propertyValue(object, 'tag')) {
+      declaresTags = true
+    }
     const result: RawSelectors = { testDir: null, match: null, ignore: null }
     const testDirNode = propertyValue(object, 'testDir')
     if (testDirNode) {
@@ -402,7 +474,8 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
     } else {
       for (const raw of (projects.elements as unknown[]) ?? []) {
         const project = asNode(raw)
-        if (project?.type === 'ObjectExpression') projectSelectors.push(readSelectors(project))
+        if (project?.type === 'ObjectExpression')
+          projectSelectors.push(readSelectors(project, true))
         // A spread inside the array hides entries that may inherit the base root.
         else projectsPartial = true
       }
@@ -441,10 +514,26 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   }
 
   const unique = [...new Set(unresolved)]
+  // `declaresTags` rides on every branch: Playwright defaults `testDir` to the
+  // config's own directory, so `{ tag: '@e2e', projects: [...] }` with no
+  // testDir is an ordinary config that yields no scopes — and dropping the flag
+  // there put the accusation back exactly one branch over.
   if (scopes.length === 0) {
     return unique.length > 0
-      ? { status: 'unreadable', reason: describeUnresolved(unique) }
-      : { status: 'no-settings' }
+      ? {
+          status: 'unreadable',
+          reason: describeUnresolved(unique),
+          declaresTags,
+          unresolved: unique,
+          sawConfigObject: true,
+        }
+      : { status: 'no-settings', declaresTags, unresolved: unique, sawConfigObject: true }
   }
-  return { status: 'ok', settings: { scopes }, unresolved: unique }
+  return {
+    status: 'ok',
+    settings: { scopes, declaresTags },
+    unresolved: unique,
+    declaresTags,
+    sawConfigObject: true,
+  }
 }

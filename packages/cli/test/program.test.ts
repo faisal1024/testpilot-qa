@@ -6,7 +6,7 @@ describe('CLI program', () => {
   it('registers the MVP commands plus `fix` and `add`', () => {
     const program = buildProgram()
     const names = program.commands.map((command) => command.name())
-    expect(names).toEqual(['init', 'run', 'analyze', 'fix', 'doctor', 'explain', 'add'])
+    expect(names).toEqual(['init', 'run', 'tags', 'analyze', 'fix', 'doctor', 'explain', 'add'])
   })
 
   it('registers the `add ai` subcommand', () => {

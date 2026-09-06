@@ -204,21 +204,21 @@ glob benchmark run per repo, so the path §1.1's evidence table measures is gate
   live in page objects under `e2e/helpers` that Playwright's `testMatch` never runs. Its 98 A measures
   what Playwright executes, not the suite's locator quality.
 
-### Phase 10 — Run tests by tag (`alpha.2`)
+### Phase 10 — Run tests by tag (`alpha.2`) — **10a/10b/10c complete**
 
 Goal: **selecting tests is a first-class, discoverable verb — not a regex.** Everything here compiles
 down to Playwright's own flags, so generated projects stay ejectable and `run` stays a pass-through,
 not a runner.
 
-- **10a — `testpilot run --tag`.** `--tag smoke` runs tests tagged `@smoke`; `--tag smoke,regression`
+- **10a — `testpilot run --tag`. ✅ Complete.** `--tag smoke` runs tests tagged `@smoke`; `--tag smoke,regression`
   is any-of; `--tag '!slow'` (or `--exclude-tag slow`) excludes. Translates to a correctly escaped,
   word-bounded `--grep` / `--grep-invert` pair — the escaping and the two-flag negation are exactly
   what people get wrong by hand. Repeatable; composes with everything after `--`.
-- **10b — Named tag sets in `testpilot.config.ts`.** `suites: { smoke: ['smoke'], nightly:
-  ['regression', '!flaky'] }` → `testpilot run --suite nightly`. `doctor` validates that every
-  referenced tag exists in the suite (see 10c), so a typo fails loudly instead of silently running
-  zero tests — the same principle as Phase 9.
-- **10c — `testpilot tags`.** Statically lists the tag vocabulary with counts per tag and untagged
+- **10b — Named tag sets in `testpilot.config.ts`. ✅ Complete.** `suites: { smoke: ['smoke'], nightly:
+  ['regression', '!flaky'] }` → `testpilot run --suite nightly`. `doctor` checks that every
+  referenced tag exists in the suite (see 10c) and **warns** when one does not, so a typo surfaces
+  instead of silently running zero tests — the same principle as Phase 9.
+- **10c — `testpilot tags`. ✅ Complete.** Statically lists the tag vocabulary with counts per tag and untagged
   test count, from the parser we already have (`test('…', { tag: [...] })` and `@tag` in titles). No
   browser, instant. This is the discoverability piece `--grep` can never offer.
 - **10d — Scaffold and guidance follow.** Generated sample tests carry `@smoke` / `@regression`;
@@ -228,10 +228,57 @@ not a runner.
 - **10e — Optional rule `require-test-tag`** (`off` by default; `info` when enabled): flags untagged
   `test()`s so a team adopting tags can gate on coverage of the vocabulary. Static, cheap, and it
   gives `analyze` its first rule about test *organization* rather than locators.
-- Docs: `run` in CLI-Spec §3, README "Run a subset", `docs/Configuration.md` `suites` key.
+
+**What landed (10a–10c).** Selection compiles to Playwright's own flags and prints them, so a team can
+paste them into their own CI and drop TestPilot. The boundary assertions are Playwright's own tag
+tokenization (`@\S+`) rather than `\b`, which is what makes `--tag smoke` skip `@smoketest` and
+`--tag team` skip `@team:auth`. Every way a selection could silently run the wrong set is a usage
+error instead: an unknown `--suite` (lists the real ones), a tag both included and excluded, a
+malformed tag token, and `--tag` combined with a forwarded `--grep` (Playwright keeps only the last
+occurrence). Suite entries split on **commas only** — whitespace splitting turned a config entry of
+`'has space'` into two tags that happened to be valid, the same quiet reinterpretation Phase 9 spent
+five PRs removing. `tags` reports its own bounds: `dynamic-test-titles` and `files-not-parsed` say
+how incomplete the vocabulary is, and zero matched files exits `2`/`3` rather than answering "no
+tags". Verified on the corpus: mattermost yields a real 91-tag vocabulary — 83 of them declared with `{ tag: [...] }` (`@abac` 122 tests,
+`@team_membership` 86, `@accessibility` 55); Ghost, immich, cal.com and documenso are genuinely
+untagged, so the plan's claim that cal.com uses `@tag` titles was wrong — its only `@`-tokens are
+content strings, and Playwright would read those as tags too.
+
+**Also fixed:** `analyze` warned that a `testDir` was missing whenever explicit patterns were
+passed — discovery never consulted it, so the disclosure named the wrong directory. (`fix` never
+emitted that code; it builds warnings from `discoveryWarnings()`.)
+
+**What review caught, and the lesson.** The first cut claimed the compiled `--grep` was exact. It was
+not: Playwright compiles a *bare* `--grep` string as `new RegExp(pattern, 'gi')`, so `--tag here`
+also ran `@HERE` — and mattermost carries `@here`, `@HERE` and `@channEL` as distinct tags, so `run`
+would have selected a different set than `tags` counted and `doctor` validated. The tests could never
+have caught it, because they compiled the pattern with a bare `new RegExp` — **a test that models the
+runtime wrong gives confidence proportional to nothing.** The fix is the slash-delimited form, and
+every test now asserts through a copy of Playwright's own `forceRegExp`.
+
+**One bug, five argument positions.** Reviews 2–5 each reported "a declaration is silently dropped,
+`warnings: []`" — and each time it was the same defect in the next position along: the test title,
+then the test body, then the describe body, then the describe title, then the details argument. I
+fixed each instance as reported. The right move after the second was to enumerate every position the
+extractor reads and make "could not read it" a counted, disclosed outcome in all of them at once,
+which is what the code now does — both branches call one `ownTagsOf`, and the readability counters
+live there rather than being derived per-branch. **When a review reports an instance, look for the
+shape.** Four rounds instead of one is the cost of not doing that.
+
+The same rounds found further blind spots, all the Phase 9 class in new clothing — a partial read
+answering confidently: an empty `--tag ""` running the whole suite; a renamed test import
+(`import { test as setup }`) yielding "no tags found" rather than "we recognized no tests"; unreadable
+`tag` entries dropped silently; and `doctor` narrowing a partially-parsed vocabulary into "that tag
+does not exist". **Verify claims about a dependency against its source, not from memory** — reading
+Playwright 1.63 is what settled all of these, and it also disproved a plausible warning about setup
+projects being filtered out that would otherwise have shipped as fact.
+
+- Docs: `run` and `tags` in CLI-Spec §3.1a/§3.2a, README "Run a subset", the `suites` key in
+  CLI-Spec §4 (there is no `docs/Configuration.md`; config is documented in the CLI spec).
 - Done when: a scaffolded project runs `testpilot run --tag smoke` and `--suite nightly` with no
-  hand-written regex; `testpilot tags` on the corpus lists real vocabularies (mattermost and cal.com
-  already use `@tag` titles) and the untagged count.
+  hand-written regex; `testpilot tags` on the corpus lists real vocabularies and the untagged count.
+  (Measured: only mattermost is tagged — 83 tags via `{ tag: [...] }`. Ghost, immich, cal.com and
+  documenso are untagged.)
 
 ### Phase 11 — Signal precision (`alpha.3`)
 

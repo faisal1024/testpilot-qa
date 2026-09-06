@@ -25,6 +25,8 @@ export function failNoFilesMatched(
   resolved: ResolvedDiscovery,
   configPath: string | null,
   rootDir: string,
+  /** The command to name in the "pass explicit patterns" hint. */
+  command = 'analyze',
 ): never {
   const { config, discovery } = resolved
   // Name the real source AND the real selectors. Printing `config.include` here
@@ -45,7 +47,7 @@ export function failNoFilesMatched(
         globals,
         [
           `No test files matched under ${patterns.join(', ')} using ${includeHint}.`,
-          'A directory argument is expanded with the config\'s include patterns — set include/exclude in testpilot.config.ts, or pass a glob: testpilot analyze "e2e/**/*.ts".',
+          `A directory argument is expanded with the config's include patterns — set include/exclude in testpilot.config.ts, or pass a glob: testpilot ${command} "e2e/**/*.ts".`,
         ].join('\n'),
         ExitCode.CONFIG,
       )
@@ -65,7 +67,7 @@ export function failNoFilesMatched(
             `A Playwright config was found at ${discovery.playwrightConfigIgnored.path} but not used for discovery: ${discovery.playwrightConfigIgnored.reason}.`,
           ]
         : []),
-      'Set testDir/include in testpilot.config.ts to point at your suite, or pass explicit patterns: testpilot analyze "e2e/**/*.spec.ts".',
+      `Set testDir/include in testpilot.config.ts to point at your suite, or pass explicit patterns: testpilot ${command} "e2e/**/*.spec.ts".`,
     ].join('\n'),
     ExitCode.CONFIG,
   )

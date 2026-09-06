@@ -32,6 +32,14 @@ export interface ConfigDiscovery {
    * not used" on a run that used it sends them to fix a problem they don't have.
    */
   playwrightConfigPartial: { path: string; reason: string } | null
+  /**
+   * True when the project's Playwright config declares a `tag` key — or might,
+   * in a region that could not be read. Playwright applies `testConfig.tag` to
+   * every test in every file, so a statically-read tag vocabulary cannot claim
+   * to be complete. Deliberately independent of whether that config's `testDir`
+   * was adopted: the tag applies either way.
+   */
+  playwrightConfigDeclaresTags: boolean
 }
 
 export const DEFAULT_DISCOVERY: ConfigDiscovery = {
@@ -42,6 +50,7 @@ export const DEFAULT_DISCOVERY: ConfigDiscovery = {
   playwrightConfigPath: null,
   playwrightConfigIgnored: null,
   playwrightConfigPartial: null,
+  playwrightConfigDeclaresTags: false,
 }
 
 /** Human-readable provenance for one setting — the single source of this wording. */

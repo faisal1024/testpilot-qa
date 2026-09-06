@@ -2,14 +2,23 @@
 /**
  * MVP smoke test — exercises the built CLI end to end, offline and fast.
  *
- * Verifies: --help / --version, `explain --json`, `doctor --json`, `analyze`
+ * Verifies: --help / --version, `explain --json`, `doctor --json`, `tags --json`,
+ * `run --tag`/`--suite` selection, `analyze`
  * against a temp spec, and `init` scaffolding (expected files, generated
  * scripts, README note, and overwrite protection). No network or browsers.
  *
  * Usage: `pnpm -r build && pnpm smoke:mvp`
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +51,19 @@ function withTempDir(fn) {
   }
 }
 
+/**
+ * Playwright's own `forceRegExp` (packages/playwright/src/util.ts). A bare
+ * `new RegExp(src)` would claim a case-sensitivity Playwright does not give a
+ * plain-string --grep, so the smoke test has to model the real runtime.
+ */
+function forceRegExp(pattern) {
+  const match = pattern.match(/^\/(.*)\/([gi]*)$/)
+  if (match) {
+    return new RegExp(match[1], match[2])
+  }
+  return new RegExp(pattern, 'gi')
+}
+
 let failures = 0
 function check(name, fn) {
   try {
@@ -58,7 +80,7 @@ console.log('smoke:mvp — verifying the built CLI\n')
 check('--help lists every command', () => {
   const { status, stdout } = cli(['--help'])
   assert(status === 0, `exit ${status}`)
-  for (const command of ['init', 'run', 'analyze', 'doctor', 'explain', 'add']) {
+  for (const command of ['init', 'run', 'tags', 'analyze', 'doctor', 'explain', 'add']) {
     assert(stdout.includes(command), `help is missing "${command}"`)
   }
 })
@@ -84,6 +106,81 @@ check('doctor --json is parseable', () => {
     assert(report.command === 'doctor', 'unexpected command')
     assert(['pass', 'warn', 'fail'].includes(report.status), `unexpected status ${report.status}`)
     assert(Array.isArray(report.checks) && report.checks.length > 0, 'missing checks')
+  })
+})
+
+check('tags lists the vocabulary and resolves suites', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(
+      join(dir, 'tests', 'tagged.spec.ts'),
+      [
+        "test.describe('billing @regression', () => {",
+        "  test('one @smoke', async () => {})",
+        "  test('two', async () => {})",
+        '})',
+      ].join('\n'),
+    )
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { suites: { nightly: ['regression', '!smoke'] } }\n",
+    )
+    const { status, stdout } = cli(['tags', '--json', '--cwd', dir])
+    assert(status === 0, `exit ${status}`)
+    const report = JSON.parse(stdout)
+    assert(report.command === 'tags', 'unexpected command')
+    assert(report.summary.tests === 2, `expected 2 tests, got ${report.summary.tests}`)
+    const regression = report.tags.find((usage) => usage.tag === 'regression')
+    assert(regression && regression.tests === 2, 'describe tag did not reach nested tests')
+    const nightly = report.suites.find((suite) => suite.name === 'nightly')
+    assert(nightly && nightly.matchingTests === 1, 'suite did not resolve against the vocabulary')
+  })
+})
+
+check('run --tag compiles to a Playwright --grep', () => {
+  if (process.platform === 'win32') {
+    return
+  }
+  withTempDir((dir) => {
+    // A fake binary records exactly what Playwright would have received, so this
+    // checks the compiled argv on the built CLI, not our intent about it.
+    writeFileSync(join(dir, 'package.json'), '{"name":"smoke"}')
+    mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true })
+    const argsFile = join(dir, 'args.txt')
+    const bin = join(dir, 'node_modules', '.bin', 'playwright')
+    writeFileSync(bin, `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nexit 0\n`)
+    chmodSync(bin, 0o755)
+    const { status } = cli(['run', '--tag', 'smoke', '--exclude-tag', 'slow', '--cwd', dir])
+    assert(status === 0, `exit ${status}`)
+    const argv = readFileSync(argsFile, 'utf8').split('\n').filter(Boolean)
+    assert(argv[0] === 'test', `expected a test invocation, got ${JSON.stringify(argv)}`)
+    const grep = forceRegExp(argv[argv.indexOf('--grep') + 1])
+    assert(grep.test('checkout @smoke'), 'compiled --grep does not match @smoke')
+    assert(!grep.test('checkout @smoketest'), 'compiled --grep leaks into @smoketest')
+    // Playwright compiles a bare --grep string with `gi`; ours must be exact.
+    assert(!grep.test('checkout @SMOKE'), 'compiled --grep is case-insensitive')
+    assert(argv.includes('--grep-invert'), 'missing --grep-invert for the excluded tag')
+  })
+})
+
+check('run rejects an empty tag value instead of running everything', () => {
+  withTempDir((dir) => {
+    // `--tag "$SUITE_TAGS"` with the variable unset is the likeliest real case.
+    const { status, stderr } = cli(['run', '--tag', '', '--cwd', dir])
+    assert(status === 2, `expected usage exit 2, got ${status}`)
+    assert(stderr.includes('would run every test'), 'did not explain the refusal')
+  })
+})
+
+check('run rejects an unknown suite instead of running everything', () => {
+  withTempDir((dir) => {
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { suites: { nightly: ['regression'] } }\n",
+    )
+    const { status, stderr } = cli(['run', '--suite', 'nighlty', '--cwd', dir])
+    assert(status === 2, `expected usage exit 2, got ${status}`)
+    assert(stderr.includes('Available suites: nightly'), 'did not list the real suites')
   })
 })
 

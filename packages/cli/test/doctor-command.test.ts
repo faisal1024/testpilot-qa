@@ -118,4 +118,21 @@ describe('doctor command', () => {
       'missing',
     )
   })
+
+  it('validates suites against the tags the suite actually declares', async () => {
+    // End-to-end: the CLI feeds `doctor` the real vocabulary, read from source.
+    writeHealthyProject()
+    writeFileSync(join(dir, 'tests', 'a.spec.ts'), "test('one @regression', async () => {})\n")
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { testDir: 'tests', suites: { nightly: ['regression'], typo: ['regresion'] } }\n",
+    )
+    const { stdout, exitCode } = await runDoctorCli(['--json'])
+    // A warning, not a failure: the tag may simply not be written yet.
+    expect(exitCode).toBe(0)
+    const check = JSON.parse(stdout).checks.find((c: { id: string }) => c.id === 'suites')
+    expect(check.status).toBe('warn')
+    expect(check.details.unknownTags).toEqual({ typo: ['regresion'] })
+    expect(check.message).not.toContain('nightly')
+  })
 })

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import { type TestPilotConfig, defaultConfig } from '@testpilot/core'
+import { DEFAULT_DISCOVERY, type TestPilotConfig, defaultConfig } from '@testpilot/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { analyze } from '../src/analyze.js'
 
@@ -44,7 +44,7 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.7')
+    expect(report.schemaVersion).toBe('1.8')
     expect(report.summary).toEqual({
       helperFiles: 0,
       helpersNotAnalyzed: 0,
@@ -380,5 +380,31 @@ describe('analyze — Tier 1 rule set', () => {
       expect(report.summary.filesWithParseErrors).toBe(1)
       expect(report.score.score).toBe(100)
     })
+  })
+})
+
+describe('discovery warnings', () => {
+  it('does not warn about a testDir that explicit patterns bypassed', async () => {
+    // `analyze "e2e/**/*.spec.ts"` never consults testDir, so warning that the
+    // default `tests/` is missing is a disclosure about the wrong directory.
+    writeFixture('e2e/a.spec.ts', "test('x', async ({ page }) => { await page.locator('.a') })")
+    const report = await analyze({
+      cwd: dir,
+      config: config(),
+      patterns: ['e2e/**/*.spec.ts'],
+      discovery: { ...DEFAULT_DISCOVERY, roots: [join(dir, 'tests')] },
+    })
+    expect(report.warnings.map((warning) => warning.code)).not.toContain('test-root-missing')
+    expect(report.summary.filesAnalyzed).toBe(1)
+  })
+
+  it('still warns about a missing root when discovery chose it', async () => {
+    writeFixture('tests/a.spec.ts', "test('x', async ({ page }) => { await page.locator('.a') })")
+    const report = await analyze({
+      cwd: dir,
+      config: config(),
+      discovery: { ...DEFAULT_DISCOVERY, roots: [join(dir, 'tests'), join(dir, 'gone')] },
+    })
+    expect(report.warnings.map((warning) => warning.code)).toContain('test-root-missing')
   })
 })

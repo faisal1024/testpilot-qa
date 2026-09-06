@@ -19,6 +19,9 @@ import {
 } from '../config/resolve-discovery.js'
 import { type TestPilotConfig, defaultConfig } from '../config/schema.js'
 import { findProjectRoot, isDirectory, resolvePlaywrightBin } from '../project/discovery.js'
+import type { TagVocabulary } from '../tags/report.js'
+import type { SuiteMap } from '../tags/suites.js'
+import { unknownSuiteTags, validateSuites } from '../tags/validate-suites.js'
 
 /**
  * Bumped on changes to the doctor report shape.
@@ -27,8 +30,11 @@ import { findProjectRoot, isDirectory, resolvePlaywrightBin } from '../project/d
  * are omitted when the config failed to load, and `playwright-discovery` appears only
  * when a Playwright config was partially read or could not be used. `test-directory`
  * gained `details`.
+ * 1.2: `suites` — a new conditional check, present only when `testpilot.config.ts`
+ * declares a non-empty `suites` map and the config loaded. Carries `details.issues`
+ * (structural problems) or `details.unknownTags` (suite name -> tags no test carries).
  */
-export const DOCTOR_SCHEMA_VERSION = '1.1'
+export const DOCTOR_SCHEMA_VERSION = '1.2'
 
 const MIN_NODE_MAJOR = 20
 
@@ -61,6 +67,14 @@ export interface DoctorReport {
 export interface DoctorOptions {
   cwd: string
   configPath?: string
+  /**
+   * Resolves the tag vocabulary of the suite, for validating `suites`.
+   *
+   * Injected rather than imported: reading it needs the AST parser, which lives
+   * downstream of core. Returning `null` means "could not be determined" — the
+   * check then says so instead of silently reporting every tag as valid.
+   */
+  tagVocabulary?: () => Promise<TagVocabulary | null>
   /** Skip the Playwright-config fallback, so `doctor` matches `--no-playwright-discovery`. */
   disablePlaywrightFallback?: boolean
   /**
@@ -367,6 +381,114 @@ function checkAiGuidance(projectRoot: string, agents: AgentId[]): DoctorCheck {
   return check
 }
 
+/**
+ * Validates `suites` — structurally always, and against the real tag vocabulary
+ * when it could be read.
+ *
+ * A suite naming a tag no test carries is the tag-era version of the Phase 9
+ * false green: `run --suite nightly` exits 0 having run nothing. Structural
+ * problems fail; an unknown tag warns, because the tag may simply not be
+ * written yet.
+ */
+async function checkSuites(
+  suites: SuiteMap,
+  vocabulary: (() => Promise<TagVocabulary | null>) | undefined,
+): Promise<DoctorCheck> {
+  // Sorted copy: `Object.keys` returns a fresh array, but sorting it in place
+  // still surprises anyone who later hoists the call.
+  const names = [...Object.keys(suites)].sort()
+
+  const issues = validateSuites(suites)
+  const blocking = issues.filter((issue) => issue.severity === 'fail')
+  if (blocking.length > 0) {
+    return {
+      id: 'suites',
+      title: 'Tag suites',
+      category: 'config',
+      status: 'fail',
+      message: blocking.map((issue) => issue.message).join(' '),
+      remediation: 'Fix the `suites` entries in testpilot.config.ts.',
+      details: { issues },
+    }
+  }
+
+  let known: TagVocabulary | null = null
+  try {
+    known = vocabulary ? await vocabulary() : null
+  } catch {
+    known = null
+  }
+  if (!known) {
+    return {
+      id: 'suites',
+      title: 'Tag suites',
+      category: 'config',
+      status: 'warn',
+      message: `${names.length} suite(s) are well-formed, but the suite's tags could not be read, so referenced tags were not verified.`,
+      remediation: 'Run `testpilot tags` to see which tags actually exist.',
+    }
+  }
+
+  const unknownBySuite: Record<string, string[]> = {}
+  for (const name of names) {
+    const entry = suites[name]
+    const unknown = entry ? unknownSuiteTags(entry, known.tags) : []
+    if (unknown.length > 0) {
+      unknownBySuite[name] = unknown
+    }
+  }
+  const offenders = Object.keys(unknownBySuite)
+  if (offenders.length > 0) {
+    return {
+      id: 'suites',
+      title: 'Tag suites',
+      category: 'config',
+      status: 'warn',
+      message: [
+        ...offenders.map((name) => {
+          const named = (unknownBySuite[name] ?? []).map((tag) => `@${tag}`).join(', ')
+          // A tag we *did* read is confirmed good whatever else was unreadable;
+          // only an absent one is in doubt. Nulling the whole vocabulary made
+          // this check silent on any real suite (mattermost has 28 unreadable
+          // tag entries), so the doubt is scoped to the tags it applies to.
+          return known.complete
+            ? `Suite "${name}" references ${named}, which no test carries — \`--suite ${name}\` would not select what you expect.`
+            : `Suite "${name}" references ${named}, which no test we could read carries. Some tags in this suite could not be read, so this may be a typo or may be fine — run \`testpilot tags\`.`
+        }),
+        // Non-blocking issues (an awkward suite name) would otherwise be lost
+        // whenever an unknown tag happened to be present too.
+        ...issues.map((issue) => issue.message),
+      ].join(' '),
+      remediation:
+        'Run `testpilot tags` to see the real vocabulary, then fix `suites` or tag the tests.',
+      details: { unknownTags: unknownBySuite, issues },
+    }
+  }
+
+  if (issues.length > 0) {
+    return {
+      id: 'suites',
+      title: 'Tag suites',
+      category: 'config',
+      status: 'warn',
+      message: issues.map((issue) => issue.message).join(' '),
+      details: { issues },
+    }
+  }
+
+  return {
+    id: 'suites',
+    title: 'Tag suites',
+    category: 'config',
+    status: 'pass',
+    // "referenced" would overstate it: only the include side is checked, because
+    // an exclusion of a tag nobody carries cannot change what runs.
+    message: known.complete
+      ? `${names.length} suite(s) configured; every tag they select on exists.`
+      : `${names.length} suite(s) configured; every tag they select on was found, though some tags elsewhere could not be read.`,
+  }
+}
+
 function overallStatus(checks: DoctorCheck[]): CheckStatus {
   if (checks.some((check) => check.status === 'fail')) return 'fail'
   if (checks.some((check) => check.status === 'warn')) return 'warn'
@@ -471,6 +593,9 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorReport> {
   ]
   // Guidance files are a TestPilot-project concern. On a repo that has not adopted
   // TestPilot, reporting four "missing" files is noise about someone else's project.
+  if (configCheck.status !== 'fail' && Object.keys(config.suites).length > 0) {
+    checks.push(await checkSuites(config.suites, options.tagVocabulary))
+  }
   if (configFilePresent || options.strictGuidance === true) {
     checks.push(checkAiGuidance(projectRoot, selectedAgents(config.ai.agents)))
   }

@@ -130,7 +130,9 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   }
   // A declared root that does not exist contributes nothing. Without this, a config
   // naming two roots where one is missing scores a clean grade over half of them.
-  for (const root of options.discovery?.roots ?? []) {
+  // Explicit patterns bypass `testDir` entirely, so warning about it there names a
+  // directory this run never consulted — a disclosure about the wrong thing.
+  for (const root of usingPatterns ? [] : (options.discovery?.roots ?? [])) {
     if (!isDirectory(root)) {
       warnings.push({
         code: 'test-root-missing',
