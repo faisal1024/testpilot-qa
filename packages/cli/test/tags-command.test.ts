@@ -109,6 +109,36 @@ describe('tags command', () => {
     expect(stdout).toContain('no test carries @regresion')
   })
 
+  it('says a no-op exclusion does nothing when the vocabulary is complete', async () => {
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { suites: { n: ['regression', '!neverused'] } }\n",
+    )
+    const { stdout } = await runTags()
+    expect(stdout).toContain(
+      'nothing carries @neverused, so that exclusion currently does nothing.',
+    )
+  })
+
+  it('hedges the same line when the vocabulary is incomplete', async () => {
+    // The claim is about the whole suite, so it needs the same guard the
+    // include side has. This line has been wrong twice; both branches are
+    // asserted here so a third time fails a test.
+    writeFileSync(
+      join(dir, 'tests', 'b.spec.ts'),
+      ["const OPTS = { tag: ['@neverused'] }", "test('unreadable', OPTS, async () => {})"].join(
+        '\n',
+      ),
+    )
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { suites: { n: ['regression', '!neverused'] } }\n",
+    )
+    const { stdout } = await runTags()
+    expect(stdout).toContain('may or may not be a no-op')
+    expect(stdout).not.toContain('currently does nothing')
+  })
+
   it('accepts explicit patterns', async () => {
     const { stdout } = await runTags(['tests/a.spec.ts'])
     expect(stdout).toContain('@smoke')

@@ -6,6 +6,7 @@ import type { LoadConfigResult } from './load-config.js'
 import {
   type PathPattern,
   describeUnresolved,
+  mayDeclareTags,
   readPlaywrightTestSettings,
 } from './playwright-config.js'
 import type { TestPilotConfig } from './schema.js'
@@ -218,12 +219,26 @@ function helperPatterns(config: TestPilotConfig, requested: boolean): string[] {
  * the suite's tag vocabulary even when the config contributes nothing else.
  * Ambiguous candidates are all probed — any one of them could carry it.
  */
-function declaresTagsIn(located: { path: string } | { ambiguous: string[] } | null): boolean {
+function declaresTagsIn(
+  located: { path: string } | { ambiguous: string[] } | null,
+  rootDir: string,
+): boolean {
   if (!located) {
     return false
   }
   const paths = 'ambiguous' in located ? located.ambiguous : [located.path]
-  return paths.some((path) => readPlaywrightTestSettings(path).declaresTags)
+  return paths.some((path) => {
+    // `testpilot run` invokes Playwright from the project root, so only a config
+    // Playwright would itself pick up there can apply a tag to this suite. A
+    // config found one directory down (an `examples/` demo) governs its own
+    // tests, not ours, and hedging on it would suppress real counts.
+    if (dirname(resolve(path)) !== resolve(rootDir)) {
+      return false
+    }
+    // `mayDeclareTags`, not `declaresTags`: a key hidden behind a spread or an
+    // unparseable layer is "unknown", and for a vocabulary unknown must widen.
+    return mayDeclareTags(readPlaywrightTestSettings(path))
+  })
 }
 
 export function resolveDiscovery(
@@ -258,7 +273,7 @@ export function resolveDiscovery(
   // and missing it made `tags` count the wrong set and `doctor` call a correct
   // suite a typo.
   if (options.disablePlaywrightFallback === true || discovery.testDir !== 'default') {
-    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located)
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located, options.rootDir)
     return withoutFallback()
   }
 
@@ -276,7 +291,7 @@ export function resolveDiscovery(
       path: located.ambiguous.join(', '),
       reason: 'several sub-directories declare a Playwright config, so none was assumed',
     }
-    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located)
+    discovery.playwrightConfigDeclaresTags = declaresTagsIn(located, options.rootDir)
     return withoutFallback()
   }
 
@@ -284,7 +299,7 @@ export function resolveDiscovery(
   const read = readPlaywrightTestSettings(configPath)
   // Set before any branch returns: a `tag` key applies to every test whether or
   // not the config also yielded scopes we could use.
-  discovery.playwrightConfigDeclaresTags = read.declaresTags
+  discovery.playwrightConfigDeclaresTags = mayDeclareTags(read)
   if (read.status === 'no-settings') {
     // Playwright's `testDir` defaults to the config file's own directory, so a config
     // kept in a sub-directory usually IS the suite location — ignoring that sent us

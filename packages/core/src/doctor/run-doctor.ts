@@ -394,16 +394,9 @@ async function checkSuites(
   suites: SuiteMap,
   vocabulary: (() => Promise<TagVocabulary | null>) | undefined,
 ): Promise<DoctorCheck> {
-  const names = Object.keys(suites)
-  if (names.length === 0) {
-    return {
-      id: 'suites',
-      title: 'Tag suites',
-      category: 'config',
-      status: 'pass',
-      message: 'No suites configured.',
-    }
-  }
+  // Sorted copy: `Object.keys` returns a fresh array, but sorting it in place
+  // still surprises anyone who later hoists the call.
+  const names = [...Object.keys(suites)].sort()
 
   const issues = validateSuites(suites)
   const blocking = issues.filter((issue) => issue.severity === 'fail')
@@ -437,7 +430,7 @@ async function checkSuites(
   }
 
   const unknownBySuite: Record<string, string[]> = {}
-  for (const name of names.sort()) {
+  for (const name of names) {
     const entry = suites[name]
     const unknown = entry ? unknownSuiteTags(entry, known.tags) : []
     if (unknown.length > 0) {
@@ -488,9 +481,11 @@ async function checkSuites(
     title: 'Tag suites',
     category: 'config',
     status: 'pass',
+    // "referenced" would overstate it: only the include side is checked, because
+    // an exclusion of a tag nobody carries cannot change what runs.
     message: known.complete
-      ? `${names.length} suite(s) configured; every referenced tag exists.`
-      : `${names.length} suite(s) configured; every referenced tag was found, though some tags elsewhere could not be read.`,
+      ? `${names.length} suite(s) configured; every tag they select on exists.`
+      : `${names.length} suite(s) configured; every tag they select on was found, though some tags elsewhere could not be read.`,
   }
 }
 

@@ -33,9 +33,11 @@ export interface ConfigDiscovery {
    */
   playwrightConfigPartial: { path: string; reason: string } | null
   /**
-   * True when the adopted Playwright config declares a `tag` key. Playwright
-   * applies it to every test in every file, so a statically-read tag vocabulary
-   * cannot claim to be complete.
+   * True when the project's Playwright config declares a `tag` key — or might,
+   * in a region that could not be read. Playwright applies `testConfig.tag` to
+   * every test in every file, so a statically-read tag vocabulary cannot claim
+   * to be complete. Deliberately independent of whether that config's `testDir`
+   * was adopted: the tag applies either way.
    */
   playwrightConfigDeclaresTags: boolean
 }

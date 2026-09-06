@@ -40,11 +40,24 @@ export interface PlaywrightTestSettings {
 
 export type PlaywrightConfigRead =
   /** Settings were read. `unresolved` names things present but not statically knowable. */
-  | { status: 'ok'; settings: PlaywrightTestSettings; unresolved: string[]; declaresTags: boolean }
+  | {
+      status: 'ok'
+      settings: PlaywrightTestSettings
+      unresolved: string[]
+      declaresTags: boolean
+      sawConfigObject: boolean
+    }
   /** The config declares no test-selection keys. Normal; nothing to report. */
-  | { status: 'no-settings'; declaresTags: boolean }
+  | { status: 'no-settings'; declaresTags: boolean; unresolved: string[]; sawConfigObject: boolean }
   /** Something is there but cannot be used — the user should hear about this. */
-  | { status: 'unreadable'; reason: string; declaresTags: boolean }
+  | {
+      status: 'unreadable'
+      reason: string
+      declaresTags: boolean
+      unresolved: string[]
+      /** False when no config object literal was ever seen — a `tag` key is then unknowable. */
+      sawConfigObject: boolean
+    }
 
 interface Node {
   type: string
@@ -281,6 +294,31 @@ const PROSE_MARKERS = new Set([
   'a config layer that could not be read',
 ])
 
+/**
+ * Whether the config declares a `tag` — **or might, in a region we could not read**.
+ *
+ * `declaresTags` alone is a false negative whenever the key hides behind a
+ * spread (`defineConfig({ ...base, testDir })`), extra `defineConfig()`
+ * arguments, or a layer that would not parse: the answer there is "unknown",
+ * and for a tag vocabulary unknown has to widen.
+ *
+ * Only those three can conceal a key. A non-literal `testDir` makes the read
+ * unusable for *discovery* while the object itself was seen perfectly well, so
+ * it is not a reason to hedge — keying on `status` instead over-hedged exactly
+ * that ordinary case and suppressed real counts.
+ */
+export function mayDeclareTags(read: PlaywrightConfigRead): boolean {
+  if (read.declaresTags) {
+    return true
+  }
+  // Never saw the object (`export default makeConfig({...})`, an unparseable
+  // file): a `tag` key is unknowable, not absent.
+  if (!read.sawConfigObject) {
+    return true
+  }
+  return read.unresolved.some((key) => PROSE_MARKERS.has(key))
+}
+
 /** "testDir is not a literal value" / "testDir and a spread from another object". */
 export function describeUnresolved(keys: string[]): string {
   const values = keys.filter((key) => !PROSE_MARKERS.has(key))
@@ -302,7 +340,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   try {
     source = readFileSync(configPath, 'utf8')
   } catch {
-    return { status: 'unreadable', reason: 'file could not be read', declaresTags: false }
+    return {
+      status: 'unreadable',
+      reason: 'file could not be read',
+      declaresTags: false,
+      unresolved: [],
+      // Nothing was parsed, so a `tag` key is unknowable, not absent.
+      sawConfigObject: false,
+    }
   }
 
   let root: Node
@@ -314,7 +359,13 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       jsx: false,
     }) as unknown as Node
   } catch {
-    return { status: 'unreadable', reason: 'file could not be parsed', declaresTags: false }
+    return {
+      status: 'unreadable',
+      reason: 'file could not be parsed',
+      declaresTags: false,
+      unresolved: [],
+      sawConfigObject: false,
+    }
   }
 
   const unresolved: string[] = []
@@ -327,6 +378,9 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
           ? describeUnresolved([...new Set(unresolved)])
           : 'its exported config is not a literal object',
       declaresTags: false,
+      unresolved: [...new Set(unresolved)],
+      // `export default makeConfig({...})` — the object never became visible.
+      sawConfigObject: false,
     }
   }
 
@@ -466,8 +520,20 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   // there put the accusation back exactly one branch over.
   if (scopes.length === 0) {
     return unique.length > 0
-      ? { status: 'unreadable', reason: describeUnresolved(unique), declaresTags }
-      : { status: 'no-settings', declaresTags }
+      ? {
+          status: 'unreadable',
+          reason: describeUnresolved(unique),
+          declaresTags,
+          unresolved: unique,
+          sawConfigObject: true,
+        }
+      : { status: 'no-settings', declaresTags, unresolved: unique, sawConfigObject: true }
   }
-  return { status: 'ok', settings: { scopes, declaresTags }, unresolved: unique, declaresTags }
+  return {
+    status: 'ok',
+    settings: { scopes, declaresTags },
+    unresolved: unique,
+    declaresTags,
+    sawConfigObject: true,
+  }
 }

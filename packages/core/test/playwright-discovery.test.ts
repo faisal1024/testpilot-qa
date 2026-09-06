@@ -50,6 +50,7 @@ describe('readPlaywrightTestSettings — static parsing', () => {
       status: 'ok',
       unresolved: [],
       declaresTags: false,
+      sawConfigObject: true,
       settings: {
         scopes: [
           {
@@ -305,12 +306,19 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'testDir is not a literal value',
       declaresTags: false,
+      unresolved: expect.any(Array),
+      sawConfigObject: expect.any(Boolean),
     })
   })
 
   it('separates "declares nothing" from "cannot be read"', () => {
     const bare = writeFile('bare/playwright.config.ts', "export default { reporter: 'list' }\n")
-    expect(readSettings(bare)).toEqual({ status: 'no-settings', declaresTags: false })
+    expect(readSettings(bare)).toEqual({
+      status: 'no-settings',
+      declaresTags: false,
+      unresolved: [],
+      sawConfigObject: true,
+    })
   })
 
   it('reports unparseable and absent files without throwing', () => {
@@ -320,6 +328,8 @@ export default { testDir: 'e2e', testMatch: '**/*.e2e.ts' }
       status: 'unreadable',
       reason: 'file could not be read',
       declaresTags: false,
+      unresolved: expect.any(Array),
+      sawConfigObject: expect.any(Boolean),
     })
   })
 })
@@ -334,6 +344,8 @@ it('reports a spread as unresolved instead of reading the config as empty', () =
     status: 'unreadable',
     reason: 'it uses a spread from another object',
     declaresTags: false,
+    unresolved: expect.any(Array),
+    sawConfigObject: expect.any(Boolean),
   })
 })
 
@@ -653,6 +665,42 @@ describe('config-level tag detection across discovery paths', () => {
 
   it('reports no config tag when there is none', async () => {
     writeFile('playwright.config.ts', "export default { testDir: './tests' }\n")
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(false)
+  })
+
+  it('hedges when a `tag` could hide behind a spread', async () => {
+    // `defineConfig({ ...base, testDir })` — the spread is exactly the region a
+    // `tag` key can hide in, so "no tag" there is a guess, not a reading.
+    writeFile(
+      'playwright.config.ts',
+      "const base = { tag: '@cfgtag' }\nexport default defineConfig({ ...base, testDir: './tests' })\n",
+    )
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+  })
+
+  it('hedges when the config cannot be read at all', async () => {
+    writeFile('playwright.config.ts', "export default makeConfig({ tag: '@cfgtag' })\n")
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(true)
+  })
+
+  it('does not hedge on an ordinary non-literal testDir, which cannot hide a tag', async () => {
+    writeFile('playwright.config.ts', 'export default { testDir: DIR }\n')
+    writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
+    const resolved = await resolveIn(dir)
+    expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(false)
+  })
+
+  it('ignores a config one directory down, which governs its own tests', async () => {
+    // `testpilot run` starts Playwright at the project root, so an examples/
+    // demo config cannot tag this suite — hedging on it would suppress real counts.
+    writeFile('examples/playwright.config.ts', "export default { tag: '@demo' }\n")
+    writeFile('examples/tests/a.spec.ts', "test('x', async () => {})\n")
     writeFile('testpilot.config.ts', "export default { testDir: 'tests' }\n")
     const resolved = await resolveIn(dir)
     expect(resolved.discovery.playwrightConfigDeclaresTags).toBe(false)
