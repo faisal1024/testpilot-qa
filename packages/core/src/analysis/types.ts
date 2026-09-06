@@ -71,6 +71,12 @@ export interface AnalysisSummary {
   filesAnalyzed: number
   /** Subset of matched files that could not be parsed. */
   filesWithParseErrors: number
+  /**
+   * Findings counted but **not** scored, because the Locator Quality Score's
+   * denominator is locator call sites and these are per-test (`require-test-tag`).
+   * Present so the exclusion is visible rather than a silent adjustment.
+   */
+  unscoredFindings?: number
   findings: number
   bySeverity: Record<FindingSeverity, number>
 }
@@ -140,9 +146,10 @@ export interface AnalysisReport {
  * 1.4 `rootDir` + `no-files-matched` warning code; 1.5 `discovery`; 1.6 discovery warnings
  * (`playwright-config-partial`, `playwright-config-ignored`, `test-root-missing`);
  * 1.7 `inHelper` on findings + `summary.helperFiles`;
- * 1.8 `discovery.playwrightConfigDeclaresTags`.
+ * 1.8 `discovery.playwrightConfigDeclaresTags`;
+ * 1.9 `summary.unscoredFindings`.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.8'
+export const ANALYSIS_SCHEMA_VERSION = '1.9'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

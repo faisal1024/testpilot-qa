@@ -536,6 +536,8 @@ export default defineConfig({
     'no-deep-css-chain': 'warn',
     'prefer-user-facing-locator': 'warn',
     'no-hard-wait': 'error',
+    // Off by default — opt in once the suite has a tag vocabulary.
+    'require-test-tag': 'info',
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
   // `doctor` warns when a referenced tag exists in no test, so a typo surfaces
@@ -581,11 +583,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.8`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.9`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.8",
+  "schemaVersion": "1.9",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -603,6 +605,7 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "helperFiles": 0,
     "filesWithParseErrors": 0,
     "findings": 9,
+    "unscoredFindings": 0,
     "bySeverity": { "info": 0, "warn": 4, "error": 5 }
   },
   "score": {
@@ -645,6 +648,10 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
 (`playwrightConfigIgnored: { path, reason }`). `roots` lists the absolute directories actually
 scanned — a Playwright suite can declare several via `projects[]`, which no single `testDir` string
 can represent, so every message that names a test directory renders these. `inHelper` (1.7) is present only on findings from the helper layer — absent, not `false`, otherwise.
+`unscoredFindings` (1.9) counts findings included in `summary.findings` but excluded from the
+score: `require-test-tag` is per **test**, and the score's denominator is locator **call sites**, so
+scoring it would move the grade for a reason it does not measure. The exclusion is reported rather
+than applied silently.
 `playwrightConfigDeclaresTags` (1.8) reports that the adopted Playwright config declares a
 `testConfig.tag`, which Playwright applies to every test — `analyze` does not use it, but `tags`
 cannot claim a complete vocabulary while one is declared.

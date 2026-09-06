@@ -184,6 +184,55 @@ check('run rejects an unknown suite instead of running everything', () => {
   })
 })
 
+check('a scaffolded project has a working tag vocabulary', () => {
+  withTempDir((dir) => {
+    const target = join(dir, 'demo')
+    const created = cli(['init', target])
+    assert(created.status === 0, `init exit ${created.status}`)
+    const { status, stdout } = cli(['tags', '--json', '--cwd', target])
+    assert(status === 0, `exit ${status}`)
+    const report = JSON.parse(stdout)
+    assert(report.summary.untaggedTests === 0, 'scaffolded tests are not all tagged')
+    const tags = report.tags.map((usage) => usage.tag).sort()
+    assert(tags.join(',') === 'regression,smoke', `unexpected vocabulary: ${tags.join(',')}`)
+    // Both spellings Playwright accepts are demonstrated by the samples.
+    const sources = new Set(report.tags.flatMap((usage) => usage.sources))
+    assert(sources.has('title') && sources.has('details'), 'samples do not show both tag forms')
+    const smoke = report.suites.find((suite) => suite.name === 'smoke')
+    assert(smoke && smoke.matchingTests === 2, 'the smoke suite does not resolve')
+  })
+})
+
+check('require-test-tag is off unless asked for', () => {
+  withTempDir((dir) => {
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(
+      join(dir, 'tests', 'a.spec.ts'),
+      "test('untagged', async ({ page }) => {\n  await page.getByRole('button').click()\n})\n",
+    )
+    const off = JSON.parse(cli(['analyze', '--json', '--cwd', dir]).stdout)
+    assert(
+      !off.findings.some((finding) => finding.ruleId === 'require-test-tag'),
+      'require-test-tag fired without being enabled',
+    )
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { rules: { 'require-test-tag': 'info' } }\n",
+    )
+    const on = JSON.parse(cli(['analyze', '--json', '--cwd', dir]).stdout)
+    assert(
+      on.findings.some((finding) => finding.ruleId === 'require-test-tag'),
+      'require-test-tag did not fire when enabled',
+    )
+    // Counted, but the score must not move: its denominator is call sites.
+    assert(
+      on.summary.unscoredFindings === 1,
+      `unexpected unscoredFindings ${on.summary.unscoredFindings}`,
+    )
+    assert(on.score.score === off.score.score, 'a per-test rule moved the locator score')
+  })
+})
+
 check('analyze reports a finding on a fragile locator', () => {
   withTempDir((dir) => {
     mkdirSync(join(dir, 'tests'), { recursive: true })

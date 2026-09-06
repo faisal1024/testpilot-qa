@@ -15,9 +15,10 @@ import {
 import { extractLocators } from './extractor.js'
 import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
-import { builtinRuleIds, builtinRules } from './rules/index.js'
-import type { Rule } from './rules/types.js'
+import { builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
+import type { Rule, TestRule } from './rules/types.js'
 import { computeScore } from './score.js'
+import { extractTests } from './tags/extract-tests.js'
 
 export interface AnalyzeOptions {
   /** Directory analysis is relative to (file discovery and reported paths). */
@@ -43,9 +44,15 @@ interface EnabledRule {
   severity: FindingSeverity
 }
 
+interface EnabledTestRule {
+  rule: TestRule
+  severity: FindingSeverity
+}
+
 /** Resolves which rules run and at what severity, plus warnings for unknown ids. */
 function resolveRules(config: TestPilotConfig): {
   rules: EnabledRule[]
+  testRules: EnabledTestRule[]
   warnings: AnalysisWarning[]
 } {
   const warnings: AnalysisWarning[] = []
@@ -63,12 +70,21 @@ function resolveRules(config: TestPilotConfig): {
   const rules: EnabledRule[] = []
   for (const rule of builtinRules) {
     const override = config.rules[rule.id]
-    if (override === 'off') {
+    if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
       continue
     }
     rules.push({ rule, severity: override ?? rule.defaultSeverity })
   }
-  return { rules, warnings }
+  const testRules: EnabledTestRule[] = []
+  for (const rule of builtinTestRules) {
+    const override = config.rules[rule.id]
+    // `defaultOff` rules need an explicit opt-in, not merely "not turned off".
+    if (override === 'off' || (rule.defaultOff === true && override === undefined)) {
+      continue
+    }
+    testRules.push({ rule, severity: override ?? rule.defaultSeverity })
+  }
+  return { rules, testRules, warnings }
 }
 
 function toPosix(path: string): string {
@@ -103,7 +119,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
-  const { rules, warnings } = resolveRules(options.config)
+  const { rules, testRules, warnings } = resolveRules(options.config)
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
@@ -184,6 +200,32 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     const contexts = extractLocators(code, program)
     callSites += contexts.length
 
+    // A second AST pass, so only when a test-level rule is actually enabled.
+    // All of them are `off` by default, so an ordinary run pays nothing.
+    if (testRules.length > 0) {
+      for (const declaration of extractTests(program).tests) {
+        for (const { rule, severity } of testRules) {
+          const violation = rule.evaluate(declaration)
+          if (!violation) {
+            continue
+          }
+          findings.push({
+            ruleId: rule.id,
+            category: rule.category,
+            severity,
+            message: violation.message,
+            file: relativePath,
+            ...(inHelper ? { inHelper: true } : {}),
+            line: declaration.line,
+            column: declaration.column,
+            snippet: declaration.title ? `test('${declaration.title}')` : 'test(...)',
+            suggestion: violation.suggestion,
+            docsUrl: rule.docsUrl,
+          })
+        }
+      }
+    }
+
     for (const context of contexts) {
       for (const { rule, severity } of rules) {
         const violation = rule.evaluate(context)
@@ -215,8 +257,14 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     bySeverity[finding.severity] += 1
   }
 
-  // Parse errors are reported but do not penalize the score in this milestone.
-  const score = computeScore(findings, callSites, options.config.scoring.weights)
+  // Test-level findings are counted but NOT scored. The Locator Quality Score's
+  // denominator is call sites, and a per-test rule has no relationship to it: on
+  // Ghost (95 call sites, 321 tests) `require-test-tag` alone would drop a 98 to
+  // roughly 64, a number about nothing. Excluding them silently would be its own
+  // dishonesty, so `summary.unscoredFindings` says how many were left out.
+  const testRuleIds = new Set(builtinTestRules.map((rule) => rule.id))
+  const scoredFindings = findings.filter((finding) => !testRuleIds.has(finding.ruleId))
+  const score = computeScore(scoredFindings, callSites, options.config.scoring.weights)
 
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
@@ -229,6 +277,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       helpersNotAnalyzed,
       filesWithParseErrors: parseErrors.length,
       findings: findings.length,
+      unscoredFindings: findings.length - scoredFindings.length,
       bySeverity,
     },
     score,

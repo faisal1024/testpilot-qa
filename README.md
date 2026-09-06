@@ -120,6 +120,18 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 `no-hard-wait` — and prints a human table or stable JSON. Severity is configurable per rule
 (`off` disables a rule).
 
+One further rule, **`require-test-tag`**, is **off by default** and flags tests carrying no tag. It
+is opt-in because a suite that never adopted tags would otherwise light up with one finding per
+test, which says nothing about quality. Enable it once you have a vocabulary to be consistent with:
+
+```ts
+rules: { 'require-test-tag': 'info' }
+```
+
+Its findings are counted but **not scored** — the Locator Quality Score measures locators over a
+denominator of call sites, and a per-test rule has no relation to it. `summary.unscoredFindings`
+reports how many were left out.
+
 ```bash
 # Analyze locator quality in your existing tests (read-only)
 npx testpilot-qa analyze

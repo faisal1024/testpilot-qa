@@ -147,6 +147,7 @@ Headline = weighted mean (default weights configurable). This is why "100% test-
 | `no-deep-css-chain` | locator | warn | no | no | Long ` > ` / descendant CSS chains. |
 | `prefer-user-facing-locator` | locator | warn | no | no | Raw css/`text=` that should be a user-facing locator (`getByRole`/`getByLabel`/`getByText`/`getByTestId`). **Category guidance only — no concrete rewrite in Tier 1.** |
 | `no-hard-wait` | flakiness | error | no | no¹ | `waitForTimeout(<n>)` hard sleeps. |
+| `require-test-tag` | maintainability | **off** (`info` when enabled) | no | no¹ | A `test()` carrying no tag, so no tag-based run can select it. Evaluates a **test declaration**, not a locator call site. Counted but **not scored**. |
 
 ¹ Auto-fix for any rule is a **V1** capability (the `fix` command is deferred); MVP detects and educates only.
 

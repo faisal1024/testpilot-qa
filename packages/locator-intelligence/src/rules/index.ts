@@ -4,9 +4,10 @@ import { noHardWait } from './no-hard-wait.js'
 import { noNthChild } from './no-nth-child.js'
 import { noXpath } from './no-xpath.js'
 import { preferUserFacingLocator } from './prefer-user-facing-locator.js'
-import type { Rule } from './types.js'
+import { requireTestTag } from './require-test-tag.js'
+import type { AnyRule, Rule, TestRule } from './types.js'
 
-export type { Rule, RuleViolation } from './types.js'
+export type { AnyRule, Rule, RuleMeta, RuleViolation, TestRule } from './types.js'
 
 /**
  * Built-in MVP Tier 1 rules (static analysis only). Order here does not affect
@@ -21,10 +22,20 @@ export const builtinRules: Rule[] = [
   noHardWait,
 ]
 
-/** All built-in rule ids (for unknown-rule detection). */
-export const builtinRuleIds: ReadonlySet<string> = new Set(builtinRules.map((rule) => rule.id))
+/**
+ * Built-in rules over `test()` declarations rather than locator call sites.
+ * Extracting declarations is a second AST pass, so `analyze` only does it when
+ * one of these is actually enabled — a suite that leaves them off pays nothing.
+ */
+export const builtinTestRules: TestRule[] = [requireTestTag]
 
-/** Looks up a built-in rule by id. */
-export function getRule(id: string): Rule | undefined {
-  return builtinRules.find((rule) => rule.id === id)
+/** Every built-in rule, of either kind. */
+export const allBuiltinRules: AnyRule[] = [...builtinRules, ...builtinTestRules]
+
+/** All built-in rule ids (for unknown-rule detection). */
+export const builtinRuleIds: ReadonlySet<string> = new Set(allBuiltinRules.map((rule) => rule.id))
+
+/** Looks up a built-in rule by id, of either kind. */
+export function getRule(id: string): AnyRule | undefined {
+  return allBuiltinRules.find((rule) => rule.id === id)
 }

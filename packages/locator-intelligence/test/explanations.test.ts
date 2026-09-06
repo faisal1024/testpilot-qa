@@ -3,7 +3,7 @@ import { explanationIds, getExplanation, ruleExplanations } from '../src/explana
 import { builtinRules } from '../src/rules/index.js'
 
 describe('rule explanations', () => {
-  it('covers exactly the six MVP rules', () => {
+  it('covers exactly the built-in rules', () => {
     expect(explanationIds()).toEqual([
       'no-css-class-selector',
       'no-deep-css-chain',
@@ -11,6 +11,7 @@ describe('rule explanations', () => {
       'no-nth-child',
       'no-xpath',
       'prefer-user-facing-locator',
+      'require-test-tag',
     ])
   })
 

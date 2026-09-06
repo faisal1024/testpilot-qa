@@ -44,13 +44,14 @@ describe('analyze — Tier 1 rule set', () => {
     writeFixture('tests/all.spec.ts', ALL_RULES)
     const report = await analyze({ cwd: dir, config: config() })
 
-    expect(report.schemaVersion).toBe('1.8')
+    expect(report.schemaVersion).toBe('1.9')
     expect(report.summary).toEqual({
       helperFiles: 0,
       helpersNotAnalyzed: 0,
       filesAnalyzed: 1,
       filesWithParseErrors: 0,
       findings: 9,
+      unscoredFindings: 0,
       bySeverity: { error: 5, warn: 4, info: 0 },
     })
 
@@ -406,5 +407,104 @@ describe('discovery warnings', () => {
       discovery: { ...DEFAULT_DISCOVERY, roots: [join(dir, 'tests'), join(dir, 'gone')] },
     })
     expect(report.warnings.map((warning) => warning.code)).toContain('test-root-missing')
+  })
+})
+
+describe('require-test-tag (opt-in)', () => {
+  const TAGGED = [
+    "import { test } from '@playwright/test'",
+    "test('one @smoke', async ({ page }) => { await page.getByRole('button').click() })",
+    "test('two', async ({ page }) => { await page.getByRole('link').click() })",
+  ].join('\n')
+
+  it('is off by default, even though it is not listed in `rules`', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({ cwd: dir, config: config() })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('stays off when other rules are configured', async () => {
+    // "not turned off" must not mean "on" for a rule that needs opting into.
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({ cwd: dir, config: config({ rules: { 'no-xpath': 'warn' } }) })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('flags only the untagged test when enabled', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    const found = report.findings.filter((f) => f.ruleId === 'require-test-tag')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ line: 3, severity: 'info', category: 'maintainability' })
+  })
+
+  it('counts a describe tag as covering the tests inside it', async () => {
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "test.describe('group @regression', () => {",
+        "  test('one', async ({ page }) => { await page.getByRole('button').click() })",
+        '})',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('does not flag a test whose title it could not read', async () => {
+    // The title may well carry a tag; flagging would accuse the test of our own
+    // blind spot.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        'for (const n of NAMES) {',
+        '  test(n, async ({ page }) => { await page.click() })',
+        '}',
+      ].join('\n'),
+    )
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.findings.some((f) => f.ruleId === 'require-test-tag')).toBe(false)
+  })
+
+  it('counts its findings but does not let them move the score', async () => {
+    // The score's denominator is call sites; a per-test rule has no relation to
+    // it. On Ghost (95 call sites, 321 tests) scoring this would drop 98 to ~64.
+    writeFixture(
+      'tests/a.spec.ts',
+      [
+        "import { test } from '@playwright/test'",
+        ...Array.from(
+          { length: 20 },
+          (_unused, index) =>
+            `test('case ${index}', async ({ page }) => { await page.getByRole('button').click() })`,
+        ),
+      ].join('\n'),
+    )
+    const off = await analyze({ cwd: dir, config: config() })
+    const on = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(on.summary.findings).toBe(off.summary.findings + 20)
+    expect(on.summary.unscoredFindings).toBe(20)
+    expect(on.score).toEqual(off.score)
+  })
+
+  it('is not an unknown rule', async () => {
+    writeFixture('tests/a.spec.ts', TAGGED)
+    const report = await analyze({
+      cwd: dir,
+      config: config({ rules: { 'require-test-tag': 'info' } }),
+    })
+    expect(report.warnings.some((w) => w.code === 'unknown-rule')).toBe(false)
   })
 })
