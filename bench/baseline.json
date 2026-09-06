@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-09-06",
   "nodeMajor": 22,
-  "reason": "Phase 11d/11e/11f: precision and severity, with the denominator deliberately untouched (callSites identical on all five repos: 1326/352/95/3774/2954). 11d - no-deep-css-chain measures depth per selector from the tokenizer, so a comma list is no longer a chain: 5 findings removed across the checkouts, 4 in the analyzed set (all comma lists, e.g. 'strong em, em strong'), 0 added. It now has NO corpus evidence at all (fires on 0 of 5 repos), as does no-nth-child - both are covered only by unit tests, which is worth knowing when reading this record. 11e - .nth() moves out of no-nth-child into avoid-positional-access at warn. All 276 of no-nth-child's corpus findings were .nth(); the CSS pseudo it is named for produced none, so error was in practice grading only the idiomatic case. A 1:1 swap (cal.com 113, documenso 126, mattermost 29, immich 6, Ghost 2), no count change. no-nth-child also widened from a ':nth-child(' substring to the parsed pseudo, which additionally covers :nth-last-child (corpus-neutral). 11f - locator('..') moves out of no-xpath into avoid-parent-traversal at info: 9 of the 11 xpath findings were the '..' idiom, so the error-level rule was mostly reporting the quiet case. Scores rise (cal.com 69->74, immich 89->91, Ghost 98->99, documenso 89->91, mattermost 66->67), dominated by the two severity reductions: cal.com is 113 findings x 3 weight points plus one xpath finding x 4.5 = 343.5 / (1326 x 5) = 5.18%. Not from the denominator: extracting .first()/.last() is deferred to Phase 12, which owns it. Measured with the real code path (adding them to LOCATOR_METHODS and re-running): callSites +7.9/+4.0/+50.5/+7.4/+8.4%, scores 74->73, 91->90, 99->86, 91->89, 67->66. An earlier version of this reason said '~10% more call sites' and '3-8 points' in the other direction; that figure was measured before avoid-positional-access existed, and adding a rule that fires on those calls reversed the sign. Re-measured, not re-reasoned. Correction: an earlier version of this reason said '6 of 8' xpath findings and 'exactly 5.1%'. Both were wrong. The 6-of-8 came from a probe script that scanned only single-quoted .locator() calls in spec files rather than the analyzer's own extraction - the third time in this phase that measuring with a different code path than the shipped rule produced a wrong published number.",
+  "reason": "Phase 11b + 11g, after four review rounds. prefer-user-facing-locator split into prefer-get-by-test-id (warn, 511: 426 direct / 29 scope / 46 same-element / 10 via the data-testid= engine) and prefer-semantic-locator (info, 1165). 1973 findings -> 1676; reasons the 297 no longer fire are counted INDEPENDENTLY and do not partition -- a call site can appear in more than one row: 252 has/hasText composition (167 via .filter()), 35 role=/aria-*, 21 chained off a getBy*() parent, 12 :has()/:has-text(), 0 unreadable. THREE corrections to earlier reasons here, each found by an independent recount and left visible rather than replaced: (1) a first-match classification (84/27/21/12) published as a partition; (2) '168 .filter() cases' where every counting rule gives 167; (3) '458 call sites carry both a class-selector error and this nudge' -- measured, 478 used to carry both (7 points each), 348 still do (5.5) and 130 now carry only the error (5). Round 4 also found the defect class outside the selector string for the first time: locator('[data-testid=row]', {hasText}) was answered 'Use getByTestId(\"row\")', which selects every row -- live on cal.com out-of-office.e2e.ts:177, and the reason this run is 1676 rather than 1677. Scores: cal.com 74->82, immich 91->96, documenso 91->94, mattermost 67->76, Ghost 99 unchanged; callSites identical on all five, so the rise is the warn->info re-grading and not the denominator. 11g adds uninspectedCallSites so Phase 12 has a pinned 'before': 40/1326, 20/352, 2/95, 147/3774, 108/2954 -- 317 of 8501 (3.7%). NOTE the 10% warning fires on NONE of the five repos, so the threshold itself has no corpus evidence; only the counts do.",
   "corpusRefs": {
     "cal.com": "abffde336e744e15cf69626c10e436d6172bc406",
     "immich": "4c7b30c18b55e74224ad1a223a2058ea4a13cc1f",
@@ -20,16 +20,18 @@
       },
       "filesAnalyzed": 61,
       "parseErrors": 0,
-      "findings": 827,
-      "score": 74,
-      "grade": "C",
+      "findings": 802,
+      "score": 82,
+      "grade": "B",
       "callSites": 1326,
+      "uninspectedCallSites": 40,
       "byRule": {
         "avoid-parent-traversal": 1,
         "avoid-positional-access": 113,
         "no-css-class-selector": 13,
         "no-hard-wait": 16,
-        "prefer-user-facing-locator": 684
+        "prefer-get-by-test-id": 347,
+        "prefer-semantic-locator": 312
       },
       "warnings": {
         "helpers-not-analyzed": 1
@@ -51,16 +53,18 @@
       },
       "filesAnalyzed": 21,
       "parseErrors": 0,
-      "findings": 76,
-      "score": 91,
+      "findings": 75,
+      "score": 96,
       "grade": "A",
       "callSites": 352,
+      "uninspectedCallSites": 20,
       "byRule": {
         "avoid-parent-traversal": 3,
         "avoid-positional-access": 6,
         "no-css-class-selector": 1,
         "no-hard-wait": 3,
-        "prefer-user-facing-locator": 63
+        "prefer-get-by-test-id": 9,
+        "prefer-semantic-locator": 53
       },
       "warnings": {},
       "discovery": {
@@ -84,6 +88,7 @@
       "score": 99,
       "grade": "A",
       "callSites": 95,
+      "uninspectedCallSites": 2,
       "byRule": {
         "avoid-positional-access": 2
       },
@@ -107,16 +112,18 @@
       },
       "filesAnalyzed": 127,
       "parseErrors": 0,
-      "findings": 607,
-      "score": 91,
+      "findings": 541,
+      "score": 94,
       "grade": "A",
       "callSites": 3774,
+      "uninspectedCallSites": 147,
       "byRule": {
         "avoid-parent-traversal": 3,
         "avoid-positional-access": 126,
         "no-css-class-selector": 31,
         "no-hard-wait": 112,
-        "prefer-user-facing-locator": 335
+        "prefer-get-by-test-id": 65,
+        "prefer-semantic-locator": 204
       },
       "warnings": {
         "helpers-not-analyzed": 1
@@ -138,17 +145,19 @@
       },
       "filesAnalyzed": 298,
       "parseErrors": 0,
-      "findings": 1529,
-      "score": 67,
-      "grade": "D",
+      "findings": 1324,
+      "score": 76,
+      "grade": "C",
       "callSites": 2954,
+      "uninspectedCallSites": 108,
       "byRule": {
         "avoid-parent-traversal": 2,
         "avoid-positional-access": 29,
         "no-css-class-selector": 433,
         "no-hard-wait": 172,
         "no-xpath": 2,
-        "prefer-user-facing-locator": 891
+        "prefer-get-by-test-id": 90,
+        "prefer-semantic-locator": 596
       },
       "warnings": {
         "helpers-not-analyzed": 1

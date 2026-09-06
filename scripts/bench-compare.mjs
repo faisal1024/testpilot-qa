@@ -23,6 +23,7 @@ export const COMPARED_METRICS = [
   'findings',
   'score',
   'callSites',
+  'uninspectedCallSites',
   'exitCode',
 ]
 
@@ -37,6 +38,10 @@ export const EVIDENCE_METRICS = {
   filesAnalyzed: 'decrease',
   callSites: 'decrease',
   parseErrors: 'increase',
+  // More call sites we cannot read means less of the score rests on evidence.
+  // The headline honesty metric of Phase 11g needs a gate, or it is a number
+  // nothing defends.
+  uninspectedCallSites: 'increase',
 }
 
 /** Discovery sources that mean a real config was read; anything else is a fallback. */
@@ -54,7 +59,14 @@ const warningCounts = (result) => result?.warnings ?? {}
  * harness bug as the expected state. The list is an allowlist on purpose: a new warning
  * code must be considered rather than inherited as acceptable.
  */
-const RECORDABLE_WARNINGS = new Set(['helpers-not-analyzed', 'helpers-not-recognized'])
+const RECORDABLE_WARNINGS = new Set([
+  'helpers-not-analyzed',
+  'helpers-not-recognized',
+  // A property of the repository (it interpolates its selectors), like the two
+  // above — not of the checkout. Refusing to record it would make any corpus
+  // repo over the 10% threshold impossible to baseline.
+  'uninspected-call-sites',
+])
 
 /**
  * Rows describing how one repo's measurement moved: `{ metric, before, after }`.

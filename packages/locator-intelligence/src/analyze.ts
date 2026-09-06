@@ -10,12 +10,13 @@ import {
   type Finding,
   type FindingSeverity,
   type ParseError,
+  type QualityScore,
   RULE_PREDECESSORS,
   type Severity,
   type TestPilotConfig,
   isDirectory,
 } from '@testpilot/core'
-import { extractLocators } from './extractor.js'
+import { extractLocators, isUninspected } from './extractor.js'
 import { parseSource } from './parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from './resolve-files.js'
 import { allBuiltinRules, builtinRuleIds, builtinRules, builtinTestRules } from './rules/index.js'
@@ -60,17 +61,51 @@ function resolveRules(config: TestPilotConfig): {
   warnings: AnalysisWarning[]
 } {
   const warnings: AnalysisWarning[] = []
+  // A retired id is not a typo. Reporting it as "unknown — ignored" beside the
+  // `deprecated-rule-id` warning that says it is being honoured tells the reader
+  // two opposite things about the same line of their config. `no-nth-child` and
+  // `no-xpath` hid this: both survived their splits as real rules, so this is
+  // the first id that stopped existing.
+  const known = (id: string): boolean => builtinRuleIds.has(id) || DEPRECATED_RULE_IDS.includes(id)
   for (const id of Object.keys(config.ruleOptions ?? {})) {
-    if (!builtinRuleIds.has(id)) {
+    // A retired id in `ruleOptions` gets its own warning rather than the
+    // `known()` pass used for `rules`: there is no successor to inherit an
+    // option, so it really is dropped, and saying nothing would be the silence
+    // this whole mechanism exists to avoid.
+    if (DEPRECATED_RULE_IDS.includes(id)) {
+      warnings.push({
+        code: 'deprecated-rule-id',
+        ruleId: id,
+        message: `Rule "${id}" was split, and its ruleOptions are not carried over to the rules that replaced it — set them under the new id. Options for "${id}" were ignored.`,
+      })
+      continue
+    }
+    if (!known(id)) {
       warnings.push({
         code: 'unknown-rule',
         ruleId: id,
         message: `Unknown rule "${id}" in ruleOptions — ignored.`,
       })
+      continue
+    }
+    // A real rule id that takes no options is the same silent drop one level
+    // in. `prefer-semantic-locator` reads the test-id list but is not where it
+    // is set, and setting it there is the natural mistake — so say so rather
+    // than accept the key and ignore it.
+    if (!RULES_WITH_OPTIONS.has(id)) {
+      warnings.push({
+        code: 'unknown-rule',
+        ruleId: id,
+        message: `Rule "${id}" has no configurable options — the ruleOptions entry for it was ignored.${
+          id === 'prefer-semantic-locator'
+            ? ' It reads `testIdAttributes`, but that is set under "prefer-get-by-test-id".'
+            : ''
+        }`,
+      })
     }
   }
   for (const id of Object.keys(config.rules)) {
-    if (!builtinRuleIds.has(id)) {
+    if (!known(id)) {
       warnings.push({
         code: 'unknown-rule',
         ruleId: id,
@@ -99,6 +134,16 @@ function resolveRules(config: TestPilotConfig): {
   }
   return { rules, testRules, warnings }
 }
+
+/**
+ * Rule ids `optionsFor` actually reads settings for. Any other id in
+ * `ruleOptions` is accepted by the schema (deliberately non-strict, so a rename
+ * cannot hard-break a config) and then ignored — which needs saying.
+ */
+const RULES_WITH_OPTIONS: ReadonlySet<string> = new Set([
+  'no-deep-css-chain',
+  'prefer-get-by-test-id',
+])
 
 function toPosix(path: string): string {
   return path.split('\\').join('/')
@@ -190,6 +235,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   const findings: Finding[] = []
   const parseErrors: ParseError[] = []
   let callSites = 0
+  let uninspectedCallSites = 0
   let testDeclarations = 0
   let unreadableTests = 0
   let filesWithUnreadDescribeBody = 0
@@ -221,6 +267,10 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     // ratio, and excluding `.first()` while still flagging it dropped Ghost
     // from 99 to 79 on a suite whose locators did not change.
     callSites += contexts.length
+    // Counted, not excluded: the denominator change is Phase 12's subject.
+    // Counting first means the disclosure ships before the number moves, so a
+    // reader can see how much of their grade rests on locators nobody read.
+    uninspectedCallSites += contexts.filter(isUninspected).length
 
     // A second AST pass, so only when a test-level rule is actually enabled.
     // All of them are `off` by default, so an ordinary run pays nothing.
@@ -323,6 +373,17 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     )
   }
 
+  // A tenth is where a reader's mental model of "the tool looked at my tests"
+  // stops being true. Below it the noise would outweigh the disclosure; above
+  // it the score is substantially a statement about locators nobody read.
+  if (callSites > 0 && uninspectedCallSites * 10 > callSites) {
+    const percent = Math.round((uninspectedCallSites / callSites) * 100)
+    warnings.push({
+      code: 'uninspected-call-sites',
+      message: `${uninspectedCallSites} of ${callSites} locator call-site(s) (${percent}%) use a selector that is not statically readable — an interpolated template literal, a variable, or syntax the parser declined to guess at. No rule ran on them, but they still count toward the score's denominator, so the grade is partly over locators that were never inspected.`,
+    })
+  }
+
   findings.sort(compareFindings)
   parseErrors.sort((a, b) => a.file.localeCompare(b.file))
 
@@ -340,7 +401,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     allBuiltinRules.filter((rule) => rule.scored === false).map((rule) => rule.id),
   )
   const scoredFindings = findings.filter((finding) => !unscoredRuleIds.has(finding.ruleId))
-  const score = computeScore(scoredFindings, callSites, options.config.scoring.weights)
+  // Every locator in the suite was unreadable: there is nothing to grade. A
+  // `100 (A)` here would be the strongest claim the tool can make, over the
+  // least evidence it can have.
+  const noEvidence = callSites > 0 && uninspectedCallSites === callSites
+  const score = noEvidence
+    ? withoutGrade(computeScore(scoredFindings, callSites, options.config.scoring.weights))
+    : computeScore(scoredFindings, callSites, options.config.scoring.weights)
 
   return {
     schemaVersion: ANALYSIS_SCHEMA_VERSION,
@@ -357,12 +424,37 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
       unscoredRuleIds: [...unscoredRuleIds].filter((id) =>
         findings.some((finding) => finding.ruleId === id),
       ),
+      uninspectedCallSites,
       bySeverity,
     },
     score,
     findings,
     warnings,
     parseErrors,
+  }
+}
+
+/**
+ * Blanks the headline score and grade **and every sub-score**, keeping
+ * `callSites` so a consumer can still see how much went unread.
+ *
+ * Blanking only the headline left four confident `100 A` dimension bars beside
+ * "not enough evidence" — in the JSON, the table, and four full-width green
+ * bars in the shared HTML report. A consumer gating on
+ * `subScores.resilience.score` would have read a perfect grade over exactly the
+ * absent evidence the headline `null` exists to disclose.
+ */
+function withoutGrade(score: QualityScore): QualityScore {
+  const blank = { score: null, grade: null }
+  return {
+    ...score,
+    ...blank,
+    subScores: {
+      resilience: blank,
+      accessibility: blank,
+      maintainability: blank,
+      flakiness: blank,
+    },
   }
 }
 
@@ -477,6 +569,14 @@ function optionsFor(ruleId: string, config: TestPilotConfig): RuleOptions | unde
     // options key would take down the whole analysis for a setting nobody set.
     const configured = config.ruleOptions?.['no-deep-css-chain']?.maxChainDepth
     return configured === undefined ? undefined : { maxChainDepth: configured }
+  }
+  // Both rules, from the one key. `prefer-semantic-locator` hands test ids off
+  // to `prefer-get-by-test-id`; if only one of them read the configured list,
+  // a project that sets it gets either two findings on one call site or none
+  // at all, depending on which attribute the selector used.
+  if (ruleId === 'prefer-get-by-test-id' || ruleId === 'prefer-semantic-locator') {
+    const configured = config.ruleOptions?.['prefer-get-by-test-id']?.testIdAttributes
+    return configured === undefined ? undefined : { testIdAttributes: configured }
   }
   return undefined
 }

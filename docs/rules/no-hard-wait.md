@@ -33,6 +33,13 @@ await expect(page.getByRole('alert')).toHaveText('Saved')
 - Use web-first assertions like expect(locator).toBeVisible() / toHaveText().
 - Wait for a specific condition (e.g. waitForResponse) instead of a fixed delay.
 
+## Does not fire on
+
+```ts
+await expect(page.getByText('Saved')).toBeVisible()  // a web-first assertion, which waits
+await page.getByRole('button').click()               // auto-waiting is built in
+```
+
 ## In the CLI
 
 - `testpilot explain no-hard-wait` prints this page in the terminal.

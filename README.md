@@ -116,11 +116,12 @@ quality](#analyze-locator-quality)** — `analyze` is read-only.
 ## Analyze locator quality
 
 `analyze` statically flags fragile locators with Tier 1 rules — `no-xpath`,
-`no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-user-facing-locator`, and
-`no-hard-wait` — plus `avoid-positional-access` (`.nth()`, `warn`) and
-`avoid-parent-traversal` (`locator('..')`, `info`), and prints a human table or stable JSON.
-Severity is configurable per rule (`off` disables a rule), and `no-deep-css-chain`'s threshold is
-configurable via `ruleOptions`.
+`no-css-class-selector`, `no-nth-child`, `no-deep-css-chain`, `prefer-get-by-test-id`, and
+`no-hard-wait` — plus `avoid-positional-access` (`.nth()`, `warn`),
+`avoid-parent-traversal` (`locator('..')`, `info`) and `prefer-semantic-locator` (a selector with no
+role/label/ARIA handle, `info`), and prints a human table or stable JSON.
+Severity is configurable per rule (`off` disables a rule); `no-deep-css-chain`'s threshold and
+`prefer-get-by-test-id`'s attribute list are configurable via `ruleOptions`.
 
 One further rule, **`require-test-tag`**, is **off by default** and flags tests carrying no tag. It
 is opt-in because a suite that never adopted tags would otherwise light up with one finding per
@@ -446,15 +447,19 @@ the **[release checklist](docs/Release-Checklist.md)**.
 
 Written down because a tool that hides these is worse than one that doesn't have them yet.
 
-- **`prefer-user-facing-locator` over-fires.** It flags every `page.locator()` with a CSS or text
-  selector, including `[data-testid="…"]`, `[role="…"]`, `[aria-label="…"]`, and calls chained off a
-  `getByRole()` parent. On a five-repo survey of real suites it was ~65% of all findings and roughly
-  half of those were wrong. Until it is split into a mechanical rule and a judgement rule, set it to
-  `info` or `off` in `testpilot.config.ts`:
+- **`prefer-semantic-locator` is a judgement call, not a defect report.** It flags a `locator()`
+  selector with no role, label or ARIA handle — real advice, but advice a suite can reasonably
+  decline. It ships at `info` for that reason, and is 1165 of the 1676 findings these two rules
+  produce across the five-repo survey (2745 findings in total). Set it to `off` if your suite has made that call deliberately:
 
   ```ts
-  rules: { 'prefer-user-facing-locator': 'info' }
+  rules: { 'prefer-semantic-locator': 'off' }
   ```
+
+  Its predecessor `prefer-user-facing-locator` also fired on `[data-testid="…"]`, `[role="…"]`,
+  `[aria-label="…"]` and calls chained off a `getByRole()` parent, at `warn`. Those cases are now
+  either `prefer-get-by-test-id` (which names the exact replacement) or nothing at all. A config or
+  baseline written against the old id keeps working — it maps to both successors, with a warning.
 
 - **The score is not yet comparable between projects.** The same selectors score differently
   depending on whether you wrote `page.locator('[data-testid=x]')` or `page.getByTestId('x')`, and a
@@ -462,15 +467,23 @@ Written down because a tool that hides these is worse than one that doesn't have
   `--baseline` is the honest gate today: it fails on *new* findings and grandfathers what you have.
 - **Selectors built with `${}` are counted but never inspected.** An interpolated selector still
   counts as a call site — the score's denominator — while no rule can read it. A suite that
-  interpolates heavily can therefore score `100 (A)` over locators the tool never looked at. Fixed in
-  Phase 11.
+  interpolates heavily can therefore score well over locators the tool never looked at.
+  **Partly addressed:** the report now counts them (`summary.uninspectedCallSites`) and warns when
+  they pass 10% of call sites, and a suite where *every* call site is unreadable gets no score at
+  all rather than `100 (A)`. But at 90% unreadable you still get a confident number — taking them
+  out of the denominator is Phase 12. On the five-repo survey they are 317 of 8501 call sites
+  (3.7%), and no repo crosses the 10% line.
 - **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
   The other two are the same pattern, but counting them changes the score's denominator, so they
   arrive with the scoring work in Phase 12.
-- **Your score will change when you upgrade to the next alpha.** `.nth()` dropped from `error` to `warn`
-  and `locator('..')` from `error` to `info`, which raises most scores by a few points (measured on
-  five real suites: +1 to +5). If you gate on `--min-score`, re-check the threshold — one you had tuned
-  tightly is now looser than you meant. In the other direction, `no-nth-child` now also covers
+- **Your score will change substantially when you upgrade to the next alpha.** Three re-gradings
+  stack: `.nth()` `error`→`warn`, `locator('..')` `error`→`info`, and the general "prefer
+  user-facing locators" nudge `warn`→`info` (as `prefer-semantic-locator`). Measured end-to-end on
+  five real suites, from the **earliest recorded corpus baseline** to now: **cal.com 68→82,
+  immich 89→96, Ghost 98→99, documenso 89→94, mattermost 66→76** — up to **+14 points**, on suites
+  whose locators did not change. (That is the honest reference point: the benchmark did not exist
+  when `0.1.0-alpha.0` was tagged, so there is no measurement at that tag to compare against.) **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
+  much looser than you meant. In the other direction, `no-nth-child` now also covers
   `:nth-last-child()`, so a suite using it gains one new `error` finding.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).

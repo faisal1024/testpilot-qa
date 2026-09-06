@@ -50,6 +50,7 @@ export interface AnalysisWarning {
     | 'test-root-missing'
     | 'helpers-not-recognized'
     | 'helpers-not-analyzed'
+    | 'uninspected-call-sites'
   message: string
   ruleId?: string
 }
@@ -84,6 +85,15 @@ export interface AnalysisSummary {
    * hardcoding rule ids. Only rules that actually produced findings.
    */
   unscoredRuleIds?: string[]
+  /**
+   * Call sites that take a selector argument the analyzer could **not** read —
+   * an interpolated template literal, a variable, a selector the tokenizer
+   * refused. They still count toward `QualityScore.callSites` today (the
+   * denominator moves in Phase 12), so a suite that interpolates heavily is
+   * scored partly over locators no rule ever looked at. Reported so that is
+   * visible rather than folded silently into a grade.
+   */
+  uninspectedCallSites?: number
   findings: number
   bySeverity: Record<FindingSeverity, number>
 }
@@ -93,8 +103,9 @@ export type Grade = 'A' | 'B' | 'C' | 'D' | 'F'
 
 /** A 0–100 score with its letter grade. */
 export interface ScoreBreakdown {
-  score: number
-  grade: Grade
+  /** `null` in the same case as {@link QualityScore.score}: no evidence to grade. */
+  score: number | null
+  grade: Grade | null
 }
 
 /** The dimensions a headline score decomposes into. */
@@ -111,8 +122,14 @@ export interface SubScores {
  * the same penalty down by dimension. Not DOM-aware.
  */
 export interface QualityScore {
-  score: number
-  grade: Grade
+  /**
+   * `null` when every call site was uninspectable: there were locators, and not
+   * one of them could be read. A `100 (A)` there would be a grade over evidence
+   * that does not exist — the one case where no number is the honest answer.
+   * (Zero call sites is different and still scores 100; see `docs/Scoring.md`.)
+   */
+  score: number | null
+  grade: Grade | null
   /** Analyzed call-sites — the scoring denominator basis. */
   callSites: number
   subScores: SubScores
@@ -162,9 +179,17 @@ export interface AnalysisReport {
  * 1.7 `inHelper` on findings + `summary.helperFiles`;
  * 1.8 `discovery.playwrightConfigDeclaresTags`;
  * 1.9 `summary.unscoredFindings` + `summary.unscoredRuleIds`;
- * 1.10 `baseline.matchedByPreviousId`.
+ * 1.10 `baseline.matchedByPreviousId`;
+ * 1.11 `summary.uninspectedCallSites` + `score.score`/`grade` (headline and every sub-score)
+ * become nullable.
+ *
+ * **1.11 is the first 1.x bump that is not purely additive**: it narrows an
+ * existing field. A consumer doing `if (report.score.score < 80) fail()` passes
+ * on `null` — a false green in the one field this project exists to protect —
+ * so check for `null` explicitly. It occurs only when there is at least one
+ * locator call-site and not one of them had a statically readable selector.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.10'
+export const ANALYSIS_SCHEMA_VERSION = '1.11'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).

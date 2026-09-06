@@ -186,7 +186,9 @@ export async function analyzeCommand(
       }
       if (scoreFailed) {
         console.error(
-          `Locator Quality Score ${report.score.score} (${report.score.grade}) is below the required minimum of ${threshold}.`,
+          report.score.score === null
+            ? `No Locator Quality Score could be computed: all ${report.score.callSites} call-site(s) use selectors that are not statically readable. --min-score ${threshold} cannot be satisfied without evidence.`
+            : `Locator Quality Score ${report.score.score} (${report.score.grade}) is below the required minimum of ${threshold}.`,
         )
       }
     }

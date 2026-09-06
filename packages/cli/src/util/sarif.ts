@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   type AnalysisReport,
+  type AnalysisWarning,
   type Finding,
   type FindingSeverity,
   findingKey,
@@ -189,27 +190,31 @@ export function toSarif(report: AnalysisReport, options: SarifOptions = {}): Sar
   }
 }
 
-const NOTIFICATION_DESCRIPTORS = [
-  { id: 'unknown-rule', shortDescription: { text: 'A configured rule id is not recognized.' } },
-  { id: 'no-files-matched', shortDescription: { text: 'No test files matched.' } },
-  {
-    id: 'playwright-config-partial',
-    shortDescription: { text: 'The Playwright config was only partly readable.' },
-  },
-  {
-    id: 'playwright-config-ignored',
-    shortDescription: { text: 'The Playwright config was not used for discovery.' },
-  },
-  { id: 'test-root-missing', shortDescription: { text: 'A declared test root does not exist.' } },
-  {
-    id: 'helpers-not-analyzed',
-    shortDescription: { text: 'Page objects exist that were not analyzed.' },
-  },
-  {
-    id: 'helpers-not-recognized',
-    shortDescription: { text: 'Helper files matched but show no sign of using Playwright.' },
-  },
-]
+/**
+ * Every warning code, with the text SARIF shows for it.
+ *
+ * A keyed literal with `satisfies`, not an array with an assertion: the array
+ * form only caught a *typo'd* id, never a *missing* one — the direction that
+ * left three codes emitting references that resolved to nothing. `satisfies`
+ * on a total record rejects both, with no cast to erase the check.
+ */
+const NOTIFICATION_TEXT = {
+  'unknown-rule': 'A configured rule id is not recognized.',
+  'deprecated-rule-id': 'A configured rule id was split; its setting was carried over.',
+  'no-files-matched': 'No test files matched.',
+  'test-tag-coverage': 'How many test declarations carry a selectable tag.',
+  'playwright-config-partial': 'The Playwright config was only partly readable.',
+  'playwright-config-ignored': 'The Playwright config was not used for discovery.',
+  'test-root-missing': 'A declared test root does not exist.',
+  'helpers-not-analyzed': 'Page objects exist that were not analyzed.',
+  'helpers-not-recognized': 'Helper files matched but show no sign of using Playwright.',
+  'uninspected-call-sites': 'Locator call-sites whose selector could not be read statically.',
+} satisfies Record<AnalysisWarning['code'], string>
+
+const NOTIFICATION_DESCRIPTORS = Object.entries(NOTIFICATION_TEXT).map(([id, text]) => ({
+  id,
+  shortDescription: { text },
+}))
 
 function driver(rules: SarifReportingDescriptor[]): SarifDriver {
   return {

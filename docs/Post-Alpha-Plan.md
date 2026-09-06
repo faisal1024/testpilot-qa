@@ -292,7 +292,7 @@ denominator is call sites (on Ghost, 95 call sites against 321 tests, scoring it
 a 98 to ~64). `summary.unscoredFindings` reports that exclusion rather than applying it silently —
 a quiet score adjustment would be the same dishonesty this plan spent Phase 9 removing.
 
-### Phase 11 — Signal precision (next alpha)
+### Phase 11 — Signal precision ✅ Complete (next alpha)
 
 Goal: **every finding at `warn`/`error` is one an engineer would act on.** Corpus target: hard
 false-positive rate < 5% per rule.
@@ -301,13 +301,49 @@ false-positive rate < 5% per rule.
   (`packages/locator-intelligence/src/selector/`): selector lists, compound selectors, attribute values
   (quoted/unquoted), escapes, pseudo-classes, and the static prefix of template literals. Everything
   below builds on it.
-- **11b — `prefer-user-facing-locator` becomes selector-aware, then splits:**
+- **11b — `prefer-user-facing-locator` becomes selector-aware, then splits. ✅ Complete.**
   - `prefer-get-by-test-id` (**warn**, auto-fixable): `locator('[data-testid="x"]')`,
     `locator('[data-test-id=…]')`, configurable attribute list matching Playwright's `testIdAttribute`.
   - `prefer-semantic-locator` (**info**): raw tag/class/`#id`/`text=` selectors with no semantic
     handle. Never fires on `[role=]`, `[aria-*]`, `has:`/`hasText:` composition, or calls chained off
     a `getBy*()` parent.
   - The old id stays as a deprecated alias in config (maps to both) with a `doctor` warning.
+
+  **Measured on the corpus.** 1973 findings became 1676: `prefer-get-by-test-id` 511 (426 direct,
+  29 scope, 46 same-element, 10 through the `data-testid=` engine), `prefer-semantic-locator` 1165.
+  Reasons the 297 no longer fire, counted **independently — a call site can appear in more than one
+  row, so these do not partition**: 252 composed with a `has`/`hasText` option (167 of them through
+  `.filter()`), 35 carrying `role=`/`aria-*`, 21 chained off a `getBy*()` parent, 12 composed with
+  `:has()`/`:has-text()`, 0 unreadable. An earlier draft published a first-match classification
+  (84/27/21/12) as though it were a partition; it was not, and a reviewer's independent recount is
+  what caught it. A later draft said 168 `.filter()` cases where every way of counting gives 167.
+
+  The probe that produced this ran over the same discovery and the shipped rule objects, and had to
+  reproduce the benchmark's own totals before any of it was written down. Its first run reported
+  **zero** call sites, because it used `defaultConfig` instead of the discovery the CLI performs —
+  the reconciliation check is what caught that, and is the reason this paragraph exists rather than
+  a plausible wrong one.
+
+  Scores rose: cal.com 74→82, immich 91→96, documenso 91→94, mattermost 67→76, Ghost 99 unchanged.
+  `callSites` is identical on all five, which is how you can tell the rise is the re-grading of 1165
+  findings from `warn` to `info` plus those removals, and not a denominator change.
+
+  **No false-positive rate is claimed.** The phase target is stated as a percentage, and measuring it
+  needs a labelled sample this phase did not build. What is measured is the above.
+
+  **Two things 11b's own wording promised and did not deliver**, recorded rather than quietly
+  dropped: `prefer-get-by-test-id` is *not* auto-fixable yet — `fix` still only rewrites `text=` —
+  which is Phase 13's subject and is why the rule now hands `selector/test-id.ts` the
+  direct/scope/same-element decision instead of burying it in a message string; and the deprecated
+  id produces an **`analyze`** warning, not a `doctor` one, because `doctor` does not validate rule
+  ids at all.
+
+  **A boundary that is drawn on the wrong axis, deliberately.** `locator('text=Save')` *is*
+  mechanically fixable today — `fix` rewrites it to `getByText('Save')` — yet it lands in the `info`
+  rule, because 11b's text puts `text=` there. The stated cut is "mechanical fix → `warn`", so the
+  two disagree. Left as the plan wrote it rather than redesigned under review; revisit in Phase 13,
+  when the fixer's actual coverage is the right organizing principle.
+
 - **11c — `no-css-class-selector`. ✅ Complete.** fires only on a real class token in the selector (tokenizer);
   never on `#id`, attribute values, or escaped dots. `#id` selectors are not this rule's business.
 - **11d — `no-deep-css-chain`. ✅ Complete.** depth per selector in a list; threshold documented and configurable.
@@ -343,14 +379,15 @@ that changed its sign existed. Every one of them read as a plausible number and 
 whose whole purpose is being checkable. **Measure with the real code path** — a probe script is a
 different program, and its answer is about that program.
 
-- **11g — Uninspectable call sites** (template literals with `${}`, `as string`, variables): count
+- **11g — Uninspectable call sites. ✅ Complete.** (template literals with `${}`, `as string`, variables): count
   them in a new `summary.uninspectedCallSites`, surface a `warn`-level note when they exceed 10% of
   call sites, and **exclude them from the score denominator** (Phase 12 lands the denominator
   change; 11g adds the counting). Guard the other direction too: a suite with **zero inspected**
   call sites gets no score (`null`, reported as "not enough evidence"), never `100 (A)` — the same
   rule as zero files.
-- Every rule page in `docs/rules/` gains a "Does not fire on" section (generated from a new
-  `notFlagged` example list in `explanations.ts`, so the docs and the tests share fixtures).
+- Every rule page in `docs/rules/` gains a "Does not fire on" section. ✅ Complete — all ten,
+  generated from the `notFlagged` list in `explanations.ts`, and every entry is executed against its
+  own rule through the real extractor (`not-flagged.test.ts`), test-declaration rules included.
 
 ### Phase 12 — A score you can gate on (`alpha.4`)
 
@@ -410,7 +447,7 @@ Measured on the pinned corpus by `pnpm bench` after each phase:
 | Metric | alpha.0 (today) | Target after Phase 12 |
 |---|---|---|
 | Repos where default discovery finds the suite | 3 / 5 (alpha.0) — #71 should make it 5 / 5; bench confirms | 5 / 5 |
-| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% |
+| Hard false positives, `prefer-user-facing-locator` (or successors) | ~27% | < 5% — **still unmeasured after 11b**: no labelled sample exists. What 11b measured is 1973 → 1676 findings, with the reasons the 297 no longer fire counted independently |
 | Hard false positives, `no-css-class-selector` | ~7% | < 2% |
 | Same selectors, `locator('[data-testid]')` vs `getByTestId()` score gap | 40 pts | ≤ 5 pts |
 | Single-line file minimum score | 0 F | ≥ 50 |

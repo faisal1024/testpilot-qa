@@ -33,6 +33,13 @@ test('checkout works', { tag: ['@smoke'] }, async ({ page }) => { … })
 - Enable with `rules: { 'require-test-tag': 'info' }`; it is `off` by default.
 - Findings from this rule are counted but not scored — the Locator Quality Score measures locators, over a denominator of call sites.
 
+## Does not fire on
+
+```ts
+test('checkout works @smoke', async ({ page }) => {})
+test('checkout works', { tag: ['@smoke'] }, async ({ page }) => {})
+```
+
 ## In the CLI
 
 - `testpilot explain require-test-tag` prints this page in the terminal.

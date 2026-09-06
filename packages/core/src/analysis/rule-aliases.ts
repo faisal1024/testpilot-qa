@@ -19,6 +19,9 @@ export const RULE_SUCCESSORS: Readonly<Record<string, readonly string[]>> = {
   'no-nth-child': ['avoid-positional-access'],
   // Phase 11f: the `locator('..')` idiom left the hand-written-XPath rule.
   'no-xpath': ['avoid-parent-traversal'],
+  // Phase 11b: the general "prefer user-facing locators" nudge split into the
+  // one case with a mechanical fix and the one without.
+  'prefer-user-facing-locator': ['prefer-get-by-test-id', 'prefer-semantic-locator'],
 }
 
 /** The inverse: which old ids a current rule's findings may have been recorded under. */

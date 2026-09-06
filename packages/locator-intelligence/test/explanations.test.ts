@@ -12,7 +12,8 @@ describe('rule explanations', () => {
       'no-hard-wait',
       'no-nth-child',
       'no-xpath',
-      'prefer-user-facing-locator',
+      'prefer-get-by-test-id',
+      'prefer-semantic-locator',
       'require-test-tag',
     ])
   })

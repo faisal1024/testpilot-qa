@@ -1,7 +1,9 @@
 import type { AnalysisReport, Finding, ScoreBreakdown } from '@testpilot/core'
 
 function scoreLine(label: string, breakdown: ScoreBreakdown): string {
-  return `  ${label.padEnd(16)}${String(breakdown.score).padStart(3)}  ${breakdown.grade}`
+  return breakdown.score === null
+    ? `  ${label.padEnd(16)}  —`
+    : `  ${label.padEnd(16)}${String(breakdown.score).padStart(3)}  ${breakdown.grade}`
 }
 
 function findingLine(finding: Finding): string {
@@ -38,7 +40,9 @@ export function renderAnalysisText(report: AnalysisReport, newFindings?: Finding
     )
   }
   lines.push(
-    `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
+    score.score === null
+      ? `Locator Quality Score: not enough evidence  [${score.callSites} call-site(s), none inspectable]`
+      : `Locator Quality Score: ${score.score} (${score.grade})  [${score.callSites} call-site(s)]`,
   )
   lines.push(scoreLine('Resilience', score.subScores.resilience))
   lines.push(scoreLine('Accessibility', score.subScores.accessibility))

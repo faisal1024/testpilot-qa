@@ -5,7 +5,8 @@ import { noDeepCssChain } from './no-deep-css-chain.js'
 import { noHardWait } from './no-hard-wait.js'
 import { noNthChild } from './no-nth-child.js'
 import { noXpath } from './no-xpath.js'
-import { preferUserFacingLocator } from './prefer-user-facing-locator.js'
+import { preferGetByTestId } from './prefer-get-by-test-id.js'
+import { preferSemanticLocator } from './prefer-semantic-locator.js'
 import { requireTestTag } from './require-test-tag.js'
 import type { AnyRule, Rule, TestRule } from './types.js'
 
@@ -27,7 +28,8 @@ export const builtinRules: Rule[] = [
   noCssClassSelector,
   noNthChild,
   noDeepCssChain,
-  preferUserFacingLocator,
+  preferGetByTestId,
+  preferSemanticLocator,
   noHardWait,
   avoidPositionalAccess,
   avoidParentTraversal,
