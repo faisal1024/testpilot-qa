@@ -65,7 +65,8 @@ That's it. The rest of this README goes deeper on each command.
 | Command | What it does |
 |---|---|
 | `init` | Scaffold a TypeScript Playwright project (UI + API examples + AI guidance files). |
-| `run` | Thin pass-through to your local Playwright — not a custom runner. |
+| `run` | Thin pass-through to your local Playwright — not a custom runner. Selects tests by tag (`--tag`, `--suite`). |
+| `tags` | List the tag vocabulary of your suite, with per-tag test counts. |
 | `analyze` | Statically score locator quality and flag fragile patterns. Reports as table / JSON / SARIF / HTML. |
 | `fix` | Apply safe, behavior-preserving locator rewrites. **Dry-run by default.** |
 | `add ai` | Regenerate the AI agent guidance files. **Dry-run by default.** |
@@ -226,6 +227,62 @@ so a brownfield PR isn't buried under pre-existing debt; the comprehensive `json
 stay whole and carry the baseline summary. The CLI is fully usable without GitHub — SARIF is just one
 more `--reporter`. (The Action runs the published `testpilot-qa` package via `npx`.) Keep the Action at
 your repo root, or set `upload-sarif`'s `checkout_path`/`sourceRoot`, so the file paths resolve in the PR.
+
+---
+
+## Run a subset — `--tag` and `--suite`
+
+Playwright selects tagged tests with a regex. Getting that regex right is fiddly — `--grep @smoke`
+also runs `@smoketest`, and excluding a tag needs a *second* flag, `--grep-invert`. `run` takes the
+tags and writes the regex for you:
+
+```bash
+npx testpilot-qa run --tag smoke                  # tests tagged @smoke
+npx testpilot-qa run --tag smoke,regression       # either tag
+npx testpilot-qa run --tag smoke --exclude-tag flaky
+npx testpilot-qa run --tag '!slow'                # everything except @slow
+```
+
+It stays a pass-through: `--tag smoke` compiles to `--grep "(?<!\S)@smoke(?!\S)"` and the compiled
+flags are printed, so you can paste them into your own CI and drop TestPilot whenever you like. Tag
+either way Playwright supports — `test('checkout @smoke', …)` or
+`test('checkout', { tag: ['@smoke'] }, …)`. Tags on a `test.describe` count for every test inside it.
+
+**Name the sets you actually run.** In `testpilot.config.ts`:
+
+```ts
+export default defineConfig({
+  suites: {
+    smoke: ['smoke'],
+    nightly: ['regression', '!flaky'],
+  },
+})
+```
+
+```bash
+npx testpilot-qa run --suite nightly
+```
+
+A typo is an error, not an empty run: `--suite nighlty` exits `2` and lists the suites that exist,
+and `doctor` warns when a suite references a tag no test carries.
+
+**See what there is to select — `tags`:**
+
+```bash
+npx testpilot-qa tags
+```
+
+```
+TAG            TESTS  FILES
+@regression       86     14
+@accessibility    55     10
+@smoke            12      4
+
+3 tag(s) across 153 test(s) in 28 file(s); 41 untagged.
+```
+
+Static and instant — no browser, no test run. It also says where the list is incomplete (tests whose
+titles are built from template literals can hide a tag inside `${...}`).
 
 ---
 

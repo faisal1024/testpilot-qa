@@ -1,9 +1,11 @@
-import { runDoctor } from '@testpilot/core'
+import { loadConfig, resolveDiscovery, runDoctor } from '@testpilot/core'
+import { collectTags } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
 import { doctorExitCode } from '../util/doctor-exit.js'
 import { ExitCode } from '../util/exit-codes.js'
-import { readGlobalOptions } from '../util/global-options.js'
+import { type GlobalOptions, readGlobalOptions } from '../util/global-options.js'
 import { renderDoctorText } from '../util/render-doctor.js'
+import { resolveRootDir } from '../util/resolve-config.js'
 
 interface DoctorOptions {
   strictGuidance?: boolean
@@ -19,6 +21,7 @@ export async function doctorCommand(options: DoctorOptions, command: Command): P
       configPath: globals.configPath,
       strictGuidance: options.strictGuidance === true,
       disablePlaywrightFallback: globals.playwrightDiscovery === false,
+      tagVocabulary: () => readTagVocabulary(globals),
     })
   } catch (error) {
     if (!globals.quiet) {
@@ -40,4 +43,37 @@ export async function doctorCommand(options: DoctorOptions, command: Command): P
   }
 
   process.exit(doctorExitCode(report))
+}
+
+/**
+ * Reads the suite's tag vocabulary for `doctor`'s `suites` check.
+ *
+ * Only called when suites are configured, so an untagged project pays nothing.
+ * Deliberately does not reuse `resolveDiscoveryOrExit`: that helper exits the
+ * process on a config problem, and `doctor` must report problems, never exit
+ * from inside a check. Returns `null` when the vocabulary cannot be determined
+ * — an empty set would report every configured tag as a typo.
+ */
+async function readTagVocabulary(globals: GlobalOptions): Promise<ReadonlySet<string> | null> {
+  try {
+    const loaded = await loadConfig({ cwd: globals.cwd, configPath: globals.configPath })
+    const rootDir = resolveRootDir(globals.cwd, loaded.filepath)
+    const resolved = resolveDiscovery(loaded, {
+      rootDir,
+      disablePlaywrightFallback: globals.playwrightDiscovery === false,
+    })
+    const report = await collectTags({
+      cwd: globals.cwd,
+      config: resolved.config,
+      rootDir,
+      scopes: resolved.scopes,
+      discovery: resolved.discovery,
+    })
+    if (report.summary.filesAnalyzed === 0) {
+      return null
+    }
+    return new Set(report.tags.map((usage) => usage.tag))
+  } catch {
+    return null
+  }
 }

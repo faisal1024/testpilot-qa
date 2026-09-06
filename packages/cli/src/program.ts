@@ -6,11 +6,13 @@ import { explainCommand } from './commands/explain.js'
 import { fixCommand } from './commands/fix.js'
 import { initCommand } from './commands/init.js'
 import { runCommand } from './commands/run.js'
+import { tagsCommand } from './commands/tags.js'
 import { CLI_VERSION } from './version.js'
 
 /**
  * Builds the TestPilot CLI program: the five MVP commands — `init` (scaffolding),
- * `run` (Playwright pass-through), `analyze` (static locator analysis), `doctor`
+ * `run` (Playwright pass-through, with tag/suite selection), `analyze` (static
+ * locator analysis), `tags` (tag vocabulary), `doctor`
  * (project diagnostics), and `explain` (rule education) — plus `fix` (safe,
  * dry-run-by-default mechanical locator rewrites) and `add ai` (safe,
  * dry-run-by-default AI guidance regeneration).
@@ -50,12 +52,30 @@ export function buildProgram(): Command {
     .option('--force', 'Overwrite existing files.', false)
     .action(initCommand)
 
+  const collect = (value: string, previous: string[]): string[] => [...previous, value]
+
   program
     .command('run')
     .description('Run Playwright tests — a thin pass-through. Forward args after `--`.')
+    .option(
+      '--tag <tags>',
+      'Run tests with these tags (comma-separated, any-of). Prefix with ! to exclude.',
+      collect,
+      [],
+    )
+    .option('--exclude-tag <tags>', 'Skip tests with these tags (comma-separated).', collect, [])
+    .option('--suite <name>', 'Run a named tag set from testpilot.config.ts `suites`.', collect, [])
     .allowUnknownOption()
     .allowExcessArguments()
+    .addHelpText('after', GLOBAL_FLAGS_HELP)
     .action(runCommand)
+
+  program
+    .command('tags [patterns...]')
+    .description('List the tag vocabulary of the suite, with per-tag test counts.')
+    .option('--output <path>', 'Write the report to a file instead of stdout.')
+    .addHelpText('after', GLOBAL_FLAGS_HELP)
+    .action(tagsCommand)
 
   program
     .command('analyze [patterns...]')

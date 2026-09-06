@@ -67,6 +67,12 @@ export const configSchema = z
      * this, or passing `--with-helpers`, turns it on.
      */
     includeHelpers: z.array(z.string()).default([]),
+    /**
+     * Named tag sets for `testpilot run --suite <name>`. Values are tag tokens:
+     * `smoke` includes, `!flaky` excludes. Empty by default — a project without
+     * tags gets no behaviour it did not ask for.
+     */
+    suites: z.record(z.array(z.string())).default({}),
     rules: z.record(severitySchema).default({}),
     scoring: scoringSchema,
     ai: aiSchema,

@@ -93,13 +93,42 @@ testpilot init demo --json
 
 ---
 
-### 3.1a `testpilot run` *(MVP — implemented in 2.5)*
+### 3.1a `testpilot run` *(MVP — implemented in 2.5; tag selection in Phase 10)*
 
 Run Playwright tests through a **thin pass-through**. TestPilot adds no execution semantics — Playwright remains the runner.
 
 ```
-testpilot run [-- <playwright args>]
+testpilot run [--tag <tags>] [--exclude-tag <tags>] [--suite <name>] [-- <playwright args>]
 ```
+
+| Flag | Meaning |
+|---|---|
+| `--tag <tags>` | Run tests carrying any of these tags. Comma-separated, repeatable. A `!` prefix excludes. |
+| `--exclude-tag <tags>` | Skip tests carrying any of these tags. Comma-separated, repeatable. |
+| `--suite <name>` | Expand a named tag set from the config's `suites` key. Repeatable. |
+
+Tag selection **compiles to Playwright's own flags** and nothing else:
+
+| You write | TestPilot runs |
+|---|---|
+| `--tag smoke` | `--grep "(?<!\S)@smoke(?!\S)"` |
+| `--tag smoke,regression` | `--grep "(?<!\S)@(?:smoke\|regression)(?!\S)"` |
+| `--tag '!slow'` / `--exclude-tag slow` | `--grep-invert "(?<!\S)@slow(?!\S)"` |
+
+The compiled flags are printed on stderr, so a team dropping TestPilot can paste them into their own
+CI. The boundary assertions are Playwright's own tag tokenization (`@\S+`), which is what makes
+`--tag smoke` skip `@smoketest` and `--tag team` skip `@team:auth` — the mistake hand-written
+`--grep` invites.
+
+**Rules**
+- Tag names must start with a letter, digit or `_` and contain no whitespace or `@`. Anything more
+  exotic still works through `run -- --grep '<pattern>'`.
+- A tag both included and excluded is a **usage error** (`2`), not an empty run.
+- An unknown `--suite` is a **usage error** (`2`) that lists the suites that do exist. A typo must
+  never fall through to running the whole suite.
+- Combining `--tag`/`--suite` with a forwarded `--grep`/`-g`/`--grep-invert` is a **usage error**
+  (`2`): Playwright keeps only the last occurrence, so one of the two filters would be silently lost.
+- `--tag` and `--suite` compose; the excludes of both apply.
 
 **Behavior:** finds the project root (nearest `package.json`), loads `testpilot.config.ts` if
 present, resolves the Playwright config (from `config.playwrightConfig` or discovery), invokes the
@@ -111,6 +140,7 @@ Playwright's own exit code.
 | Playwright's result | passes through (Playwright's code) |
 | Invalid `testpilot.config.ts` | `3` |
 | Playwright not installed locally | `4` (message: run `npm install`) |
+| Bad tag/suite selection (unknown suite, malformed tag, `--grep` conflict) | `2` |
 
 **Examples**
 ```bash
@@ -119,7 +149,16 @@ testpilot run -- --project=chromium
 testpilot run -- tests/example.spec.ts
 testpilot run -- --workers=2              # Playwright parallelism, passed straight through
 testpilot run -- tests/ui --workers=2     # run only the UI tests, with 2 workers
+
+testpilot run --tag smoke                 # tests tagged @smoke
+testpilot run --tag smoke,regression      # either tag (any-of)
+testpilot run --tag smoke --exclude-tag flaky
+testpilot run --tag '!slow'               # everything except @slow
+testpilot run --suite nightly             # a named set from testpilot.config.ts
+testpilot run --suite nightly -- --workers=4
 ```
+
+`testpilot tags` (§3.2a) lists what there is to select.
 
 Parallelism is **Playwright's** (`fullyParallel: true` + `--workers`), not TestPilot's — `run`
 forwards everything after `--` verbatim. The generated project must still run with plain
@@ -218,6 +257,55 @@ testpilot analyze --reporter sarif --output testpilot.sarif --baseline testpilot
 
 # Tier 2: concrete suggestions from a Playwright trace
 testpilot analyze tests/login.spec.ts --dom ./test-results/login/trace.zip
+```
+
+---
+
+### 3.2a `testpilot tags` *(Phase 10)*
+
+List the **tag vocabulary** of the suite, statically. No browser, no Playwright process — the same
+AST pass `analyze` uses. This is the discoverability half of tag-based running: `--grep` can filter,
+but it can never tell you what there is to filter by.
+
+```
+testpilot tags [globs...] [--output <path>]
+```
+
+**Reads tags from both places Playwright does:** `@tag` tokens in a title, and the
+`{ tag: [...] }` details argument. Tags on a `test.describe` are inherited by every test inside it,
+including through nesting — the count reported is what `--grep` would actually select.
+
+**Output (table):** one row per tag with the number of tests and files carrying it, sorted by count;
+then the totals and the untagged count; then the configured `suites`, each resolved against the real
+vocabulary.
+
+**Honest bounds.** The vocabulary is a static read, so the report says where it is incomplete:
+
+| Warning | Meaning |
+|---|---|
+| `dynamic-test-titles` | Titles built from a template literal — a tag inside `${...}` cannot be read. |
+| `files-not-parsed` | Files that failed to parse contribute no tags. |
+| `no-files-matched` | Discovery matched nothing. Exits `3`/`2` like `analyze` — "no tags" must never be the answer to "we scanned nothing". |
+
+**Exit codes:** `0` on success; `2`/`3` when discovery matched no files (same rules as `analyze`).
+
+**Example**
+```bash
+testpilot tags
+testpilot tags --json
+testpilot tags "e2e/**/*.spec.ts"
+```
+
+```
+TAG            TESTS  FILES
+@regression       86     14
+@accessibility    55     10
+@smoke            12      4
+
+3 tag(s) across 153 test(s) in 28 file(s); 41 untagged.
+
+Suites (testpilot.config.ts):
+  nightly: @regression, excluding @flaky — 84 test(s)
 ```
 
 ---
@@ -403,10 +491,30 @@ export default defineConfig({
     'prefer-user-facing-locator': 'warn',
     'no-hard-wait': 'error',
   },
+  // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
+  // `doctor` checks that every referenced tag exists, so a typo fails loudly
+  // instead of silently running zero tests.
+  suites: {
+    smoke: ['smoke'],
+    nightly: ['regression', '!flaky'],
+  },
   // rulePacks (external) is a V2 public-plugin feature — not configurable in MVP.
   ai: { agents: ['claude', 'cursor'] },
 })
 ```
+
+### `suites`
+
+| | |
+|---|---|
+| Type | `Record<string, string[]>` |
+| Default | `{}` |
+| Used by | `testpilot run --suite <name>`, `testpilot tags`, `testpilot doctor` |
+
+Each value is a list of tag tokens: `smoke` selects, `!smoke` excludes. Suite names must be writable
+on a command line (letters, digits, `_`, `-`). An empty suite is a `doctor` **failure** — it would
+select every test. A suite naming a tag no test carries is a `doctor` **warning** (the tag may not
+be written yet) and is called out in `testpilot tags`.
 
 ---
 
@@ -492,6 +600,42 @@ still have something to read; the table and HTML reporters print only the error.
 against the saved baseline. Findings are sorted by `(file, line, column, ruleId)`, so the report is
 deterministic and diffable.
 
+### `tags --json` (`schemaVersion` `1.0`)
+
+```json
+{
+  "schemaVersion": "1.0",
+  "command": "tags",
+  "rootDir": "/abs/path/to/project",
+  "discovery": { "…": "same shape as analyze" },
+  "summary": {
+    "filesAnalyzed": 28,
+    "filesWithParseErrors": 0,
+    "tests": 153,
+    "taggedTests": 112,
+    "untaggedTests": 41,
+    "distinctTags": 3,
+    "dynamicTitles": 2
+  },
+  "tags": [{ "tag": "regression", "tests": 86, "files": 14 }],
+  "suites": [
+    {
+      "name": "nightly",
+      "include": ["regression"],
+      "exclude": ["flaky"],
+      "unknownTags": [],
+      "matchingTests": 84
+    }
+  ],
+  "warnings": [{ "code": "dynamic-test-titles", "message": "…" }],
+  "parseErrors": []
+}
+```
+
+Tag names are stored **without** the leading `@`. `matchingTests` is `null` when the suite
+references a tag no test carries — a count over a vocabulary we know is wrong would be worse than no
+count. `warnings[].code` adds `dynamic-test-titles` and `files-not-parsed` for this command.
+
 **SARIF (`--reporter sarif`)** is a derived view of the same findings, not a second contract: each
 distinct `ruleId` becomes a SARIF reporting descriptor (with its `helpUri`), and each finding becomes a
 result whose `level` maps from severity (`error`→`error`, `warn`→`warning`, `info`→`note`) at its
@@ -525,7 +669,7 @@ across line moves.
 
 Distinguishing `1` (legitimate quality gate) from `2–5` (operational failures) lets CI treat them differently.
 
-**A run that matches zero test files is never a pass.** `analyze` and `fix` exit `2` when explicit
+**A run that matches zero test files is never a pass.** `analyze`, `fix` and `tags` exit `2` when explicit
 patterns match nothing and `3` when config-driven discovery (`testDir` + `include`) matches nothing,
 printing what was searched (a **directory** argument that matches nothing is a `3` too — it is
 expanded with the config's `include`). The default `include` is
@@ -648,7 +792,8 @@ What exists today — see the per-command sections above for details:
 | Command | Status | Summary |
 |---|---|---|
 | `testpilot init` | MVP (2.5) | Scaffold a TypeScript Playwright project + AI guidance files. |
-| `testpilot run` | MVP (2.5) | Thin pass-through to the project's local Playwright. |
+| `testpilot run` | MVP (2.5) + Phase 10 | Thin pass-through to the project's local Playwright; `--tag`/`--exclude-tag`/`--suite` compile to `--grep`/`--grep-invert`. |
+| `testpilot tags` | Phase 10 | Static tag vocabulary with per-tag counts, untagged count, and suite resolution. |
 | `testpilot analyze` | MVP + 6A/6B/7A | Static Tier 1 analysis; `--min-score` gate; `--baseline`/`--update-baseline` no-regression gate; `--output`; `--reporter table\|json\|sarif\|html`. |
 | `testpilot fix` | 8A | Safe, behavior-preserving mechanical rewrites. **Dry-run by default; `--write` to apply.** Not DOM-aware, not broad auto-fix. |
 | `testpilot add ai` | 6C | Regenerate AI guidance files (dry-run by default; `--write`/`--force`). Other `add` subcommands remain V1. |

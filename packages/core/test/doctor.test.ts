@@ -322,3 +322,89 @@ describe('runDoctor', () => {
     })
   })
 })
+
+describe('doctor: tag suites', () => {
+  it('adds no check when no suites are configured', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      const report = await runDoctor({ cwd: dir })
+      expect(report.checks.find((check) => check.id === 'suites')).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('fails on a structurally broken suite, without needing the sources', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        'export default { suites: { nightly: [] } }\n',
+      )
+      const report = await runDoctor({ cwd: dir })
+      const check = report.checks.find((c) => c.id === 'suites')
+      expect(check?.status).toBe('fail')
+      expect(check?.message).toMatch(/would run every test/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('warns on a tag no test carries', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { suites: { nightly: ['regresion'] } }\n",
+      )
+      const report = await runDoctor({
+        cwd: dir,
+        tagVocabulary: async () => new Set(['regression']),
+      })
+      const check = report.checks.find((c) => c.id === 'suites')
+      expect(check?.status).toBe('warn')
+      expect(check?.message).toMatch(/@regresion/)
+      expect(report.nextActions.join(' ')).toMatch(/testpilot tags/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('passes when every referenced tag exists', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { suites: { nightly: ['regression', '!flaky'] } }\n",
+      )
+      const report = await runDoctor({
+        cwd: dir,
+        tagVocabulary: async () => new Set(['regression', 'flaky']),
+      })
+      expect(report.checks.find((c) => c.id === 'suites')?.status).toBe('pass')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('says so rather than reporting every tag valid when the vocabulary is unreadable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'testpilot-doctor-suites-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), '{"name":"x"}')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { suites: { nightly: ['regression'] } }\n",
+      )
+      const report = await runDoctor({ cwd: dir, tagVocabulary: async () => null })
+      const check = report.checks.find((c) => c.id === 'suites')
+      expect(check?.status).toBe('warn')
+      expect(check?.message).toMatch(/not verified|were not verified/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

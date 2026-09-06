@@ -76,6 +76,39 @@ export {
   type TestPilotConfigInput,
 } from './config/schema.js'
 export {
+  type BuildTagSelectionInput,
+  buildTagSelection,
+  describeTagSelection,
+  escapeForRegExp,
+  findConflictingGrep,
+  isEmptySelection,
+  parseTagToken,
+  splitTagList,
+  type TagName,
+  tagPattern,
+  type TagSelection,
+  TagSelectionError,
+  tagSelectionArgs,
+} from './tags/tag-selection.js'
+export {
+  expandSuites,
+  isValidSuiteName,
+  selectionInputFor,
+  type SuiteMap,
+} from './tags/suites.js'
+export {
+  type SuiteUsage,
+  TAGS_SCHEMA_VERSION,
+  type TagUsage,
+  type TagsReport,
+  type TagsSummary,
+} from './tags/report.js'
+export {
+  type SuiteIssue,
+  unknownSuiteTags,
+  validateSuites,
+} from './tags/validate-suites.js'
+export {
   type CheckStatus,
   DOCTOR_SCHEMA_VERSION,
   type DoctorCategory,
