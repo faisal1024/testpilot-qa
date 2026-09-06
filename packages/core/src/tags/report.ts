@@ -52,6 +52,11 @@ export interface SuiteUsage {
    */
   unknownTags: string[]
   /**
+   * Excluded tags no test carries. Harmless — an exclusion of something nobody
+   * has cannot change the selection — so these never suppress the count.
+   */
+  unknownExcludedTags: string[]
+  /**
    * Tests the suite would select, or `null` when no honest count exists: the
    * suite references unknown tags, is malformed, or the vocabulary is knowingly
    * incomplete. A count over a vocabulary we know is wrong is worse than none.
@@ -93,6 +98,11 @@ export interface TagsSummary {
    */
   unreadableTitles: number
   /**
+   * `test.describe` blocks whose body is a reference rather than an inline
+   * function. The tests inside are declared elsewhere and cannot be seen.
+   */
+  describesNotInlined: number
+  /**
    * False when anything above (or an unscanned test root) means the vocabulary
    * is knowingly short of the truth. The single flag every consumer keys on —
    * `tags`, `doctor`, and the suite counts — so they cannot drift apart and
@@ -120,6 +130,8 @@ export interface TagsWarning {
     | 'unreadable-tag-expressions'
     | 'unreadable-test-titles'
     | 'no-tests-recognized'
+    | 'describe-body-not-inlined'
+    | 'playwright-config-tags'
     | 'unselectable-tags'
   message: string
 }

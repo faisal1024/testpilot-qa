@@ -16,7 +16,7 @@ import {
   parseTagToken,
   selectionInputForSuite,
   splitTagList,
-  unknownSuiteTags,
+  unknownSuiteTagsDetailed,
 } from '@testpilot/core'
 import { parseSource } from '../parser.js'
 import { type FileScope, discoveryBase, resolveFiles } from '../resolve-files.js'
@@ -94,6 +94,8 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   let dynamicTitles = 0
   let unreadableTagExpressions = 0
   let unreadableTitles = 0
+  let describesNotInlined = 0
+  let filesWithNoTests = 0
 
   for (const absolute of files) {
     const relativePath = toPosix(relative(reportBase, absolute))
@@ -114,6 +116,10 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
 
     const extracted = extractTests(program)
     unreadableTagExpressions += extracted.unreadableTagExpressions
+    describesNotInlined += extracted.describesNotInlined
+    if (extracted.tests.length === 0) {
+      filesWithNoTests += 1
+    }
     for (const declaration of extracted.tests) {
       declarations.push(declaration)
       tests += 1
@@ -171,14 +177,29 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   // Scanned real files and recognized no tests at all: almost always a renamed
   // import (`import { test as setup }`), which the walk keys on by name. Saying
   // "no tags found" there is an answer to a question we never managed to ask.
-  const parsedFiles = files.length - parseErrors.length
-  if (parsedFiles > 0 && tests === 0) {
-    // Scoped to the files that parsed, so an unrelated parse error elsewhere
-    // cannot suppress the disclosure — the previous condition let one broken
-    // file hide the fact that nothing was recognized in the others.
+  // Per file, not per run: a suite where one file uses a renamed import and the
+  // rest are normal never tripped the whole-run condition, so the gap was
+  // invisible in exactly the mixed case real repos have (Ghost's
+  // global.setup.ts, mattermost's test_setup.ts).
+  if (filesWithNoTests > 0) {
     warnings.push({
       code: 'no-tests-recognized',
-      message: `${parsedFiles} file(s) parsed but no \`test()\` declarations were recognized. Tests declared through a renamed import (e.g. \`import { test as setup }\`) are not seen, so this vocabulary may be empty for the wrong reason.`,
+      message: `${filesWithNoTests} file(s) parsed but declared no \`test()\` we recognized. Tests declared through a renamed import (e.g. \`import { test as setup }\`) are not seen, so tags in those files are missing from this vocabulary.`,
+    })
+  }
+  if (options.discovery?.playwrightConfigDeclaresTags) {
+    // `testConfig.tag` / `testProject.tag` puts a tag on every test in every
+    // file. We do not read the values yet, but claiming a complete vocabulary
+    // while one is declared would have `doctor` call a correct suite a typo.
+    warnings.push({
+      code: 'playwright-config-tags',
+      message: `${options.discovery.playwrightConfigPath ?? 'The Playwright config'} declares a \`tag\` key, which Playwright applies to every test. Those tags are not read here, so this vocabulary is incomplete.`,
+    })
+  }
+  if (describesNotInlined > 0) {
+    warnings.push({
+      code: 'describe-body-not-inlined',
+      message: `${describesNotInlined} \`test.describe\` block(s) take their body from a variable or function reference, so the tests inside them — and any tag on the block — could not be read.`,
     })
   }
   if (unreadableTitles > 0) {
@@ -216,15 +237,19 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
   // computed over it would be a lower bound stated as a fact.
   // `test-root-missing` / `playwright-config-partial` mean whole files were
   // never read at all, which is the largest gap of the lot.
+  const INCOMPLETE_CODES = new Set([
+    'test-root-missing',
+    'playwright-config-partial',
+    'no-tests-recognized',
+    'describe-body-not-inlined',
+    'playwright-config-tags',
+  ])
   const vocabularyComplete =
     unreadableTagExpressions === 0 &&
     unreadableTitles === 0 &&
     dynamicTitles === 0 &&
     parseErrors.length === 0 &&
-    !warnings.some(
-      (warning) =>
-        warning.code === 'test-root-missing' || warning.code === 'playwright-config-partial',
-    )
+    !warnings.some((warning) => INCOMPLETE_CODES.has(warning.code))
   const suites: SuiteUsage[] = Object.keys(options.config.suites)
     .sort()
     .map((name) => {
@@ -247,7 +272,8 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
         // print "all tests — N", a confident count for a suite that cannot run.
         malformed = true
       }
-      const unknown = unknownSuiteTags(entry, vocabulary)
+      const missing = unknownSuiteTagsDetailed(entry, vocabulary)
+      const unknown = missing.include
       const countable = !malformed && unknown.length === 0 && vocabularyComplete
       // Count over `anchoredTags`, not `effectiveTags`: a tag that only appears
       // fused to a word (`user@dual`) is one Playwright reads but our leading
@@ -262,7 +288,16 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
               !exclude.some((tag) => declaration.anchoredTags.includes(tag)),
           ).length
         : null
-      return { name, include, all, exclude, unknownTags: unknown, matchingTests, malformed }
+      return {
+        name,
+        include,
+        all,
+        exclude,
+        unknownTags: unknown,
+        unknownExcludedTags: missing.exclude,
+        matchingTests,
+        malformed,
+      }
     })
 
   return {
@@ -280,6 +315,7 @@ export async function collectTags(options: CollectTagsOptions): Promise<TagsRepo
       dynamicTitles,
       unreadableTagExpressions,
       unreadableTitles,
+      describesNotInlined,
       vocabularyComplete,
     },
     tags,

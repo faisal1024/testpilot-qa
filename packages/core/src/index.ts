@@ -114,7 +114,9 @@ export {
 export {
   type SuiteIssue,
   selectionInputForSuite,
+  type UnknownSuiteTags,
   unknownSuiteTags,
+  unknownSuiteTagsDetailed,
   validateSuites,
 } from './tags/validate-suites.js'
 export {

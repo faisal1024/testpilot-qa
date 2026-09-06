@@ -15,6 +15,7 @@ import {
   tagPattern,
   tagSelectionArgs,
   unknownSuiteTags,
+  unknownSuiteTagsDetailed,
   validateSuites,
 } from '../src/index.js'
 
@@ -417,10 +418,29 @@ describe('validateSuites', () => {
 })
 
 describe('unknownSuiteTags', () => {
-  it('reports tags no test carries, on both sides', () => {
-    expect(unknownSuiteTags(['regression', '!flakey'], new Set(['regression', 'flaky']))).toEqual([
-      'flakey',
+  it('reports include-side tags no test carries', () => {
+    expect(unknownSuiteTags(['regresion', '!flaky'], new Set(['regression', 'flaky']))).toEqual([
+      'regresion',
     ])
+  })
+
+  it('does not treat a missing EXCLUDE tag as changing the selection', () => {
+    // `nightly: ['regression', '!flaky']` before anyone tags @flaky: excluding
+    // a tag nobody carries cannot change what runs, so it must not be reported
+    // as "would not select what you expect", nor suppress the count.
+    const vocabulary = new Set(['regression'])
+    expect(unknownSuiteTags(['regression', '!flaky'], vocabulary)).toEqual([])
+    expect(unknownSuiteTagsDetailed(['regression', '!flaky'], vocabulary)).toEqual({
+      include: [],
+      exclude: ['flaky'],
+    })
+  })
+
+  it('separates the two sides', () => {
+    expect(unknownSuiteTagsDetailed(['a', '!b'], new Set())).toEqual({
+      include: ['a'],
+      exclude: ['b'],
+    })
   })
 
   it('reports nothing when every tag exists', () => {

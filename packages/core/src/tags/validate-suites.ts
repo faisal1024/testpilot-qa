@@ -70,20 +70,38 @@ export function unknownSuiteTags(
   entry: SuiteDefinition,
   vocabulary: ReadonlySet<string>,
 ): string[] {
-  const unknown: string[] = []
+  return unknownSuiteTagsDetailed(entry, vocabulary).include
+}
+
+export interface UnknownSuiteTags {
+  /** Referenced on the include side. These change what the suite selects. */
+  include: string[]
+  /**
+   * Referenced on the exclude side. A tag nobody carries cannot change the
+   * selection, so this is a no-op to mention, never "would not select what you
+   * expect" — the README's own `nightly: ['regression', '!flaky']` example
+   * trips it the moment nobody has tagged `@flaky` yet.
+   */
+  exclude: string[]
+}
+
+export function unknownSuiteTagsDetailed(
+  entry: SuiteDefinition,
+  vocabulary: ReadonlySet<string>,
+): UnknownSuiteTags {
   let selection: ReturnType<typeof buildTagSelection>
   try {
     selection = buildTagSelection(selectionInputForSuite(entry))
   } catch {
     // Malformed tokens are reported by validateSuites; do not double-report.
-    return []
+    return { include: [], exclude: [] }
   }
-  for (const tag of [...selection.include, ...selection.all, ...selection.exclude]) {
-    if (!vocabulary.has(tag)) {
-      unknown.push(tag)
-    }
+  const missing = (tags: string[]) =>
+    [...new Set(tags.filter((tag) => !vocabulary.has(tag)))].sort()
+  return {
+    include: missing([...selection.include, ...selection.all]),
+    exclude: missing(selection.exclude),
   }
-  return [...new Set(unknown)].sort()
 }
 
 /** Both suite forms, as {@link buildTagSelection} input. */

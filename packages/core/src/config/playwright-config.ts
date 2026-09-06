@@ -26,6 +26,16 @@ export interface PlaywrightScope {
 
 export interface PlaywrightTestSettings {
   scopes: PlaywrightScope[]
+  /**
+   * True when the config (or a project) declares a `tag` key.
+   *
+   * Playwright applies `testConfig.tag` to **every test in every file**, so a
+   * statically-read vocabulary that ignores it is short by a tag nobody wrote
+   * in a test — and `doctor` would call a correct `suites` entry a typo. We do
+   * not read the values yet; knowing the key is there is enough to stop
+   * claiming the vocabulary is complete.
+   */
+  declaresTags: boolean
 }
 
 export type PlaywrightConfigRead =
@@ -321,8 +331,12 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
 
   const configDir = dirname(configPath)
 
+  let declaresTags = false
   const readSelectors = (object: Node): RawSelectors => {
     if (hasSpread(object)) unresolved.push('a spread from another object')
+    if (propertyValue(object, 'tag')) {
+      declaresTags = true
+    }
     const result: RawSelectors = { testDir: null, match: null, ignore: null }
     const testDirNode = propertyValue(object, 'testDir')
     if (testDirNode) {
@@ -446,5 +460,5 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
       ? { status: 'unreadable', reason: describeUnresolved(unique) }
       : { status: 'no-settings' }
   }
-  return { status: 'ok', settings: { scopes }, unresolved: unique }
+  return { status: 'ok', settings: { scopes, declaresTags }, unresolved: unique }
 }

@@ -149,10 +149,10 @@ function normalizeTag(raw: string): string | null {
 }
 
 /**
- * Playwright throws at load time on a details tag without a leading `@`
- * ("Tag must start with '@' symbol"), so such a file cannot run at all. Naming
- * the tag anyway would put something in the vocabulary that can never exist;
- * it is counted as unreadable instead.
+ * Playwright rejects a details tag without a leading `@` at load time
+ * (1.63: `details.tag: does not match any of the expected types` → no tests
+ * found), so such a file cannot run at all. Naming the tag anyway would put
+ * something in the vocabulary that can never exist; it is counted as unreadable.
  */
 function isWellFormedDetailsTag(raw: string): boolean {
   return raw.trim().startsWith('@')
@@ -247,7 +247,14 @@ function classify(node: AstNode): CallKind {
       // `test.describe.configure({...})` and friends declare nothing.
       return null
     }
-    return args.some(isFunctionNode) ? 'describe' : null
+    // `(cb)`, `(title, cb)` and `(title, details, cb)` — describe has no
+    // non-declaration overload, so requiring a *literal* function argument was
+    // pure over-restriction: `test.describe('g @shared', sharedTests)` was
+    // dropped, and its tag with it. Same hole as the test branch, one level up.
+    if (args.length === 0) {
+      return null
+    }
+    return isFunctionNode(args[0]) || args.length >= 2 ? 'describe' : null
   }
 
   if (!rest.every((part) => TEST_MODIFIERS.has(part))) {
@@ -267,11 +274,26 @@ function classify(node: AstNode): CallKind {
   // object. That is the only discriminator available, and it errs toward
   // "declaration" — which widens the vocabulary rather than narrowing it.
   const ambiguous = rest.some((part) => part !== 'only')
-  const secondArg = args[1]
-  if (ambiguous && secondArg?.type === 'Literal' && typeof secondArg.value === 'string') {
+  if (ambiguous && isDescriptionArg(args[1])) {
     return null
   }
   return 'test'
+}
+
+/**
+ * True for the *description* argument of an in-body modifier.
+ *
+ * A declaration's second argument is a body function or a details object, never
+ * a string — so any string-valued expression there means `test.skip(cond, why)`.
+ * Template literals count: `test.skip(cond, \`reason ${x}\`)` appears in the
+ * corpus and was being counted as a phantom test declaration, which flipped the
+ * whole vocabulary to "incomplete" on a suite that was perfectly readable.
+ */
+function isDescriptionArg(arg: AstNode | undefined): boolean {
+  if (!arg) {
+    return false
+  }
+  return (arg.type === 'Literal' && typeof arg.value === 'string') || arg.type === 'TemplateLiteral'
 }
 
 interface OwnTags {
@@ -319,6 +341,13 @@ function ownTagsOf(node: AstNode): OwnTags {
 export interface ExtractedTests {
   tests: TestDeclaration[]
   /**
+   * `test.describe` blocks whose body is a reference rather than an inline
+   * function (`test.describe('g @shared', sharedTests)`). The tests inside are
+   * declared elsewhere, so neither they nor the describe's tags can be seen —
+   * the count and the vocabulary are both short by an unknown amount.
+   */
+  describesNotInlined: number
+  /**
    * Every unreadable `tag` entry in the file, on tests **and** describes.
    * File-level because a describe is not a declaration we report, and its
    * unreadable tags would otherwise vanish.
@@ -335,6 +364,7 @@ export interface ExtractedTests {
 export function extractTests(program: AstNode): ExtractedTests {
   const declarations: TestDeclaration[] = []
   let unreadableTagExpressions = 0
+  let describesNotInlined = 0
 
   const visit = (node: unknown, inherited: OwnTags): void => {
     if (node === null || typeof node !== 'object') {
@@ -362,6 +392,9 @@ export function extractTests(program: AstNode): ExtractedTests {
         unreadableTagExpressions += own.unreadable
         const nested = mergeTags(inherited, own)
         const args = (candidate.arguments as AstNode[]) ?? []
+        if (!args.some(isFunctionNode)) {
+          describesNotInlined += 1
+        }
         for (const arg of args) {
           visit(arg, isFunctionNode(arg) ? nested : inherited)
         }
@@ -404,5 +437,5 @@ export function extractTests(program: AstNode): ExtractedTests {
 
   visit(program, EMPTY_TAGS)
   declarations.sort((a, b) => a.line - b.line || a.column - b.column)
-  return { tests: declarations, unreadableTagExpressions }
+  return { tests: declarations, unreadableTagExpressions, describesNotInlined }
 }

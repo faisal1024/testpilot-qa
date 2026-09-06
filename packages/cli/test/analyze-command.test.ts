@@ -156,6 +156,7 @@ describe('analyze — nothing matched is never a pass', () => {
       playwrightConfigPath: join(dir, 'playwright.config.ts'),
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
+      playwrightConfigDeclaresTags: false,
     })
   })
 
@@ -169,6 +170,7 @@ describe('analyze — nothing matched is never a pass', () => {
       playwrightConfigPath: null,
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
+      playwrightConfigDeclaresTags: false,
     })
   })
 

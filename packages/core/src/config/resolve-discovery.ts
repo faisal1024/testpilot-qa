@@ -329,6 +329,7 @@ export function resolveDiscovery(
   discovery.testDir = 'playwright-config'
   discovery.roots = [...new Set(scopes.map((scope) => scope.root))]
   discovery.playwrightConfigPath = configPath
+  discovery.playwrightConfigDeclaresTags = read.settings.declaresTags
   if (adoptedInclude) {
     // Some scopes may still use our own globs (Playwright declared none for them).
     discovery.include = scopes.some((scope) => scope.includeGlobs.length > 0)

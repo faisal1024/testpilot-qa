@@ -106,6 +106,7 @@ describe('collectTags', () => {
         all: [],
         exclude: ['flaky'],
         unknownTags: [],
+        unknownExcludedTags: [],
         matchingTests: 1,
         malformed: false,
       },
@@ -115,6 +116,7 @@ describe('collectTags', () => {
         all: [],
         exclude: [],
         unknownTags: [],
+        unknownExcludedTags: [],
         matchingTests: 1,
         malformed: false,
       },
@@ -134,7 +136,7 @@ describe('collectTags', () => {
     // `import { test as setup }` — Playwright's own auth pattern. The walk keys
     // on the name `test`, so "no tags found" would answer a question we never
     // managed to ask.
-    write('tests/auth.setup.ts', "setup('authenticate @smoke', async () => {})")
+    write('tests/auth.spec.ts', "setup('authenticate @smoke', async () => {})")
     write('tests/a.spec.ts', "setup('other @smoke', async () => {})")
     const report = await collectTags({ cwd: dir, config: config() })
     expect(report.summary.tests).toBe(0)
@@ -320,6 +322,40 @@ describe('collectTags', () => {
       config: config({ suites: { d: ['dual'] } }),
     })
     expect(report.suites[0]?.matchingTests).toBe(1)
+  })
+
+  it('discloses a describe whose body is not inlined, and stops claiming completeness', async () => {
+    write('tests/a.spec.ts', "test.describe('desktop @shared', sharedTests)")
+    const report = await collectTags({ cwd: dir, config: config({ suites: { d: ['shared'] } }) })
+    expect(report.warnings.map((w) => w.code)).toContain('describe-body-not-inlined')
+    expect(report.summary.vocabularyComplete).toBe(false)
+    // The suite is not accused of a typo over a tag we admit we could not read.
+    expect(report.suites[0]?.matchingTests).toBeNull()
+  })
+
+  it('discloses a renamed-import file even when other files are normal', async () => {
+    // The whole-run condition never fired in the mixed case real repos have
+    // (Ghost's global.setup.ts, mattermost's test_setup.ts).
+    write('tests/normal.spec.ts', "test('one @smoke', async () => {})")
+    write('tests/auth.spec.ts', "setup('authenticate @smoke', async () => {})")
+    const report = await collectTags({ cwd: dir, config: config() })
+    expect(report.summary.tests).toBe(1)
+    expect(report.warnings.map((w) => w.code)).toContain('no-tests-recognized')
+    expect(report.summary.vocabularyComplete).toBe(false)
+  })
+
+  it('does not suppress the count for an exclusion nobody carries', async () => {
+    // The README's own nightly example, before anyone tags @flaky.
+    write('tests/a.spec.ts', "test('1 @regression', async () => {})")
+    const report = await collectTags({
+      cwd: dir,
+      config: config({ suites: { nightly: ['regression', '!flaky'] } }),
+    })
+    expect(report.suites[0]).toMatchObject({
+      unknownTags: [],
+      unknownExcludedTags: ['flaky'],
+      matchingTests: 1,
+    })
   })
 
   it('resolves an all-of suite', async () => {

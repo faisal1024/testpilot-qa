@@ -39,7 +39,12 @@ Run tests by tag, and see what tags exist.
   recognized (a renamed import such as `import { test as setup }`), and tags `--tag` cannot select.
   `summary.vocabularyComplete` is the single flag `tags`, `doctor` and the suite counts all key on,
   so they cannot disagree about whether a tag exists: when it is `false`, a tag we did not find is
-  reported as *unconfirmed*, never as a typo.
+  reported as *unconfirmed*, never as a typo. It also covers a `test.describe` whose body is a
+  function reference (its tests are declared elsewhere) and a Playwright config that declares its own
+  `tag` key, which Playwright applies to every test in every file.
+- **An exclusion nobody carries is a no-op, not a mistake.** `nightly: ['regression', '!flaky']`
+  before anyone has tagged `@flaky` no longer reports "would not select what you expect", and no
+  longer suppresses the suite's count.
 - **Fix:** `analyze` no longer warns that a `testDir` is missing when explicit patterns were passed —
   discovery never consulted it, so the warning named the wrong directory.
 

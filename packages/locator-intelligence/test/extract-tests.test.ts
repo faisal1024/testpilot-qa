@@ -111,6 +111,35 @@ describe('extractTests', () => {
     expect(found[0]).toMatchObject({ titleKnown: false, effectiveTags: ['regression'] })
   })
 
+  it('finds a describe whose body is passed by reference', () => {
+    // test.describe has no non-declaration overload, so requiring a literal
+    // function was pure over-restriction — and dropped the block's tag.
+    const found = extracted("test.describe('desktop @shared', sharedTests)")
+    expect(found.describesNotInlined).toBe(1)
+  })
+
+  it('finds a describe with only a callback', () => {
+    expect(extracted("test.describe(() => { test('x @a', async () => {}) })").tests).toHaveLength(1)
+  })
+
+  it('still ignores test.describe.configure', () => {
+    expect(extracted("test.describe.configure({ mode: 'serial' })").describesNotInlined).toBe(0)
+  })
+
+  it('counts an inlined describe as inlined', () => {
+    expect(
+      extracted("test.describe('g @a', () => { test('x', async () => {}) })").describesNotInlined,
+    ).toBe(0)
+  })
+
+  it('does not count a template-literal reason as a test declaration', () => {
+    // `test.skip(cond, `reason ${x}`)` is a modifier; counting it invented a
+    // phantom test whose unreadable title flipped the whole vocabulary to
+    // "incomplete" on a suite that was perfectly readable. cal.com has one.
+    expect(tests('test.skip(cond, `reason ${x}`)')).toHaveLength(0)
+    expect(tests('test.fixme(cond, `later ${y}`)')).toHaveLength(0)
+  })
+
   it('finds a test whose body is passed by reference', () => {
     // `test('one @smoke', body)` is a real declaration. Requiring a literal
     // function argument deleted it and its tags with no disclosure at all.
@@ -142,8 +171,9 @@ describe('extractTests', () => {
   })
 
   it('counts a details tag with no leading @ as unreadable, since Playwright rejects it', () => {
-    // Playwright throws "Tag must start with '@' symbol" at load, so the file
-    // cannot run; naming the tag would put an impossible entry in the vocabulary.
+    // Playwright rejects it at load (`details.tag: does not match any of the
+    // expected types`), so the file cannot run; naming the tag would put an
+    // impossible entry in the vocabulary.
     const found = tests("test('x', { tag: ['smoke'] }, async () => {})")
     expect(found[0]?.effectiveTags).toEqual([])
     expect(found[0]?.unreadableTags).toBe(1)

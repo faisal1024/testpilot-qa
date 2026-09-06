@@ -57,8 +57,30 @@ describe('readPlaywrightTestSettings — static parsing', () => {
             ignore: [],
           },
         ],
+        declaresTags: false,
       },
     })
+  })
+
+  it('reports a config-level `tag` key, which Playwright applies to every test', () => {
+    // We do not read the values yet; knowing the key exists is what stops the
+    // tag vocabulary from claiming to be complete.
+    const path = writeFile(
+      'playwright.config.ts',
+      "export default { testDir: './e2e', tag: '@APIv2' }\n",
+    )
+    const read = readSettings(path)
+    expect(read.status).toBe('ok')
+    expect(read.status === 'ok' && read.settings.declaresTags).toBe(true)
+  })
+
+  it('reports a project-level `tag` key too', () => {
+    const path = writeFile(
+      'playwright.config.ts',
+      "export default { projects: [{ testDir: './e2e', tag: ['@a'] }] }\n",
+    )
+    const read = readSettings(path)
+    expect(read.status === 'ok' && read.settings.declaresTags).toBe(true)
   })
 
   it('preserves a RegExp testMatch instead of dropping or mistranslating it', () => {
@@ -569,6 +591,7 @@ describe('resolveDiscovery', () => {
       playwrightConfigPath: null,
       playwrightConfigIgnored: null,
       playwrightConfigPartial: null,
+      playwrightConfigDeclaresTags: false,
     })
   })
 

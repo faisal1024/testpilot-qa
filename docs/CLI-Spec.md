@@ -310,7 +310,9 @@ is the difference between a vocabulary and noise: mattermost's `@abac` (122 test
 |---|---|
 | `dynamic-test-titles` | Titles built from a template literal. Text touching a `${...}` hole is not read at all, because it fuses with the hole at runtime — ``test(`@smoke${x}`)`` is the tag `@smokeX`, not `@smoke`. |
 | `unreadable-tag-expressions` | A `tag` entry that is a spread, a variable, or an interpolated template. Each is at least one tag the suite carries and this list cannot name. |
-| `no-tests-recognized` | Files were scanned but no `test()` was recognized — usually a renamed import (`import { test as setup }`), which the walk keys on by name. "No tags" would otherwise answer a question that was never asked. |
+| `no-tests-recognized` | A parsed file declared no `test()` we recognized — usually a renamed import (`import { test as setup }`), which the walk keys on by name. "No tags" would otherwise answer a question that was never asked. |
+| `describe-body-not-inlined` | A `test.describe` whose body is a variable or function reference. The tests inside it are declared elsewhere and cannot be read, nor can the block's tag reach them. |
+| `playwright-config-tags` | The Playwright config declares a `tag` key, which it applies to every test in every file. Those values are not read here. |
 | `unselectable-tags` | A tag `--tag` cannot select: the name contains a comma (split on) or leads with `-` (reads as a negation), or the tag only ever appears fused to a word (`user@smoke.example`), which Playwright reads as a tag and the leading boundary deliberately does not. `run -- --grep` reaches these. |
 | `files-not-parsed` | Files that failed to parse contribute no tags. |
 | `no-files-matched` | Discovery matched nothing. Exits `3`/`2` like `analyze` — "no tags" must never be the answer to "we scanned nothing". |
@@ -532,7 +534,7 @@ export default defineConfig({
     'no-hard-wait': 'error',
   },
   // Named tag sets for `testpilot run --suite <name>`. A leading `!` excludes.
-  // `doctor` checks that every referenced tag exists, so a typo fails loudly
+  // `doctor` warns when a referenced tag exists in no test, so a typo surfaces
   // instead of silently running zero tests.
   suites: {
     smoke: ['smoke'],
@@ -589,7 +591,8 @@ Stable, versioned envelope so agents and CI can depend on it. The shape below ma
     "roots": ["/abs/path/to/e2e"],
     "playwrightConfigPath": "/abs/path/to/playwright.config.ts",
     "playwrightConfigIgnored": null,
-    "playwrightConfigPartial": null
+    "playwrightConfigPartial": null,
+    "playwrightConfigDeclaresTags": false
   },
   "summary": {
     "filesAnalyzed": 3,
@@ -672,6 +675,7 @@ deterministic and diffable.
     "dynamicTitles": 2,
     "unreadableTagExpressions": 0,
     "unreadableTitles": 0,
+    "describesNotInlined": 0,
     "vocabularyComplete": false
   },
   "tags": [
@@ -684,6 +688,7 @@ deterministic and diffable.
       "all": [],
       "exclude": ["flaky"],
       "unknownTags": [],
+      "unknownExcludedTags": [],
       "matchingTests": 84
     }
   ],

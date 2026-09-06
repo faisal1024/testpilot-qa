@@ -77,6 +77,12 @@ export function renderTagsText(report: TagsReport): string {
           ? 'count unavailable'
           : `${suite.matchingTests} test declaration(s)`
       lines.push(`  ${suite.name}: ${what} — ${count}`)
+      if (suite.unknownExcludedTags.length > 0) {
+        // An exclusion of a tag nobody carries cannot change the selection.
+        lines.push(
+          `    · nothing carries ${suite.unknownExcludedTags.map((tag) => `@${tag}`).join(', ')}, so that exclusion currently does nothing.`,
+        )
+      }
       if (suite.unknownTags.length > 0) {
         const named = suite.unknownTags.map((tag) => `@${tag}`).join(', ')
         // Only call it a typo when the vocabulary is complete. Otherwise the tag

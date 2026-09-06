@@ -215,9 +215,9 @@ not a runner.
   word-bounded `--grep` / `--grep-invert` pair — the escaping and the two-flag negation are exactly
   what people get wrong by hand. Repeatable; composes with everything after `--`.
 - **10b — Named tag sets in `testpilot.config.ts`. ✅ Complete.** `suites: { smoke: ['smoke'], nightly:
-  ['regression', '!flaky'] }` → `testpilot run --suite nightly`. `doctor` validates that every
-  referenced tag exists in the suite (see 10c), so a typo fails loudly instead of silently running
-  zero tests — the same principle as Phase 9.
+  ['regression', '!flaky'] }` → `testpilot run --suite nightly`. `doctor` checks that every
+  referenced tag exists in the suite (see 10c) and **warns** when one does not, so a typo surfaces
+  instead of silently running zero tests — the same principle as Phase 9.
 - **10c — `testpilot tags`. ✅ Complete.** Statically lists the tag vocabulary with counts per tag and untagged
   test count, from the parser we already have (`test('…', { tag: [...] })` and `@tag` in titles). No
   browser, instant. This is the discoverability piece `--grep` can never offer.
@@ -239,7 +239,7 @@ occurrence). Suite entries split on **commas only** — whitespace splitting tur
 `'has space'` into two tags that happened to be valid, the same quiet reinterpretation Phase 9 spent
 five PRs removing. `tags` reports its own bounds: `dynamic-test-titles` and `files-not-parsed` say
 how incomplete the vocabulary is, and zero matched files exits `2`/`3` rather than answering "no
-tags". Verified on the corpus: mattermost yields a real 100+ tag vocabulary (`@abac` 122 tests,
+tags". Verified on the corpus: mattermost yields a real 91-tag vocabulary — 83 of them declared with `{ tag: [...] }` (`@abac` 122 tests,
 `@team_membership` 86, `@accessibility` 55); Ghost, immich, cal.com and documenso are genuinely
 untagged, so the plan's claim that cal.com uses `@tag` titles was wrong — its only `@`-tokens are
 content strings, and Playwright would read those as tags too.
