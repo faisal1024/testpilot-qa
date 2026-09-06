@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned commits so a benchmark run measures TestPilot changes, not upstream churn \u2014 the runner refuses to diff when a pin moves. Sparse patterns are non-cone (gitignore-style) and every one must match something: a dead pattern silently shrinks the corpus. Check out every directory the repo's Playwright config declares as a test root, or the benchmark manufactures the missing-root warning it exists to detect.",
+  "$comment": "Pinned commits so a benchmark run measures TestPilot changes, not upstream churn \u2014 the runner refuses to diff when a pin moves. Sparse patterns are non-cone (gitignore-style) and every one must match something: a dead pattern silently shrinks the corpus. Check out every directory the repo's Playwright config declares as a test root, or the benchmark manufactures the missing-root warning it exists to detect. Note the limit of the sparse checkouts: they hold test trees only, so the withHelpers columns can detect the helper gate narrowing but not it widening onto application source \u2014 that case needs a fixture, not the corpus.",
   "repos": [
     {
       "name": "cal.com",

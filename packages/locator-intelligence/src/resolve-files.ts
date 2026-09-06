@@ -16,16 +16,25 @@ const toPosix = (path: string): string => path.split('\\').join('/')
  * that happens to sit in a directory with a suggestive name. Read once, cheaply, and
  * only for helper candidates.
  *
- * The bar is exactly "contains something the extractor would extract". Anything looser
- * admits files that cannot produce a finding but still inflate the score's denominator
- * (an earlier version accepted `expect(`, which is Jest's and Vitest's too). Anything
- * tied to a receiver name is worse: page objects hold the handle as `this._page`,
- * `this.root`, `scope` or `adminPage` at least as often as `page`, and the extractor
- * matches by method name on any receiver — so a gate that insisted on `page.` rejected
- * real page objects while admitting non-Playwright code.
+ * The bar is "contains something the extractor extracts", but two of those methods are
+ * not Playwright's alone. `getBy*` and `nth` are Testing Library's too, and admitting
+ * an RTL helper is not harmless: it produces no findings while adding call sites, and
+ * call sites are the score's denominator — enough to move a failing `--min-score` gate
+ * to passing. So the shared methods count as evidence only when nothing in the file
+ * claims them for Testing Library.
+ *
+ * Nothing here may key on a receiver named `page`: page objects hold the handle as
+ * `this._page`, `this.root` or `adminPage` at least as often, and the extractor matches
+ * by method name on any receiver.
  */
-const PLAYWRIGHT_SIGNAL =
-  /from\s+['"]@playwright\/test['"]|require\(['"]@playwright\/test['"]\)|\bLocator\b|\.\s*(locator|frameLocator|getBy(Role|Text|Label|Placeholder|AltText|Title|TestId))\s*\(/
+const PLAYWRIGHT_UNIQUE =
+  /from\s+['"]@playwright\/test['"]|require\(['"]@playwright\/test['"]\)|\bLocator\b|\.\s*(locator|frameLocator|waitForTimeout)\s*\(/
+
+/** Extracted, but shared with Testing Library — evidence only in its owner's absence. */
+const SHARED_WITH_TESTING_LIBRARY =
+  /\.\s*(getBy(Role|Text|Label|Placeholder|AltText|Title|TestId)|nth)\s*\(/
+
+const TESTING_LIBRARY = /@testing-library\/|\bscreen\s*\.\s*getBy/
 
 /** Keeps a symlinked helper directory from taking analysis (and `fix --write`) outside. */
 function withinRoot(file: string, root: string): boolean {
@@ -40,7 +49,9 @@ function withinRoot(file: string, root: string): boolean {
 
 function usesPlaywright(file: string): boolean {
   try {
-    return PLAYWRIGHT_SIGNAL.test(readFileSync(file, 'utf8'))
+    const code = readFileSync(file, 'utf8')
+    if (PLAYWRIGHT_UNIQUE.test(code)) return true
+    return SHARED_WITH_TESTING_LIBRARY.test(code) && !TESTING_LIBRARY.test(code)
   } catch {
     return false
   }
@@ -262,7 +273,10 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       // A symlink can point anywhere; `fix --write` follows it. The helper scan
       // widened the root from `testDir` to the whole project, so this is the one
       // remaining route out of the checkout.
-      if (!withinRoot(file, helperScope.helperRoot)) continue
+      if (!withinRoot(file, helperScope.helperRoot)) {
+        helperCandidatesRejected += 1
+        continue
+      }
       // Directory names alone are not evidence: `pages/` is Next.js's routes and
       // `helpers/` is Ember's. A page object is a file that actually uses Playwright.
       if (usesPlaywright(file)) helpers.add(file)

@@ -28,8 +28,9 @@ quality.
   Ember's — so a candidate must also contain something the analyzer would extract before it is
   analyzed. Without that gate, `fix --write` would rewrite application source; on cal.com it would have
   reached seven Next.js route files. The gate is deliberately not keyed on a receiver named `page`
-  (page objects use `this._page`, `this.root`, `adminPage`) and deliberately excludes `expect(`, which
-  is Jest's and Vitest's too. When helper directories match but nothing in them uses Playwright, the
+  (page objects use `this._page`, `this.root`, `adminPage`), and `getBy*`/`.nth(` count as evidence
+  only when nothing in the file claims them for Testing Library — an RTL helper produces no findings
+  while adding call sites, which is enough to move a failing `--min-score` to passing. When helper directories match but nothing in them uses Playwright, the
   run says so rather than reporting an empty helper layer as an absent one.
 - **Helpers never rescue a failed run.** If the test scan matched nothing, the run still fails, rather
   than scoring the helper layer alone and turning a wrong `testDir` into a green gate.

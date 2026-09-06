@@ -106,10 +106,12 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   // Discovery problems belong in the report, not only on stderr: the HTML report is
   // what gets shared and SARIF is what the gate publishes, and neither should show a
   // confident grade over a config we admit we only half-read.
-  if (helpers.size === 0 && helperCandidatesRejected > 0) {
+  if (helperCandidatesRejected > 0) {
+    // Not only when *every* candidate was rejected: a layer where one file is admitted
+    // and twenty real ones are dropped is the same blindness, one level down.
     warnings.push({
       code: 'helpers-not-recognized',
-      message: `${helperCandidatesRejected} file(s) matched the helper patterns but show no sign of using Playwright, so none were analyzed. Name your page-object locations in \`includeHelpers\` if this is wrong.`,
+      message: `${helperCandidatesRejected} file(s) matched the helper patterns but show no sign of using Playwright, so they were not analyzed. Name your page-object locations in \`includeHelpers\` if this is wrong.`,
     })
   }
   if (options.discovery?.playwrightConfigPartial) {

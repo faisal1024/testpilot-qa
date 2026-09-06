@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { type DiscoveryScope, defaultConfig } from '@testpilot/core'
@@ -188,8 +188,16 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
         'helpers/component.js':
           'export class C { constructor(r){ this.root = r } row(i){ return this.root.locator("tr").nth(i) } }\n',
         'helpers/admin.js': 'export const admin = (adminPage) => adminPage.locator("div.admin")\n',
+        // The legacy POM shape: no `locator()` at all, just hard waits.
+        'helpers/legacy.js':
+          'export class L { constructor(p){ this.p = p } async go(){ await this.p.waitForTimeout(500) } }\n',
         'helpers/vitest-fixture.ts':
           "import { expect } from 'vitest'\nexport const seed = () => expect(1).toBe(1)\n",
+        // Testing Library shares `getBy*` with Playwright. Admitting this adds call
+        // sites — the score's denominator — from a file that can never produce a
+        // finding, which is enough to move a failing --min-score gate to passing.
+        'helpers/rtl.tsx':
+          "import { screen } from '@testing-library/react'\nexport const title = () => screen.getByRole('heading')\n",
       }
       for (const [path, body] of Object.entries(shapes)) {
         const full = write(path)
@@ -211,11 +219,46 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
       expect([...found.helpers].map((f) => relative(dir, f)).sort()).toEqual([
         join('helpers', 'admin.js'),
         join('helpers', 'component.js'),
+        join('helpers', 'legacy.js'),
         join('helpers', 'underscore.js'),
       ])
-      // Assertion libraries are not Playwright: admitting one inflates the score's
-      // denominator with files that can never produce a finding.
-      expect(found.helperCandidatesRejected).toBe(1)
+      // The Vitest fixture and the Testing Library helper.
+      expect(found.helperCandidatesRejected).toBe(2)
+    })
+
+    it('will not follow a symlinked helper directory out of the project', async () => {
+      // `--with-helpers` widened the scan root from testDir to the whole project, so
+      // this is the remaining route to analyzing — and with `fix --write`, rewriting —
+      // files outside it.
+      const outside = mkdtempSync(join(tmpdir(), 'testpilot-outside-'))
+      writeFileSync(
+        join(outside, 'evil.ts'),
+        "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.x')\n",
+      )
+      write('e2e/a.spec.ts')
+      mkdirSync(join(dir, 'helpers'), { recursive: true })
+      symlinkSync(outside, join(dir, 'helpers', 'linked'))
+      try {
+        const found = await resolveFiles({
+          cwd: dir,
+          config: defaultConfig,
+          rootDir: dir,
+          scopes: [
+            scope({
+              root: join(dir, 'e2e'),
+              includeGlobs: defaultConfig.include,
+              helperGlobs: ['**/helpers/**'],
+              helperRoot: dir,
+            }),
+          ],
+        })
+        expect(found.helpers.size).toBe(0)
+        // Skipped, but counted — a helper layer that vanishes silently is the failure
+        // this whole gate exists to avoid.
+        expect(found.helperCandidatesRejected).toBeGreaterThan(0)
+      } finally {
+        rmSync(outside, { recursive: true, force: true })
+      }
     })
 
     it('never scans helpers when the suite itself was not found', async () => {

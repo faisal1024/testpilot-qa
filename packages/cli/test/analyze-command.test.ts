@@ -331,6 +331,32 @@ describe('analyze — nothing matched is never a pass', () => {
     expect(stdout).toContain('page object/helper file(s)')
   })
 
+  it('cannot let a non-Playwright helper raise the score or flip the gate', async () => {
+    // Twice now the gate admitted files that produce no findings but add call sites —
+    // the score's denominator — turning a failing --min-score into a passing one.
+    // This is the assertion that catches it whatever the next false-positive shape is.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(join(dir, 'playwright.config.ts'), "export default { testDir: './tests' }\n")
+    writeFileSync(
+      join(dir, 'tests', 'a.spec.ts'),
+      "page.locator('//button')\npage.locator('.cls')\npage.waitForTimeout(9)\n",
+    )
+    mkdirSync(join(dir, 'helpers'), { recursive: true })
+    writeFileSync(
+      join(dir, 'helpers', 'render.tsx'),
+      "import { screen } from '@testing-library/react'\nexport const t = () => screen.getByRole('heading')\nexport const u = () => screen.getByText('x')\n",
+    )
+
+    const plain = JSON.parse((await runAnalyze(['--json'])).stdout)
+    const withHelpers = JSON.parse((await runAnalyze(['--json', '--with-helpers'])).stdout)
+    expect(withHelpers.score.callSites).toBe(plain.score.callSites)
+    expect(withHelpers.score.score).toBe(plain.score.score)
+
+    const gate = await runAnalyze(['--min-score', '50'])
+    const gateWithHelpers = await runAnalyze(['--min-score', '50', '--with-helpers'])
+    expect(gateWithHelpers.exitCode).toBe(gate.exitCode)
+  })
+
   it('says so when helper directories matched but nothing in them uses Playwright', async () => {
     // Silence here is indistinguishable from "you have no page objects", which is how
     // a gate that rejected every real page-object shape went unnoticed.
