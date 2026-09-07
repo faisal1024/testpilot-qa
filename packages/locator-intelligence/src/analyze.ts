@@ -383,7 +383,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     const percent = Math.round((uninspectedCallSites / callSites) * 100)
     warnings.push({
       code: 'uninspected-call-sites',
-      message: `${uninspectedCallSites} of ${callSites} locator call-site(s) (${percent}%) use a selector that is not statically known — an interpolated template literal, a variable, or an \`as string\`. No rule ran on them, but they still count toward the score's denominator, so the grade is partly over locators that were never inspected.`,
+      message: `${uninspectedCallSites} of ${callSites} locator call-site(s) (${percent}%) use a selector that is not a static string — most often an interpolated template literal or a variable, but any expression counts. No rule ran on them, but they still count toward the score's denominator, so the grade is partly over locators that were never inspected.`,
     })
   }
 

@@ -4,7 +4,7 @@
 
 > **Category:** locator · **Default severity:** info
 
-A raw tag, class, #id or text= selector says nothing about what the element is to a user.
+A raw tag, class or #id selector says nothing about what the element is to a user; a text= string says only what it reads.
 
 ## Why it matters
 
