@@ -55,7 +55,7 @@
     "jiti": "^2.4.2",
     "picomatch": "^4.0.2",
     "tinyglobby": "^0.2.10",
-    "zod": "^3.24.1"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@testpilot/ai": "workspace:*",
