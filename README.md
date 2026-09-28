@@ -20,22 +20,20 @@ still have a working suite. Zero lock-in.
 ## Install
 
 ```bash
-npm i -D testpilot-qa@0.1.0-alpha.2     # requires Node >= 20
+npm i -D -E testpilot-qa@alpha     # requires Node >= 20
 ```
 
 Then every `npx testpilot-qa …` example below resolves to your local copy — no network round-trip.
 The package installs three interchangeable binaries: **`testpilot`**, **`testpilot-qa`**, and
 **`tpq`**. This README uses the first two; pick whichever you prefer.
-Prefer not to install? Add the version inline: `npx testpilot-qa@0.1.0-alpha.2 …`.
+Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
 
-> **Pin an exact version.** Between `alpha.N` releases the CLI flags, JSON/SARIF report shapes,
-> baseline file format, rule ids, and scoring weights may all change without a major version bump —
-> see [Known limitations](#known-limitations-alpha) for what moved most recently. Pinning matters
-> most if you gate CI on `--min-score`.
->
-> The `alpha` dist-tag tracks the newest prerelease (`npm i -D testpilot-qa@alpha`), and a plain
-> `npm i testpilot-qa` resolves `latest`. Both are moving targets — check
-> `npm dist-tag ls testpilot-qa` if you care which build you get.
+> **`-E` pins the exact version.** `@alpha` resolves to the newest prerelease, and `-E`
+> (`--save-exact`) records that exact version in your `package.json` rather than a range. That
+> matters: between `alpha.N` releases the CLI flags, JSON/SARIF report shapes, baseline file format,
+> rule ids, and scoring weights may all change without a major version bump — see
+> [Known limitations](#known-limitations-alpha) for what moved most recently — and it matters most
+> if you gate CI on `--min-score`. Upgrade deliberately by re-running the same command.
 
 ---
 
@@ -276,7 +274,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: faisal1024/testpilot-qa/action@v0
         with:
-          version: alpha          # pin the dist-tag; the action defaults to `latest`
+          version: alpha          # newest prerelease; set an exact version to freeze CI
           min-score: 80
           baseline: testpilot-baseline.json
       - uses: github/codeql-action/upload-sarif@v3
@@ -343,13 +341,18 @@ npx testpilot-qa tags
 ```
 
 ```
-TAG              TESTS  FILES  DECLARED
-@regression         86     14  details
-@accessibility      55     10  details
-@here                1      1  title
+TAG          TESTS  FILES  DECLARED
+@smoke           2  2      title
+@regression      1  1      details
 
-3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
+2 tag(s) across 3 test declarations in 3 file(s); 0 untagged.
+
+Suites (testpilot.config.ts):
+  regression: any of @regression — 1 test declaration(s)
+  smoke: any of @smoke — 2 test declaration(s)
 ```
+
+That is the real output for the project `init` generates, so you can reproduce it exactly.
 
 Static and instant — no browser, no test run. `DECLARED` separates a real vocabulary from noise:
 Playwright treats any `@word` in a title as a tag, so a test named *"turn off mentions for @here"*
@@ -555,8 +558,9 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
 
-**Shipped:** `testpilot-qa@0.1.0-alpha.2` is the current prerelease on npm, CI-published with SLSA
-provenance. It follows `0.1.0-alpha.0` — `alpha.1` was versioned but never published. Next up is the
+**Shipped:** the current prerelease is on npm under the `alpha` tag
+(`npm view testpilot-qa@alpha version`), CI-published with SLSA provenance. `0.1.0-alpha.1` was
+versioned but never published, so the releases so far are `alpha.0` and `alpha.2` onward. Next up is the
 scoring work described under [Known limitations](#known-limitations-alpha), plus the deferred
 dependency majors, each in its own PR. See the **[release checklist](docs/Release-Checklist.md)**.
 
@@ -595,7 +599,7 @@ Written down because a tool that hides these is worse than one that doesn't have
 - **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
   The other two are the same pattern, but counting them changes the score's denominator, so they
   arrive with the scoring work in Phase 12.
-- **Your score will change substantially when you upgrade to the next alpha.** Three re-gradings
+- **Scores moved substantially between `alpha.0` and `alpha.2`.** Three re-gradings
   stack: `.nth()` `error`→`warn`, `locator('..')` `error`→`info`, and the general "prefer
   user-facing locators" nudge `warn`→`info` (as `prefer-semantic-locator`). Measured end-to-end on
   five real suites, from the **earliest recorded corpus baseline** to now: **cal.com 68→82,
@@ -603,7 +607,7 @@ Written down because a tool that hides these is worse than one that doesn't have
   whose locators did not change. (That is the honest reference point: the benchmark did not exist
   when `0.1.0-alpha.0` was tagged, so there is no measurement at that tag to compare against.) **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
   much looser than you meant. In the other direction, `no-nth-child` now also covers
-  `:nth-last-child()`, so a suite using it gains one new `error` finding.
+  `:nth-last-child()`, so a suite gains one new `error` finding per use of it.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
@@ -649,7 +653,8 @@ sequencing):
 The original MVP was deliberately narrow — five commands (`init`/`run`/`analyze`/`doctor`/`explain`),
 one `ui-api-fullstack` template, six static rules, Tier 1 only — and has since grown the brownfield,
 CI, fix, and guidance-regeneration surfaces above. See [Architecture §2](docs/Architecture.md) for the
-full set of challenged assumptions and the [Roadmap](docs/Roadmap.md) for the Phase 0–10 plan.
+full set of challenged assumptions, the [Roadmap](docs/Roadmap.md) for the original MVP → V3
+sequencing, and the [Post-Alpha Plan](docs/Post-Alpha-Plan.md) for what shipped after `alpha.0`.
 
 ---
 

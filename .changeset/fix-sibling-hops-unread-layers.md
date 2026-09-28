@@ -76,3 +76,10 @@ also as documented, instead of `1`.
 
 Corpus findings are unchanged; every rule fix here has zero corpus incidence, and the ten reworded
 suggestions are text.
+
+**Correction to the alpha.2 notes.** They said that wherever `prefer-get-by-test-id` abstains,
+`prefer-semantic-locator` "speaks instead, so no call site falls between them". That was not true: a
+`locator()` call whose own options carry a filter — `locator('[data-testid=x]', { hasText: '…' })`,
+or an options object neither rule can read — is reported by **neither** rule, because the test-id
+rule abstains on the options bag while the semantic rule still defers on the test id. One corpus call
+site is in that gap. (`data-testid=a >> div` was also in it; this release closes that one.)
