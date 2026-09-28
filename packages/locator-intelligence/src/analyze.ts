@@ -647,7 +647,7 @@ function severityFor(
 export function helpersAdvice(namedList: boolean, usingPatterns: boolean): string {
   if (usingPatterns) return 'Name them in the patterns, or run without patterns to use discovery.'
   if (namedList) {
-    return 'Add their location to `includeHelpers` — a named list replaces the conventional directory names, so --with-helpers adds nothing.'
+    return 'Add their location to `includeHelpers`, or take them out of `exclude` if that is what removed them — a named list replaces the conventional directory names, so --with-helpers adds nothing.'
   }
   return 'Add --with-helpers to include them.'
 }

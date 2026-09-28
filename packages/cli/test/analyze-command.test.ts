@@ -477,6 +477,33 @@ describe('analyze — nothing matched is never a pass', () => {
       expect(codes(report)).not.toContain('include-helpers-unmatched')
     })
 
+    it('admits only source files from a named glob', async () => {
+      // `pages/**` selected every file type: a NOTES.md quoting `page.locator('text=Save')`
+      // passed the Playwright sniff, produced a [helper] finding, and `fix` offered to
+      // rewrite it; images and JSON inflated helpers-not-recognized.
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages/**', 'docs/**'] }\n",
+      )
+      put('pages/login.ts')
+      put('pages/NOTES.md', "page.locator('text=Save').click()\n")
+      put('pages/data.json', '{"a":1}\n')
+      put('docs/guide.md', "page.locator('.x')\n")
+      const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+      expect(helperFiles(report)).toEqual(['pages/login.ts'])
+      expect(report.parseErrors).toEqual([])
+      expect(codes(report)).not.toContain('helpers-not-recognized')
+      // `docs/**` holds no source file, so it added nothing: say so.
+      const unmatched = report.warnings.find(
+        (w: { code: string }) => w.code === 'include-helpers-unmatched',
+      )
+      expect(unmatched?.message).toContain('docs/**')
+      expect(unmatched?.message).not.toContain('pages/**')
+      const fix = JSON.parse((await runCli(['fix', '--cwd', dir, '--json'])).stdout)
+      expect(fix.files.map((f: { file: string }) => f.file)).not.toContain('pages/NOTES.md')
+    })
+
     it('reads a bare directory entry as everything under it', async () => {
       writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
       writeFileSync(

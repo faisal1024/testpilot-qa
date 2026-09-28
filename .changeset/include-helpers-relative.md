@@ -13,7 +13,8 @@ replaces the conventional directories, so the flag analyzed zero helper files, w
 An `includeHelpers` list now resolves from the directory of your `testpilot.config.ts`, and only
 from there. That holds even when discovery adopts `e2e/playwright.config.ts`: `'pages/**'` means
 your `pages/`, not `e2e/pages/`.
-- A bare directory (`'pages'`) means everything under it.
+- A bare directory (`'pages'`) means everything under it. Only source files (`.ts`, `.js`, …) are
+  ever treated as page objects, whatever the glob matches.
 - `'!pages/legacy/**'` excludes. Before, a `!` entry matched nearly every file in the project.
 - Files outside the config's directory (a `../` entry or a symlink) are never analyzed, and so
   never rewritten by `fix --write`.

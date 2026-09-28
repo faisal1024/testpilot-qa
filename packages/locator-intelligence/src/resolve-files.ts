@@ -86,6 +86,8 @@ const ALWAYS_IGNORED = [
 
 /** Candidate set when a Playwright RegExp `testMatch` decides membership. */
 const ANY_SOURCE_FILE = ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']
+/** The same set as a test on a path: a named helper glob selects files of every type. */
+const SOURCE_EXTENSION = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
 
 /** One directory to scan with the selectors that apply to it (see `resolveDiscovery`). */
 export type FileScope = DiscoveryScope
@@ -181,12 +183,13 @@ export interface ResolvedFiles {
   helpersNotAnalyzed: number
   /** The paths behind that count, so the number can be checked rather than trusted. */
   helpersNotAnalyzedFiles: string[]
-  /** Absolute paths within `files` that came from `helperGlobs`. */
+  /** Absolute paths within `files` that came from the helper layer. */
   helpers: Set<string>
   /**
-   * Files that matched `helperGlobs` but were not admitted — they carry no sign of
-   * using Playwright. Reported, because a helper layer matched and then silently
-   * discarded is indistinguishable from one that does not exist.
+   * Source files the helper layer selected but did not admit — they carry no sign of
+   * using Playwright, or resolve outside the project. Reported, because a helper layer
+   * matched and then silently discarded is indistinguishable from one that does not
+   * exist.
    */
   helperCandidatesRejected: number
   /**
@@ -257,7 +260,9 @@ function namedHelpers(written: string[], base: string): NamedHelpers {
 }
 
 function normaliseHelperEntry(entry: string, base: string): string {
-  let glob = isAbsolute(entry) ? toPosix(relative(base, entry)) : entry.replace(/^\.\//, '')
+  // On Windows a `\` is a separator the user typed, not a glob escape.
+  const written = sep === '\\' ? entry.replace(/\\/g, '/') : entry
+  let glob = isAbsolute(written) ? toPosix(relative(base, written)) : written.replace(/^\.\//, '')
   if (!/[*?[{]/.test(glob) && isDirectory(resolve(base, glob))) {
     glob = `${glob.replace(/\/+$/, '')}/**`
   }
@@ -265,8 +270,8 @@ function normaliseHelperEntry(entry: string, base: string): string {
 }
 
 /**
- * The conventional names (`pages`, `fixtures`, … at any depth) matched against the path **below** the scan
- * root. Testing the absolute path too meant a checkout under a directory called
+ * The conventional names (`pages`, `fixtures`, … at any depth) matched against the path
+ * **below** `helperRoot`. Testing the absolute path too meant a checkout under a directory called
  * `fixtures/` or `pages/` turned every Playwright file in the project into a page object.
  */
 function conventionalMatcher(patterns: string[], root: string): (file: string) => boolean {
@@ -441,8 +446,13 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       // what gets read, not what gets reported.
       const root = named ? named.base : helperScope.helperRoot
       const base = realpathOrNull(root)
+      // A named glob selects every file type; only source files are page objects. A
+      // `.md` that quotes `page.locator(` passed the Playwright sniff and `fix` offered
+      // to rewrite it.
       const candidates = named
-        ? await run(root, named.include, [...helperScope.excludeGlobs, ...named.exclude])
+        ? (await run(root, named.include, [...helperScope.excludeGlobs, ...named.exclude])).filter(
+            (file) => SOURCE_EXTENSION.test(file),
+          )
         : (await run(root, ANY_SOURCE_FILE, helperScope.excludeGlobs)).filter(
             conventionalMatcher(helperScope.helperGlobs, root),
           )
@@ -464,13 +474,19 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       // conventional names legitimately match nothing in most projects, and an entry
       // whose files `exclude` removed was not misspelt.
       if (named) {
+        const selected = candidates.map((file) => toPosix(relative(named.base, file)))
         for (const entry of named.entries) {
+          const isMatch = picomatch(entry.glob, { dot: true })
+          if (selected.some((path) => isMatch(path))) continue
+          // Nothing admitted; ask again without `exclude`, which removes files on purpose.
           const any = await glob([entry.glob], {
             cwd: named.base,
             dot: true,
             ignore: ALWAYS_IGNORED,
           })
-          if (any.length === 0) includeHelpersUnmatched.push(entry.written)
+          if (!any.some((file) => SOURCE_EXTENSION.test(file))) {
+            includeHelpersUnmatched.push(entry.written)
+          }
         }
       }
     }

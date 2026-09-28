@@ -845,7 +845,12 @@ often.
 **Writing entries.**
 - Entries are globs (`'e2e/pages/**'`), and a `**/`-anchored entry matches at any depth.
 - A bare directory (`'pages'`, `'pages/'`) means everything under it.
-- `'!pages/legacy/**'` excludes.
+- `'!pages/legacy/**'` excludes. A list of *only* `!` entries selects nothing, so to leave one
+  directory out of the conventional names, list the ones you want and add the `!` entry.
+- Only source files (`.ts`, `.tsx`, `.js`, …) are ever page objects, whatever the glob matches.
+- `exclude` applies too. With a named list it resolves from the config's directory, like the list
+  itself; for the conventional names it resolves from the scan root. The default `exclude` entries
+  are all `**/`-anchored, so they mean the same either way.
 - A named list **replaces** the conventional names rather than adding to them, so list every
   location you want.
 - A file outside the config's directory, reached by `../` or through a symlink, is never analyzed.
