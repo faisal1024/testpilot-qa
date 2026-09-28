@@ -41,9 +41,19 @@ merged is then never published. That is how `0.1.0-alpha.1` was lost.
 1. Merge feature PRs, then **wait for the Release run on that commit to finish**. It regenerates the
    Version PR.
 2. Confirm the Version PR's head moved and its CHANGELOG diff includes the last change you merged.
-3. Merge **nothing else carrying a changeset**, then merge the Version PR. Dependabot PRs carry no
-   changeset, so they're harmless here.
+3. Merge **nothing else carrying a changeset, including an empty one** (`pnpm changeset --empty`),
+   then merge the Version PR. Dependabot PRs carry no changeset, so they're harmless here. An empty
+   changeset is not harmless: while one is pending, `changesets/action` logs "All changesets are
+   empty; not creating PR" and stops. It neither publishes nor versions, and the run stays green.
 4. Wait for the publish run to finish before merging anything else.
+
+**If the gate fails on the Version PR's merge commit:**
+- A flake: **Re-run failed jobs**. That publishes the version.
+- A real failure: merge the code fix **with no changeset**. `main` isn't protected, so the failing
+  "Changeset present" check doesn't block the merge. The next Release run then publishes the version
+  you already merged. A fix that carries a changeset, even an empty one, makes that run version
+  again or stop instead, and the merged version is never published. Road-to-Beta A2 removes this
+  hazard.
 
 ## One-time setup (maintainer)
 
@@ -96,8 +106,9 @@ Settings → Actions → General → enable *"Allow GitHub Actions to create and
 3. With npm auth configured (Option A or B) **and** `PUBLISH_ENABLED=true`, the Changesets action
    publishes `testpilot-qa@<version>` to `latest` once there are no pending changesets and the gate
    has passed. That happens on the push of the Version PR's merge, or immediately via **Run workflow**
-   (`workflow_dispatch`, on `main` only). A red gate publishes nothing; fix it, then **Re-run failed
-   jobs**. Then run the [Post-publish](#post-publish) checks.
+   (`workflow_dispatch`, on `main` only). A red gate publishes nothing; see
+   [if the gate fails](#merge-order-around-a-version-pr). Then run the [Post-publish](#post-publish)
+   checks.
 
 ## Cutting the alpha (the version PR)
 
@@ -134,7 +145,17 @@ See [`docs/Release-Checklist.md`](docs/Release-Checklist.md) for the full launch
 
 ```bash
 corepack pnpm -r build
-cd packages/cli && npm publish   # prereleases go to `latest` while only prereleases exist; never `--tag alpha`
+cd packages/cli && pnpm publish --tag latest --no-git-checks
+```
+
+npm refuses to publish a prerelease without an explicit `--tag`, and it has no "only-pre" rule, so
+name the tag yourself. Use `latest` while every published version is an alpha, which matches what CI
+does. After a stable release, use the pre tag instead (`--tag beta`). Use `pnpm publish`, not
+`npm publish`: pnpm rewrites the `workspace:*` devDependencies, while npm would publish them literally.
+
+```bash
+# Then check what landed:
+npm view testpilot-qa dist-tags
 ```
 
 ## Post-publish

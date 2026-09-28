@@ -2,7 +2,7 @@
 'testpilot-qa': patch
 ---
 
-**Install `testpilot-qa`, not `testpilot-qa@alpha`.** Every alpha is published to npm's `latest`:
+**Install `testpilot-qa`, not `testpilot-qa@alpha`.** Every alpha after the first is published to npm's `latest`:
 Changesets does that for a package whose published versions are all prereleases, and it rejects
 `--tag` in pre-release mode. The first docs said to install `@alpha`. CI set that tag at the first
 publish and cannot move it, so it stayed on `0.1.0-alpha.0` for three weeks after `alpha.2` shipped.
