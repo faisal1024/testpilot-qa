@@ -7,30 +7,11 @@
 
 ## 1. Where we are
 
-**Published:** `testpilot-qa@0.1.0-alpha.2` (npm `alpha` and `latest`), which carries Phases 9–11 of
-the previous plan. `0.1.0-alpha.1` was versioned but never published.
-
-**On `main`, unreleased (#86 and today's dependency bumps), shipping as `alpha.3`:**
-- `prefer-get-by-test-id` names a rewrite only for shapes it can prove. The combinator axis and the
-  pseudo-class axis are both allowlists now, and the `data-testid=` engine is bounded the same way.
-  The six pseudo-class shapes that broke it, and seven common shapes it still rewrites, were checked
-  **by hand** in real Chromium: the six are no longer rewritten, and the seven select identical
-  elements. Nothing replays them in CI yet; that is workstream **D**.
-- An error Commander itself rejects (unknown flag or command, missing option value) exits `2`, and an
-  internal error exits `5`, as documented. Before, both exited `1`, the gate-failed code.
-  (`--min-score abc` already exited `2`.)
-- Reading `use.testIdAttribute` (shipped in alpha.2) is now conservative: a config layer TestPilot
-  cannot read (an imported base, a spread, a computed key) gives `"unresolved"` instead of asserting
-  Playwright's default.
-- The README was corrected claim by claim.
-- The Action passes `patterns` verbatim (B1, #107). It reached Action users when `v0` was re-pointed
-  on 2026-09-28; the changelog entry ships with `alpha.3`.
-- The `@typescript-eslint/parser` bump, the only runtime dependency among today's bumps. The others
-  (`lint-staged`, `yaml`, `@types/node`, `actions/cache`, `actions/upload-artifact`) don't ship.
-
-**Waiting:** [#104](https://github.com/faisal1024/testpilot-qa/pull/104), the `alpha.3` Version PR.
-It must not merge until A1 and A3 land, and then only in the order in
-[RELEASING.md](../RELEASING.md#merge-order-around-a-version-pr).
+**Published:** `testpilot-qa@0.1.0-alpha.3` on npm `latest` (2026-09-28). It was the first
+release through the gated workflow and the first trusted publish: `_npmUser` is GitHub Actions, and
+it has provenance. It carries #86 (the `prefer-get-by-test-id` allowlists, conservative
+`testIdAttribute` reading, usage errors exiting `2`), the corrected README, the install-`latest`
+docs, and B1. `0.1.0-alpha.1` was versioned but never published.
 
 This plan comes from four independent reviews run against `main` on 2026-09-28:
 - the published CLI surface
@@ -91,10 +72,10 @@ parallel. F waits on E and on G's test-id rewrites.
 
 | # | Item | Why |
 |---|---|---|
-| A1 | **Release job** (#106): Node 22; `needs:` the full CI workflow, called as a reusable workflow with read-only permissions (lint, typecheck, test, build, `smoke:mvp`, `smoke:package`); publishes only from `main`. Publishing stays on `changeset publish`, which sends every alpha to `latest` (D1). Docs install `testpilot-qa`, not `@alpha`. | Trusted publishing needs Node ≥ 22.14. The job published untested code, and the Version PR gets no CI of its own. With trusted publishing, CI cannot run `npm dist-tag`, so the docs must point at the tag that moves by itself. |
+| A1 | ✅ #106 — **Release job**: Node 22; `needs:` the full CI workflow, called as a reusable workflow with read-only permissions (lint, typecheck, test, build, `smoke:mvp`, `smoke:package`); publishes only from `main`. Publishing stays on `changeset publish`, which sends every alpha to `latest` (D1). Docs install `testpilot-qa`, not `@alpha`. | Trusted publishing needs Node ≥ 22.14. The job published untested code, and the Version PR gets no CI of its own. With trusted publishing, CI cannot run `npm dist-tag`, so the docs must point at the tag that moves by itself. |
 | A2 | **Never lose a versioned release.** Before the Changesets action runs: if the version in `packages/cli/package.json` is not on npm, **publish it first** (`changeset publish`, push its git tag, create its GitHub release), then let the action version the pending changesets. Refusing to version instead would deadlock: a failed publish plus any new changeset would block every later release. | Stops a repeat of the lost `alpha.1`. The new gate adds a way to strand a version (a red gate on the Version PR's merge commit). Due before `alpha.4`. Until then, RELEASING.md's merge order covers it. |
-| A3 | **PR CI** (#106) on Node 20, 22 and 24 (20 stays while `engines` claims it; D6), running `smoke:mvp`, `smoke:package` and a `changeset status` check. Dependabot and the Version PR are exempt. | None of those checks ran on PRs. `@testpilot/ai` changed in four PRs without a changeset. |
-| A4 | **Verify the first trusted publish.** The trusted publisher is configured on npmjs.com (owner, 2026-09-28). `alpha.3`'s `_npmUser` must be the GitHub Actions identity, not a person. npm falls back to the token *silently*: alpha.2's run logged "using npm trusted publishing" and was still a token publish. Once confirmed, the owner sets *"require 2FA and disallow tokens"*, deletes `NPM_TOKEN`, and the `NODE_AUTH_TOKEN` line goes. After alpha.3, the owner also removes the retired `alpha` dist-tag. | npm is restricting bypass-2FA tokens for publishing. A tag nobody moves serves an old build silently. |
+| A3 | ✅ #106 — **PR CI** on Node 20, 22 and 24 (20 stays while `engines` claims it; D6), running `smoke:mvp`, `smoke:package` and a `changeset status` check. Dependabot and the Version PR are exempt. | None of those checks ran on PRs. `@testpilot/ai` changed in four PRs without a changeset. |
+| A4 | ✅ #109 (owner steps pending) — **Verify the first trusted publish.** Verified on `alpha.3`: `_npmUser` is GitHub Actions, provenance attached. #109 removed the token fallback from `release.yml`. npm falls back to a token *silently*: alpha.2's run logged "using npm trusted publishing" and was still a token publish. **Owner steps pending:** set *require 2FA and disallow tokens*, delete `NPM_TOKEN`, and remove the retired `alpha` dist-tag. | npm is restricting bypass-2FA tokens for publishing. A tag nobody moves serves an old build silently. |
 | A5 | **Repair the `alpha.2` GitHub release notes.** They contain only #84, so Phases 9–11, including the breaking nullable score, appear in no release. | The owner approves the text; editing a published release is outward-facing. |
 
 **Exit:** `alpha.3` published to `latest` through trusted publishing, with provenance, from a job
@@ -108,7 +89,7 @@ Each item is one PR with a reproduction test.
 | # | Defect | Source |
 |---|---|---|
 | B1 | ✅ #107 (`v0` re-pointed) — **The Action let bash glob-expand `patterns`**. An unquoted `${TP_PATTERNS}` turns `tests/**/*.spec.ts` into a subset. The score and baseline gate cover files nobody chose, silently. Ships to Action users only when the `v0` tag is re-pointed, which is a standing step after every `action/` change (RELEASING.md). | surface P1 |
-| B2 | **`includeHelpers` never matches a relative glob** (`pages/**`), because it is matched against absolute paths. Setting it also *replaces* the defaults, so `--with-helpers` then analyzes zero helpers. The documented way to opt in does nothing. Also: warn when an entry matches nothing. | surface P1, independently reproduced |
+| B2 | ✅ #108 — **`includeHelpers` never matched a relative glob** (`pages/**`), because it is matched against absolute paths. Setting it also *replaces* the defaults, so `--with-helpers` then analyzes zero helpers. The documented way to opt in does nothing. Also: warn when an entry matches nothing. | surface P1, independently reproduced |
 | B3 | **`init` in an existing Playwright project turns a failing gate green.** It hard-codes `testDir: 'tests'` and adds sample tests, so the real suite is no longer analyzed. A score of 0 becomes 100. Needs a detect-and-augment mode, or refuse without `--force`. | surface P1 |
 | B4 | **`run` resolves a different Playwright config** than `tags`, `analyze` and `doctor` (root only vs one level down). | surface P1 |
 | B5 | **Zero evidence reads as a pass:** `--min-score ""` is parsed as 0; all files failing to parse gives `100 (A)`; a zero-file `--json` report says `100/A`; parse errors never reach SARIF. The fix uses the nullable score that schema 1.11 already publishes, so it is not the breaking score change F reserves. | surface P1/P2 |

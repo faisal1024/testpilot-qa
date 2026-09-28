@@ -57,10 +57,10 @@ jobs:
       # unpinned @latest that drops Node 22 support would turn main red; and
       # gated, so non-publishing pushes don't pay for it.
       #
-      # npm tries OIDC first and falls back to NODE_AUTH_TOKEN *silently* (it
-      # logs the failed exchange only at verbose level). alpha.2 was published
-      # this way: the action logged "using npm trusted publishing" and
-      # `_npmUser` still shows a person. `_npmUser` is the only reliable check.
+      # Trusted publishing is the only credential: alpha.3 was the first OIDC
+      # publish (`_npmUser` = GitHub Actions). There is deliberately no token
+      # fallback — npm falls back to one *silently*, which is how alpha.2 was a
+      # token publish although the action logged "using npm trusted publishing".
       - name: Upgrade npm for OIDC trusted publishing
         if: vars.PUBLISH_ENABLED == 'true'
         run: |
@@ -74,9 +74,4 @@ jobs:
           # PR when changesets are pending; it never attempts to publish.
           publish: ${{ vars.PUBLISH_ENABLED == 'true' && 'pnpm release' || '' }}
         env:
-          # Kept for one release as a fallback while trusted publishing is first
-          # used: npm tries OIDC before a token. Remove this line (and delete the
-          # secret) once a published version's `_npmUser` shows the GitHub
-          # Actions identity rather than a person — Road-to-Beta A4.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"

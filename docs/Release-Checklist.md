@@ -1,7 +1,8 @@
 # TestPilot QA — Release Checklist
 
 > Status: **alpha, publishing through CI.** The active plan is [`docs/Road-to-Beta.md`](Road-to-Beta.md).
-> Released so far: `0.1.0-alpha.0` and `0.1.0-alpha.2` (`alpha.1` was versioned but never published).
+> Released so far: `0.1.0-alpha.0`, `0.1.0-alpha.2` and `0.1.0-alpha.3` (`alpha.1` was versioned but
+> never published). Since alpha.3, every release is a trusted publish from CI.
 > The newest is npm's `latest`: `npm view testpilot-qa version`.
 >
 > **Dist-tags.** While every published version is an alpha, each new alpha publishes to `latest`; see
@@ -27,7 +28,7 @@ publishes, on Node 20, 22 and 24. They are listed so you know what a release has
    `npx testpilot-qa --version` works
 10. **README sanity check** — alpha positioning honest; the Try-it path actually works end to end
 
-npm auth for step 9 (trusted publishing or a token) plus the `PUBLISH_ENABLED` switch are described in
+npm auth for step 9 (trusted publishing) plus the `PUBLISH_ENABLED` switch are described in
 [`RELEASING.md`](../RELEASING.md).
 
 The detailed checklist below expands steps 1–8; **post-alpha hardening** (the deferred dependency majors)

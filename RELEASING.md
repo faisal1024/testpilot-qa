@@ -76,15 +76,17 @@ credential from the workflow's OIDC identity, and provenance is attached automat
 2. Repository: `faisal1024/testpilot-qa`; workflow filename: `release.yml` (leave environment blank
    unless the job uses one).
 3. The workflow grants `id-token: write`, runs on Node 22 and upgrades npm to >= 11.5.1 (Node 22
-   bundles npm 10, which cannot do OIDC publishing). `NODE_AUTH_TOKEN` is **kept for one release** as
-   a fallback: npm tries OIDC first and silently falls back to the token. Once a publish's `_npmUser`
-   shows the GitHub Actions identity (see [Post-publish](#post-publish)), remove the line, delete the
-   secret, and disallow tokens.
+   bundles npm 10, which cannot do OIDC publishing). **In use since `0.1.0-alpha.3`**, the first
+   version whose `_npmUser` is GitHub Actions. The workflow passes no token, on purpose: npm falls
+   back to a token *silently*, so a broken trusted-publisher config would otherwise go unnoticed.
+   With no real token in the job, a broken config fails the publish loudly instead. Setting the
+   package to *disallow tokens* (an owner step, Road-to-Beta A4) keeps it that way if a token is
+   ever re-added.
 
-**Option B — granular access token.** Create a granular npm token with publish rights on
-`testpilot-qa` and add it as the GitHub Actions secret **`NPM_TOKEN`**, which the workflow reads as
-`NODE_AUTH_TOKEN`. npm has removed classic automation tokens, and granular tokens expire, so note the
-expiry date.
+**Option B — granular access token (not used).** Only if trusted publishing is unavailable: a
+granular npm token with publish rights, stored as the secret `NPM_TOKEN` and passed to the Changesets
+step as `NODE_AUTH_TOKEN`. This requires re-allowing tokens on the package. npm has removed classic
+automation tokens, and granular tokens expire.
 
 ### 2. Turn publishing on
 
@@ -163,9 +165,11 @@ npm view testpilot-qa dist-tags
 **1. Confirm it is `latest`:** `npm view testpilot-qa version` should print the new version.
 
 **2. Confirm how it was authenticated.** `npm view testpilot-qa@<version> _npmUser` shows a *person*
-for a token publish and the GitHub Actions identity for a trusted publish. Once a trusted publish is
-confirmed, remove `NODE_AUTH_TOKEN` from `release.yml`, delete the `NPM_TOKEN` secret, and set the
-package's *Publishing access* to "require two-factor authentication and disallow tokens".
+for a token publish and the GitHub Actions identity for a trusted publish. It must be GitHub Actions.
+A person here means a token was used. Once the package disallows tokens, that cannot happen.
+
+The npm registry can take several minutes to show a new version: alpha.3 returned 404 for about four
+minutes after "packages published successfully". Wait before concluding a publish failed.
 
 **3. Smoke the published package** from an empty directory: `npx testpilot-qa@<version> --version`,
 `--help`, `init demo --yes`, then `analyze --reporter html --output report.html` inside `demo`.
