@@ -27,22 +27,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The full CI gate, on the exact commit being released. This job used to
+  # install, build and publish with no tests at all — and the Version PR it
+  # opens gets no CI either (GitHub runs no workflows for PRs created with
+  # GITHUB_TOKEN), so nothing tested the code that shipped.
+  gate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: gate
+    # A manual dispatch from another branch would otherwise publish that branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # npm trusted publishing (OIDC) requires Node >= 22.14.
+          node-version: 22
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
-      # OIDC trusted publishing needs npm >= 11.5.1; Node 20 bundles npm 10.
+      # OIDC trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
       # The real chain is `changeset publish` -> `pnpm publish` -> the `npm` on
       # PATH, so upgrading the global npm is what reaches the publisher (don't
       # "simplify" this away or pin pnpm's npm-path). Pinned, because an
-      # unpinned @latest that drops Node 20 support would turn main red; and
+      # unpinned @latest that drops Node 22 support would turn main red; and
       # gated, so non-publishing pushes don't pay for it.
+      #
+      # npm tries OIDC first and falls back to NODE_AUTH_TOKEN *silently* (it
+      # logs the failed exchange only at verbose level). alpha.2 was published
+      # this way: the action logged "using npm trusted publishing" and
+      # `_npmUser` still shows a person. `_npmUser` is the only reliable check.
       - name: Upgrade npm for OIDC trusted publishing
         if: vars.PUBLISH_ENABLED == 'true'
         run: |
@@ -56,7 +74,9 @@ jobs:
           # PR when changesets are pending; it never attempts to publish.
           publish: ${{ vars.PUBLISH_ENABLED == 'true' && 'pnpm release' || '' }}
         env:
-          # Unset when using trusted publishing (OIDC); set only for token-based
-          # publishing (Option B in RELEASING.md).
+          # Kept for one release as a fallback while trusted publishing is first
+          # used: npm tries OIDC before a token. Remove this line (and delete the
+          # secret) once a published version's `_npmUser` shows the GitHub
+          # Actions identity rather than a person — Road-to-Beta A4.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"

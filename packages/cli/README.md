@@ -13,19 +13,19 @@ generates is **ejectable plain Playwright** — zero lock-in.
 
 ```bash
 # New project: scaffold, then open a locator-quality report in your browser
-npx testpilot-qa@alpha init demo --yes
+npx testpilot-qa init demo --yes
 cd demo
-npx testpilot-qa@alpha analyze tests --reporter html
+npx testpilot-qa analyze --reporter html --output testpilot-report.html
 ```
 
 Already have a Playwright project? `analyze` is read-only — just point it at your tests:
 
 ```bash
-npx testpilot-qa@alpha analyze tests              # human table (add --json for CI)
+npx testpilot-qa analyze              # finds your suite from playwright.config.* (add --json for CI)
 
 # Adopting on an existing suite? Record a baseline, then gate CI on NEW findings only:
-npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json --update-baseline
-npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json
+npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa analyze --baseline testpilot-baseline.json
 ```
 
 ## Commands
@@ -53,8 +53,9 @@ The scoring model is fully documented (formula, weights, worked examples) in the
 Full documentation, the scoring model, the GitHub Action, and the design docs live in the repository:
 **https://github.com/faisal1024/testpilot-qa**
 
-This is an alpha — published under the npm `alpha` dist-tag. Install a pinned alpha with
-`npm i -D testpilot-qa@alpha`, or just use `npx testpilot-qa@alpha`.
+This is an alpha. Every prerelease is published as npm's `latest`, so `npm i -D -E testpilot-qa`
+installs the newest one and `-E` pins that exact version — pin it, because report shapes and scoring
+can change between alphas. Or just run `npx testpilot-qa`.
 
 ## License
 
