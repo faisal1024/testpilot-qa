@@ -163,6 +163,33 @@ check('run --tag compiles to a Playwright --grep', () => {
   })
 })
 
+check('a usage error exits 2, never the gate-failed code 1', () => {
+  withTempDir((dir) => {
+    // Left to commander, every one of these exited 1 — the code a CI job reads
+    // as "quality below threshold". A typo in a gate flag would look like a
+    // failed gate rather than a broken job.
+    for (const args of [
+      ['analyze', '--bogus'],
+      ['analyze', '--min-scor', '80'],
+      ['analyze', '--reporter'],
+      ['not-a-command'],
+      ['add'],
+    ]) {
+      const { status } = cli([...args, '--cwd', dir])
+      assert(status === 2, `${args.join(' ')}: expected usage exit 2, got ${status}`)
+    }
+    // ...while help and version still succeed, and a real gate still fails 1.
+    for (const args of [['--help'], ['--version'], ['analyze', '--help']]) {
+      const { status } = cli(args)
+      assert(status === 0, `${args.join(' ')}: expected exit 0, got ${status}`)
+    }
+    mkdirSync(join(dir, 'tests'), { recursive: true })
+    writeFileSync(join(dir, 'tests', 'a.spec.ts'), "page.locator('//button')\n")
+    const gate = cli(['analyze', '--cwd', dir, '--min-score', '99'])
+    assert(gate.status === 1, `a failed gate must still exit 1, got ${gate.status}`)
+  })
+})
+
 check('run rejects an empty tag value instead of running everything', () => {
   withTempDir((dir) => {
     // `--tag "$SUITE_TAGS"` with the variable unset is the likeliest real case.

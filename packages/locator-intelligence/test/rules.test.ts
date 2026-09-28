@@ -282,6 +282,42 @@ describe('prefer-get-by-test-id', () => {
     )
   })
 
+  it('offers a scope only when every pseudo-class means the same under the new scope', () => {
+    // The `scope` rewrite MOVES the query scope from the page to the test-id
+    // element. Each shape below was checked in real Chromium: the original and
+    // `getByTestId(x).locator(tail)` selected different elements.
+    //   :nth-match(li, 2)      i1 vs i2      — counts matches inside the new scope
+    //   input:right-of(.label) in1 vs none   — layout measured against the scope
+    //   :is(.list .item)       s vs none     — ancestry outside the scope
+    //   li:not(.hidden li)     none vs l     — ditto, inverted
+    //   :scope, :is(:scope)    none vs the test-id element itself
+    for (const selector of [
+      '[data-testid=list] :nth-match(li, 2)',
+      '[data-testid=form] input:right-of(.label)',
+      '[data-testid=form] input:near(.label)',
+      '[data-testid=a] :is(.list .item)',
+      '[data-testid=a] li:not(.hidden li)',
+      '[data-testid=a] :scope',
+      '[data-testid=a] :is(:scope)',
+      '[data-testid=a]:scope div',
+      '[data-testid=a] p::before',
+    ]) {
+      expect(preferGetByTestId.evaluate(css(selector)), selector).toBeNull()
+    }
+    // ...while these were equivalent in Chromium and still get the rewrite.
+    for (const selector of [
+      '[data-testid=a] b',
+      '[data-testid=l] > li',
+      '[data-testid=a] p:has-text("x")',
+      '[data-testid=a] p:visible',
+      '[data-testid=a] i:nth-child(2)',
+      '[data-testid=a] li:not(.hidden)',
+      '[data-testid=a] p:has(b)',
+    ]) {
+      expect(preferGetByTestId.evaluate(css(selector))?.message, selector).toContain('ancestor')
+    }
+  })
+
   it('says nothing when a >> part precedes the test id', () => {
     // Every earlier part is an ancestor scope. `getByTestId('save')` searches
     // the whole document, so naming it drops `#login-modal` silently. This is
@@ -364,6 +400,35 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('*[data-testid="save"]'))?.suggestion).toBe(
       'Use getByTestId("save") instead.',
     )
+  })
+
+  it('bounds the data-testid= engine exactly as it bounds the CSS path', () => {
+    const engine = (
+      selector: string,
+      options?: Parameters<typeof preferGetByTestId.evaluate>[1],
+    ) => {
+      const context = ctx({ selector, selectorEngine: 'css', parsed: tokenizeSelector(selector) })
+      return {
+        testId: preferGetByTestId.evaluate(context, options),
+        semantic: preferSemanticLocator.evaluate(context, options),
+      }
+    }
+    // Playwright's attribute engine uses the body AS WRITTEN, so
+    // `data-testid= save` queries " save". The tokenizer trims it, and the rule
+    // used to offer getByTestId("save") — a different element.
+    for (const selector of ['data-testid= save', 'data-testid = save', 'data-testid=save ']) {
+      expect(engine(selector).testId, JSON.stringify(selector)).toBeNull()
+    }
+    // One part only, like the CSS path — and the semantic rule speaks instead,
+    // where this used to be reported by neither.
+    expect(engine('data-testid=a >> div').testId).toBeNull()
+    expect(engine('data-testid=a >> div').semantic).not.toBeNull()
+    // The configured attribute list governs the engine too. With `data-qa`,
+    // `[data-test=x]` is not a test id to the CSS path; `data-test=x` used to
+    // be one to this path — one locator, two rules.
+    const qa = { testIdAttributes: ['data-qa'] }
+    expect(engine('data-test=save', qa).testId).toBeNull()
+    expect(engine('data-test=save', qa).semantic).not.toBeNull()
   })
 
   it("owns Playwright's own data-testid= selector engine", () => {

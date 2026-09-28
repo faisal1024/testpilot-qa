@@ -823,7 +823,7 @@ so running from a sub-directory of a monorepo still finds the suite.
 ### Page objects, fixtures and helpers
 
 Playwright's `testMatch` selects the files it *runs*. Real suites keep most of their locators
-somewhere else — Ghost's page objects hold 114 of its 116 findings — so `analyze`/`fix` accept
+somewhere else — Ghost's page objects hold 107 of its 109 findings — so `analyze`/`fix` accept
 `--with-helpers`, or a `includeHelpers` list in `testpilot.config.ts` (naming them is itself the
 opt-in). Defaults when the flag is used: `pages`, `page-objects`, `pageobjects`, `pom`, `fixtures`,
 `helpers`, `support`. `lib/` and `utils/` are deliberately absent — broad enough that scanning them

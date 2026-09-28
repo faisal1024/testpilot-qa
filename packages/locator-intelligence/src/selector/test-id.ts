@@ -59,8 +59,12 @@ const SCOPING_COMBINATORS = new Set(['descendant', 'child'])
  * - any relevant part is a selector **list**, which has more than one target or
  *   more than one scope;
  * - the test id reaches the target through anything but descendant/child steps;
- * - anything **precedes** the test id's own compound — a `>>` part, or an
- *   earlier compound in the same selector. Both are ancestor scopes
+ * - the selector has more than one `>>` part, whether before or after the test
+ *   id — reasoning across an engine boundary is what kept going wrong;
+ * - a compound uses a pseudo-class whose meaning depends on the query scope
+ *   (`scope` answers only), since the rewrite moves that scope;
+ * - anything **precedes** the test id's own compound — an earlier compound in
+ *   the same selector. Both are ancestor scopes
  *   `getByTestId()` would drop: `'#login-modal >> [data-testid=save]'` and
  *   `'#login-modal [data-testid=save]'` are the same locator, and neither is
  *   `getByTestId('save')`, which searches the whole document. A leading
@@ -121,12 +125,144 @@ export function testIdReplacement(
   if (!arm.combinators.every((step) => SCOPING_COMBINATORS.has(step))) {
     return null
   }
+  // ...and every compound means the same thing whatever the query scope is.
+  // The `scope` rewrite MOVES the scope — from the page to the test-id element
+  // — so any pseudo-class Playwright evaluates against the scope picks a
+  // different element afterwards: `:nth-match(li, 2)` counts matches inside
+  // the new scope, `:right-of(.label)` measures against candidates in it,
+  // `:is(.list .item)` and `:not(.hidden li)` test ancestry that may now lie
+  // outside it, and `:scope` becomes the test-id element itself. Each of those
+  // was verified wrong in Chromium. The combinator axis was closed last round;
+  // this closes the pseudo axis the same way — an allowlist of what is safe,
+  // not a list of what is not.
+  if (!arm.compounds.every(isScopeIndependent)) {
+    return null
+  }
   return {
     kind: 'scope',
     attribute: found.match.name,
     exactValue,
     scopeHasOtherConditions: !isOnlyHandle(arm.compounds[0] as CompoundSelector),
   }
+}
+
+/**
+ * Pseudo-classes whose meaning is a property of the element alone — its own
+ * text, state, visibility, or position among its siblings — and so cannot
+ * change when the query scope does. Deliberately short: a pseudo-class not
+ * listed here makes the `scope` rewrite unsafe until someone shows otherwise.
+ */
+const SCOPE_INDEPENDENT_PSEUDOS: ReadonlySet<string> = new Set([
+  // Playwright's own, evaluated against the element's text or box.
+  'visible',
+  'text',
+  'has-text',
+  'text-is',
+  'text-matches',
+  // Position among siblings: the parent is unchanged by a scope move.
+  'first-child',
+  'last-child',
+  'only-child',
+  'first-of-type',
+  'last-of-type',
+  'only-of-type',
+  'nth-of-type',
+  'nth-last-of-type',
+  // Element state.
+  'empty',
+  'checked',
+  'disabled',
+  'enabled',
+  'required',
+  'optional',
+  'read-only',
+  'read-write',
+  'indeterminate',
+  'hover',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'active',
+])
+
+/**
+ * Pseudo-classes that take a selector argument, accepted only when every arm of
+ * that argument is a single compound that is itself scope-independent. A
+ * combinator inside them — `:not(.hidden li)`, `:is(.list .item)` — tests
+ * ancestry, which may lie outside the new scope.
+ */
+const COMPOUND_ARGUMENT_PSEUDOS: ReadonlySet<string> = new Set([
+  'not',
+  'is',
+  'where',
+  'matches',
+  'has',
+])
+
+/** True when this compound selects the same elements under any query scope. */
+function isScopeIndependent(compound: CompoundSelector): boolean {
+  return compound.pseudos.every((pseudo) => {
+    if (pseudo.element) {
+      return false
+    }
+    if (SCOPE_INDEPENDENT_PSEUDOS.has(pseudo.name)) {
+      return true
+    }
+    // `:nth-child(2)` is sibling position; `:nth-child(2 of .a .b)` is not.
+    if (pseudo.name === 'nth-child' || pseudo.name === 'nth-last-child') {
+      return pseudo.selectors === undefined
+    }
+    if (COMPOUND_ARGUMENT_PSEUDOS.has(pseudo.name)) {
+      // `=== true`: an argument we did not parse is not an argument we checked.
+      return (
+        pseudo.selectors?.every(
+          (arm) =>
+            arm.compounds.length === 1 && isScopeIndependent(arm.compounds[0] as CompoundSelector),
+        ) === true
+      )
+    }
+    return false
+  })
+}
+
+/**
+ * The `data-testid=value` selector ENGINE, as a test id with an exact
+ * `getByTestId()` form — or `null`.
+ *
+ * Kept beside `testIdReplacement`, and shared by both rules, for the reason
+ * that function is: the engine branch used to live inside one rule, outside
+ * every bound the CSS path had, and so reproduced the defect class on its own.
+ *
+ * - One part only, like the CSS path: `data-testid=a >> div` scopes across an
+ *   engine boundary this does not reason about.
+ * - The engine must be one of the configured test-id attributes. With
+ *   `testIdAttributes: ['data-qa']`, `[data-test=x]` is not a test id to the
+ *   CSS path, and `data-test=x` must not be one to this path either — the same
+ *   locator, spelled two ways, got two different rules.
+ * - No whitespace around `=` or at either end. Playwright's attribute engine
+ *   builds `[attr=${JSON.stringify(body)}]` from the body *as written*, so
+ *   `data-testid= save` queries `" save"`; the tokenizer trims it, and the rule
+ *   used to offer `getByTestId("save")` — a different element.
+ */
+export function testIdEngineReplacement(
+  parsed: ParsedSelector,
+  names: readonly string[],
+  selector: string,
+): { attribute: string; value: string } | null {
+  if (parsed.unparsed.length > 0 || parsed.parts.length !== 1) {
+    return null
+  }
+  const part = parsed.parts[0]
+  if (part?.engine !== 'test-id' || part.engineName === undefined) {
+    return null
+  }
+  if (!names.includes(part.engineName)) {
+    return null
+  }
+  if (selector !== selector.trim() || /\s=|=\s/.test(selector)) {
+    return null
+  }
+  return { attribute: part.engineName, value: part.body }
 }
 
 /** The one selector in a part, or `null` when the part is a list (or unparsed). */

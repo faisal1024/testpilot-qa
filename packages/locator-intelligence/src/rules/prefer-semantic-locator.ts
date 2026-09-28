@@ -1,6 +1,6 @@
 import type { LocatorApi } from '../locator-context.js'
 import { hasPseudo, topLevelAttributeTokens } from '../selector/query.js'
-import { testIdReplacement } from '../selector/test-id.js'
+import { testIdEngineReplacement, testIdReplacement } from '../selector/test-id.js'
 import { testIdAttributesFrom } from './prefer-get-by-test-id.js'
 import type { Rule } from './types.js'
 
@@ -114,7 +114,14 @@ export const preferSemanticLocator: Rule = {
     // `role=button[name="Save"]` through the `role=` engine is already the
     // thing this rule asks for, spelled as a selector; `data-testid=save` is
     // the other rule's business.
-    if (context.parsed.parts.some((part) => part.engine === 'role' || part.engine === 'test-id')) {
+    // `role=` is already the semantic handle this rule asks for. A `data-testid=`
+    // engine is deferred only when `prefer-get-by-test-id` actually takes it —
+    // the same handoff-by-function as the CSS path. Deferring on the mere
+    // presence of the engine left `data-testid=a >> div` reported by neither.
+    if (context.parsed.parts.some((part) => part.engine === 'role')) {
+      return null
+    }
+    if (testIdEngineReplacement(context.parsed, testIds, context.selector ?? '') !== null) {
       return null
     }
     // A selector that already carries a test id gets a different sentence:
@@ -125,7 +132,9 @@ export const preferSemanticLocator: Rule = {
     // It deliberately does NOT point at `prefer-get-by-test-id`: this branch is
     // only reached when that rule declined, so naming it would send the reader
     // to a rule that has nothing to say about their selector.
-    const hasTestId = attributes.some((attribute) => testIds.includes(attribute.name))
+    const hasTestId =
+      attributes.some((attribute) => testIds.includes(attribute.name)) ||
+      context.parsed.parts.some((part) => part.engine === 'test-id')
     return {
       message:
         'This locator() selector has no semantic handle — no role, label, or ARIA attribute.',

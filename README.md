@@ -86,7 +86,7 @@ That's it. The rest of this README goes deeper on each command.
 | `--config <path>` | Path to `testpilot.config.ts` (otherwise discovered upward from `--cwd`). |
 | `-q, --quiet` | Only print errors. |
 | `--verbose` | Explain what was discovered and why, on stderr. |
-| `--no-color` | Disable ANSI color. (Also honours `NO_COLOR`.) |
+| `--no-color` | Accepted for compatibility. Output is plain text today, so there is no color to turn off. |
 | `-y, --yes` | Skip confirmation prompts. |
 | `--no-playwright-discovery` | Don't read `testDir`/`testMatch` from `playwright.config.*`. |
 | `-v, --version` · `-h, --help` | Version / help. |
@@ -437,23 +437,30 @@ you pass `--force`, so your customizations are safe.
 
 ## Configure — `testpilot.config.ts`
 
-Every key is optional; the file itself is optional. These are the defaults:
+Every key is optional, and so is the file. The block below shows every key with its default. It
+is a **reference, not a starting point**: the four discovery keys are commented out because *setting
+one changes behaviour even when you set it to its default*. An explicit `testDir` switches off
+reading your `playwright.config.*`, and an explicit `playwrightConfig` stops TestPilot looking for
+`.js`/`.mjs` variants or a config one directory down. Uncomment one only to override what your
+Playwright config already says.
 
 ```ts
 import { defineConfig } from 'testpilot-qa'
 
 export default defineConfig({
+  // ── Discovery. Leave these unset to follow your playwright.config.*. ──
   // Where tests live, relative to this file (or the project root if you have no config).
-  testDir: 'tests',
-  // The Playwright config to read testDir/testMatch/testIgnore from when the keys
-  // above are not set. Parsed, never executed.
-  playwrightConfig: 'playwright.config.ts',
+  // testDir: 'tests',
+  // Which Playwright config to read testDir/testMatch/testIgnore from. Parsed, never executed.
+  // playwrightConfig: 'playwright.config.ts',
   // Setting either of these REPLACES the default list — repeat what you still want.
-  include: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
-  exclude: [
-    '**/node_modules/**', '**/dist/**', '**/build/**',
-    '**/coverage/**', '**/test-results/**', '**/playwright-report/**',
-  ],
+  // include: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+  // exclude: [
+  //   '**/node_modules/**', '**/dist/**', '**/build/**',
+  //   '**/coverage/**', '**/test-results/**', '**/playwright-report/**',
+  // ],
+
+  // ── Everything below is safe to set to its default. ──
   // Page objects / fixtures, analyzed only with --with-helpers. Empty means
   // "use the conventional directory names" (see Known limitations).
   includeHelpers: [],

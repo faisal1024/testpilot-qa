@@ -1,4 +1,4 @@
-import { testIdReplacement } from '../selector/test-id.js'
+import { testIdEngineReplacement, testIdReplacement } from '../selector/test-id.js'
 import type { Rule, RuleOptions } from './types.js'
 
 /**
@@ -25,7 +25,7 @@ export const PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE = 'data-testid'
  * Playwright config, defaulting to `data-testid`. So on a stock config
  * `locator('[data-test="x"]')` and `getByTestId('x')` select different
  * elements, and naming the second as a replacement for the first is the same
- * class of wrong rewrite this rule has produced five times. The rule still
+ * class of wrong rewrite this rule produced repeatedly while it reasoned about shapes it could not prove. The rule still
  * reports — a test id in raw CSS is worth flagging either way — but it says
  * what has to be true for the rewrite to hold.
  */
@@ -112,16 +112,20 @@ export const preferGetByTestId: Rule = {
     // Playwright's own `data-testid=save` engine: already a test id, still not
     // `getByTestId()`, and invisible to the CSS attribute scan below.
     const [only] = context.parsed.parts
-    if (only?.engine === 'test-id' && context.parsed.parts.length === 1) {
+    if (only?.engine === 'test-id') {
+      // Bounded exactly as the CSS path is — see `testIdEngineReplacement`.
+      const engine = testIdEngineReplacement(context.parsed, names, context.selector ?? '')
+      if (engine === null) {
+        return null
+      }
       // `data-test=`/`data-test-id=` are engines of their own, and getByTestId()
       // queries neither unless the config says so.
-      const engine = only.engineName ?? PLAYWRIGHT_DEFAULT_TEST_ID_ATTRIBUTE
       return {
-        message: `The ${engine}= selector engine addresses a test id.`,
-        suggestion: `Use getByTestId(${JSON.stringify(only.body)}) instead.${
-          queriedBy(engine, options?.resolvedTestIdAttribute)
+        message: `The ${engine.attribute}= selector engine addresses a test id.`,
+        suggestion: `Use getByTestId(${JSON.stringify(engine.value)}) instead.${
+          queriedBy(engine.attribute, options?.resolvedTestIdAttribute)
             ? ''
-            : configCaveat(engine, options?.resolvedTestIdAttribute)
+            : configCaveat(engine.attribute, options?.resolvedTestIdAttribute)
         }`,
       }
     }

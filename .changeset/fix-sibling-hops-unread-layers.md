@@ -23,6 +23,16 @@ selector, no `>>` chaining, the test id leading it, reaching the target through 
 steps. Everything else is silent. The set of ways to leave a subtree is open — CSS and Playwright
 keep adding spellings — while the set of shapes that provably stay is small and closed.
 
+That closed the combinator axis. A final review found the same shape on a second axis: the
+**pseudo-classes** in a scope rewrite. Moving the query scope from the page to the test-id element
+changes what `:nth-match(li, 2)` counts, what `:right-of(.label)` measures against, and whether
+`:is(.list .item)` or `:not(.hidden li)` can see an ancestor — and `:scope` becomes the test-id
+element itself. Each was checked in real Chromium and selected a different element after the
+rewrite. A scope rewrite now also requires every pseudo-class to be on a short allowlist whose
+meaning cannot change with the scope (text, visibility, element state, sibling position, and
+`:not()`/`:is()`/`:has()` over a single compound). Verified the same way: none of those six shapes
+is rewritten any more, and the seven common ones that still are select identical elements.
+
 `locator('[data-testid=a] >> div')` loses its finding to this, which is real advice given up. It
 occurs **zero** times across the five corpus repos, and the corpus counts are unchanged.
 
@@ -53,5 +63,16 @@ interpolated templates, **120** variables, **1** property access, **1** concaten
 or the predicate's own doc comment, two of which still carried it after the first pass. And `prefer-semantic-locator` now honours the same "options bag we could not read" signal its
 sibling does.
 
-Corpus findings are unchanged; all three rule fixes have zero corpus incidence, and the ten reworded
+**The `data-testid=` selector engine is bounded the way the CSS path is.** It lived inside the rule,
+outside every limit above: `data-testid= save` was offered `getByTestId("save")` though Playwright's
+engine uses the value as written and queries `" save"`; `data-testid=a >> div` was reported by
+neither rule; and with a configured `testIdAttributes: ['data-qa']`, `data-test=x` still counted as a
+test id while `[data-test=x]` did not.
+
+**A usage error now exits `2`, as documented.** An unknown flag, a missing value or an unknown
+command exited `1` — the code a CI job reads as *the quality gate failed* — so a typo like
+`--min-scor 80` looked like low quality rather than a broken job. An internal error now exits `5`,
+also as documented, instead of `1`.
+
+Corpus findings are unchanged; every rule fix here has zero corpus incidence, and the ten reworded
 suggestions are text.
