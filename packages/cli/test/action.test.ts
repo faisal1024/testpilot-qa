@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -65,5 +67,79 @@ describe('README action example is accurate', () => {
 
   it('documents pairing with upload-sarif for code scanning', () => {
     expect(readme).toContain('upload-sarif')
+  })
+})
+
+describe('GitHub Action wrapper — what the CLI actually receives', () => {
+  // Runs the composite step's real shell body under bash, with a stand-in `npx`
+  // that records its arguments. Reading the YAML cannot catch this class of
+  // bug: the text looked right and bash changed the arguments at runtime.
+  function runAction(patterns: string, files: string[]): string[][] {
+    const dir = mkdtempSync(join(tmpdir(), 'tp-action-'))
+    try {
+      for (const file of files) {
+        mkdirSync(join(dir, dirname(file)), { recursive: true })
+        writeFileSync(join(dir, file), '')
+      }
+      const bin = join(dir, 'bin')
+      mkdirSync(bin)
+      const log = join(dir, 'npx.log')
+      // One JSON line per invocation, holding the argv npx was given.
+      writeFileSync(
+        join(bin, 'npx'),
+        `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n')\n`,
+      )
+      chmodSync(join(bin, 'npx'), 0o755)
+      const result = spawnSync('bash', ['-c', runBody], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          TP_VERSION: 'latest',
+          TP_PATTERNS: patterns,
+          TP_MIN_SCORE: '',
+          TP_BASELINE: '',
+          TP_OUTPUT: 'testpilot.sarif',
+          GITHUB_OUTPUT: join(dir, 'out'),
+          GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+        },
+      })
+      expect(result.status, result.stderr).toBe(0)
+      return readFileSync(log, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as string[])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('passes a glob to the CLI verbatim instead of letting bash expand it', () => {
+    // Files at three depths. Bash without globstar expands `**` as `*`, which
+    // matched only `tests/ui/x.spec.ts` — the other two were silently dropped.
+    const calls = runAction('tests/**/*.spec.ts', [
+      'tests/top.spec.ts',
+      'tests/ui/x.spec.ts',
+      'tests/deep/er/y.spec.ts',
+    ])
+    expect(calls).toHaveLength(2)
+    for (const argv of calls) {
+      expect(argv).toContain('tests/**/*.spec.ts')
+      expect(argv).not.toContain('tests/ui/x.spec.ts')
+    }
+  })
+
+  it('still splits several whitespace-separated patterns', () => {
+    const calls = runAction('e2e/**/*.ts  tests/*.spec.ts', ['e2e/a.ts', 'tests/b.spec.ts'])
+    for (const argv of calls) {
+      expect(argv).toContain('e2e/**/*.ts')
+      expect(argv).toContain('tests/*.spec.ts')
+    }
+  })
+
+  it('passes no pattern at all when the input is empty', () => {
+    const [summary] = runAction('', ['tests/a.spec.ts'])
+    expect(summary).toEqual(['--yes', 'testpilot-qa@latest', 'analyze'])
   })
 })

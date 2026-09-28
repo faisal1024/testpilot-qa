@@ -74,8 +74,16 @@ runs:
 
         # The inputs shared by both runs (the baseline scopes the report to new findings).
         common=(analyze)
-        # shellcheck disable=SC2206 # intentional word-splitting for multiple globs
-        [ -n "${TP_PATTERNS}" ] && common+=(${TP_PATTERNS})
+        # Split on whitespace so several globs can be passed — but with `read`,
+        # which does not do pathname expansion. The previous unquoted
+        # `common+=(${TP_PATTERNS})` let bash expand `tests/**/*.spec.ts` itself
+        # against the runner's files (without globstar, `**` means `*`), so the
+        # CLI received a partial file list and the gate silently covered files
+        # nobody chose.
+        if [ -n "${TP_PATTERNS}" ]; then
+          read -r -a tp_patterns <<< "${TP_PATTERNS}"
+          common+=("${tp_patterns[@]}")
+        fi
         [ -n "${TP_BASELINE}" ] && common+=(--baseline "${TP_BASELINE}")
 
         # PR-friendly summary first — the human report. Never fails the build.
