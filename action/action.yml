@@ -20,7 +20,7 @@ inputs:
     required: false
     default: 'latest'
   patterns:
-    description: 'Optional space-separated glob(s) to analyze. Defaults to the configured test dir.'
+    description: 'Optional glob(s) to analyze, separated by spaces, tabs or newlines, and matched by the CLI (quotes are not honoured, so a path cannot contain a space). Defaults to the configured test dir.'
     required: false
     default: ''
   min-score:
@@ -74,8 +74,24 @@ runs:
 
         # The inputs shared by both runs (the baseline scopes the report to new findings).
         common=(analyze)
-        # shellcheck disable=SC2206 # intentional word-splitting for multiple globs
-        [ -n "${TP_PATTERNS}" ] && common+=(${TP_PATTERNS})
+        # Split on whitespace (spaces, tabs, and newlines, so a YAML `|` block
+        # with one glob per line works) — with pathname expansion OFF. Unquoted,
+        # bash also globbed each pattern against the runner's files before the
+        # CLI saw it: without globstar `**` means `*`, so `tests/**/*.spec.ts`
+        # became a partial file list and the gate silently covered files nobody
+        # chose. `set -f` keeps the splitting and drops only the globbing; `read
+        # -a` would have split too, but stops at the first newline and silently
+        # drops every line after it — the same bug in a new place.
+        # Appended straight onto `common`, never via an intermediate array: a
+        # whitespace-only input splits to nothing, and expanding an EMPTY array
+        # under `set -u` crashes on bash < 4.4 (stock macOS `/bin/bash` on a
+        # self-hosted runner). `common` always holds `analyze`, so it is never empty.
+        if [ -n "${TP_PATTERNS}" ]; then
+          set -f
+          # shellcheck disable=SC2206 # word-splitting wanted; globbing disabled above
+          common+=(${TP_PATTERNS})
+          set +f
+        fi
         [ -n "${TP_BASELINE}" ] && common+=(--baseline "${TP_BASELINE}")
 
         # PR-friendly summary first — the human report. Never fails the build.
