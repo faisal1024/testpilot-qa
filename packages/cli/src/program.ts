@@ -31,6 +31,13 @@ Global flags (usable on any command):
 
 export function buildProgram(): Command {
   const program = new Command('testpilot')
+    // Throw instead of exiting, so `cli.ts` can map commander's own failures —
+    // an unknown flag, a missing value, an unknown command — to exit 2. Left to
+    // commander they exit 1, the code for a FAILED GATE: a CI job with a typo
+    // like `--min-scor 80` would read as "quality too low" rather than
+    // "misconfigured". Set before any `.command()`, so every subcommand
+    // inherits it.
+    .exitOverride()
     .description('A developer-experience layer and project accelerator for Playwright.')
     .version(CLI_VERSION, '-v, --version')
     .option('--json', 'Output machine-readable JSON.', false)

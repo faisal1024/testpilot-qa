@@ -143,6 +143,30 @@ function propertyValue(object: Node, name: string): Node | null {
   return null
 }
 
+/**
+ * True when a key is computed **and not statically readable**, so we cannot
+ * know which key it is.
+ *
+ * `propertyValue` five lines up already resolves `{ ['use']: … }` through
+ * `staticString`, so treating every computed key as unknown made
+ * `{ reporter: 'list' }` and `{ ['reporter']: 'list' }` — the same object to
+ * Node — give different answers. That is the split this whole series is about,
+ * and it was worse than a wrong sentence: an unreadable config lands in
+ * `status: 'unreadable'` rather than `'no-settings'`, so the adoption branch
+ * never ran and a different directory got analyzed.
+ */
+function hasComputedKey(object: Node): boolean {
+  for (const raw of (object.properties as unknown[]) ?? []) {
+    const property = asNode(raw)
+    if (property?.type === 'Property' && property.computed === true) {
+      if (staticString(asNode(property.key)) === null) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 /** True when the object mixes in another object, whose keys we cannot see. */
 function hasSpread(object: Node): boolean {
   return ((object.properties as unknown[]) ?? []).some(
@@ -310,6 +334,7 @@ interface RawSelectors {
 /** Markers that read as prose already and must not gain "is not a literal value". */
 const PROSE_MARKERS = new Set([
   'a spread from another object',
+  'a computed key',
   'additional defineConfig() arguments',
   'a config layer that could not be read',
 ])
@@ -423,13 +448,23 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const readSelectors = (object: Node, isProject = false): RawSelectors => {
     const spread = hasSpread(object)
     if (spread) unresolved.push('a spread from another object')
+    // A computed key here can *be* `use` — or `tag`. `hasSpread` is applied at
+    // both this level and inside `use`; the computed-key check was applied only
+    // inside `use`, four lines apart in the same function. Pushing a marker
+    // makes `mayDeclareTags` widen on it too, so the two keys agree.
+    const computed = hasComputedKey(object)
+    if (computed) unresolved.push('a computed key')
     const use = propertyValue(object, 'use')
     // A spread at this level can carry `use` entirely, so the attribute is
     // unknown — not "unset, so the default applies". Same for a `use` that is
     // not an object literal.
-    let own: string | 'unresolved' | null = spread ? 'unresolved' : null
+    let own: string | 'unresolved' | null = spread || computed ? 'unresolved' : null
     if (use?.type === 'ObjectExpression') {
       if (hasSpread(use)) own = 'unresolved'
+      // A computed key can *be* `testIdAttribute`. `readOwnOptions` in the
+      // extractor already treats one as unknown; matching that here keeps one
+      // convention across the PR instead of two.
+      if (hasComputedKey(use)) own = 'unresolved'
       const attribute = propertyValue(use, 'testIdAttribute')
       if (attribute) own = staticString(attribute) ?? 'unresolved'
     } else if (use) {
@@ -577,6 +612,14 @@ export function readPlaywrightTestSettings(configPath: string): PlaywrightConfig
   const attributeCandidates = new Set<string | 'unresolved' | null>(
     effective.length > 0 ? effective : [configTestIdAttribute],
   )
+  // A region we could not read can carry `use` whole — `defineConfig(base, {…})`
+  // with an imported base, a second `defineConfig()` argument, a layer that
+  // would not parse. `mayDeclareTags` already widens on exactly these markers;
+  // not consulting them here let the report assert Playwright's default in the
+  // same run that says "it uses a config layer that could not be read".
+  if (unresolved.some((key) => PROSE_MARKERS.has(key))) {
+    attributeCandidates.add('unresolved')
+  }
   const testIdAttribute: string | null | 'unresolved' =
     attributeCandidates.size === 1
       ? ([...attributeCandidates][0] as string | null | 'unresolved')

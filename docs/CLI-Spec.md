@@ -694,8 +694,8 @@ still have something to read; the table and HTML reporters print only the error.
 **1.11 is the first `analyze` schema bump that is not purely additive.** `score.score` and
 `score.grade` — and the same two fields on every entry of `score.subScores` — are now
 `number | null` / `Grade | null`. They are `null` when there is at least one locator call-site and
-**not one of them** had a statically readable selector (every selector is an interpolated template
-literal, a variable, an `as string`). Zero call-sites is a different case and still scores `100`/`A`.
+**not one of them** had a statically readable selector (no selector is a static string — most often an
+interpolated template literal or a variable, but any expression counts). Zero call-sites is a different case and still scores `100`/`A`.
 
 A consumer written as `if (report.score.score < 80) fail()` **passes** on `null` — a false green in
 the field this tool exists to protect. Check explicitly:
@@ -823,7 +823,7 @@ so running from a sub-directory of a monorepo still finds the suite.
 ### Page objects, fixtures and helpers
 
 Playwright's `testMatch` selects the files it *runs*. Real suites keep most of their locators
-somewhere else — Ghost's page objects hold 114 of its 116 findings — so `analyze`/`fix` accept
+somewhere else — Ghost's page objects hold 107 of its 109 findings — so `analyze`/`fix` accept
 `--with-helpers`, or a `includeHelpers` list in `testpilot.config.ts` (naming them is itself the
 opt-in). Defaults when the flag is used: `pages`, `page-objects`, `pageobjects`, `pom`, `fixtures`,
 `helpers`, `support`. `lib/` and `utils/` are deliberately absent — broad enough that scanning them

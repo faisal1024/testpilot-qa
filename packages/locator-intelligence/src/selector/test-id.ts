@@ -59,8 +59,12 @@ const SCOPING_COMBINATORS = new Set(['descendant', 'child'])
  * - any relevant part is a selector **list**, which has more than one target or
  *   more than one scope;
  * - the test id reaches the target through anything but descendant/child steps;
- * - anything **precedes** the test id's own compound — a `>>` part, or an
- *   earlier compound in the same selector. Both are ancestor scopes
+ * - the selector has more than one `>>` part, whether before or after the test
+ *   id — reasoning across an engine boundary is what kept going wrong;
+ * - a compound uses a pseudo-class whose meaning depends on the query scope
+ *   (`scope` answers only), since the rewrite moves that scope;
+ * - anything **precedes** the test id's own compound — an earlier compound in
+ *   the same selector. Both are ancestor scopes
  *   `getByTestId()` would drop: `'#login-modal >> [data-testid=save]'` and
  *   `'#login-modal [data-testid=save]'` are the same locator, and neither is
  *   `getByTestId('save')`, which searches the whole document. A leading
@@ -75,89 +79,215 @@ export function testIdReplacement(
   if (parsed.unparsed.length > 0) {
     return null
   }
-  const last = parsed.parts.at(-1)
-  if (!last || last.engine !== 'css') {
+  // ONE part, and the test id leads it.
+  //
+  // Not "one part, plus every way a later `>>` part could step outside the
+  // subtree". That enumeration was incomplete ten times running: a sibling
+  // combinator, then `*:scope`, then `:scope:hover`, then `:is(:scope)`. The
+  // set of ways to leave is open — CSS and Playwright keep adding spellings —
+  // while the set of shapes that provably stay is small and closed. So this
+  // recognises those instead, and says nothing about anything else.
+  //
+  // `locator('[data-testid=a] >> div')` loses its finding as a result. That is
+  // the price of a rule whose entire severity rests on the replacement being
+  // right, and it is the cheaper side of the trade.
+  if (parsed.parts.length !== 1) {
     return null
   }
-  const arm = singleArm(last)
-  if (!arm) {
+  const part = parsed.parts[0]
+  if (!part || part.engine !== 'css') {
     return null
   }
-  const target = arm.compounds.at(-1)
-  if (!target) {
+  const arm = singleArm(part)
+  const target = arm?.compounds.at(-1)
+  if (!arm || !target) {
     return null
   }
-
-  // The target's own selector first: it is the only place a `direct` or
-  // `same-element` answer can come from.
   const found = findIn(arm.compounds, names)
-  if (found) {
-    // Anything before the test id's own compound is an ancestor this rule
-    // would silently drop — an earlier `>>` part, or an earlier compound in
-    // this same selector. `'#modal >> [data-testid=x]'` and
-    // `'#modal [data-testid=x]'` are one locator, and neither is
-    // `getByTestId('x')`, which searches the whole document. All nine of
-    // immich's findings were the second spelling.
-    //
-    // ONE check, before the branches. The first version of this guard sat
-    // inside the target-compound branch below, so it never covered `scope`:
-    // `'#modal [data-testid=x] .child'` still offered a rewrite that dropped
-    // `#modal`, and the two spellings still disagreed. That was the sixth
-    // round of this defect, produced by the fix for the fifth.
-    if (parsed.parts.length > 1 || found.index > 0) {
-      return null
-    }
-    if (found.index === arm.compounds.length - 1) {
-      return {
-        kind: isOnlyHandle(target) ? 'direct' : 'same-element',
-        attribute: found.match.name,
-        exactValue: exactValueOf(found.match),
-      }
-    }
-    // Every step from the match to the target must be a containment step.
-    const steps = arm.combinators.slice(found.index, arm.compounds.length - 1)
-    if (!steps.every((step) => SCOPING_COMBINATORS.has(step))) {
-      return null
-    }
-    return {
-      kind: 'scope',
-      attribute: found.match.name,
-      exactValue: exactValueOf(found.match),
-      scopeHasOtherConditions: !isOnlyHandle(arm.compounds[found.index] as CompoundSelector),
-    }
-  }
-
-  // Otherwise an earlier `>>` part, which chains as a scope. The match has to
-  // be on that part's own target — `[data-testid=a] + div >> button` scopes
-  // from the div, and the test id is that div's sibling.
-  // `xpath=..` walks UP from the scope, so a later xpath part can put the
-  // target outside the test id's subtree: in `'[data-testid=x] >> .. >> div'`
-  // the target is under x's *parent*, and calling x an ancestor is false.
-  // The rewrite would still be sound — `>>` is a chained `locator()` — but the
-  // sentence would not be, and the sentence is what this rule sells.
-  if (parsed.parts.slice(1).some((part) => part.engine === 'xpath')) {
+  // `found.index > 0` means something precedes the test id — an ancestor scope
+  // `getByTestId()` would drop. A leading combinator counts: the tokenizer
+  // models `'+ [data-testid=x]'` as `:scope + [data-testid=x]`, so the test id
+  // is at index 1 and this rejects it without needing to recognise `:scope` in
+  // any of its spellings.
+  if (!found || found.index > 0) {
     return null
   }
-  // Only the *first* part: anything before the one holding the test id is a
-  // further ancestor that `getByTestId()` would drop.
-  const first = parsed.parts[0]
-  if (parsed.parts.length > 1 && first?.engine === 'css') {
-    const earlier = singleArm(first)
-    if (!earlier) {
-      return null
-    }
-    const tail = earlier.compounds.at(-1)
-    const match = tail && matchIn(tail, names)
-    if (match && earlier.compounds.length === 1) {
-      return {
-        kind: 'scope',
-        attribute: match.name,
-        exactValue: exactValueOf(match),
-        scopeHasOtherConditions: !isOnlyHandle(tail),
-      }
+  const exactValue = exactValueOf(found.match)
+  if (found.index === arm.compounds.length - 1) {
+    return {
+      kind: isOnlyHandle(target) ? 'direct' : 'same-element',
+      attribute: found.match.name,
+      exactValue,
     }
   }
-  return null
+  // Provably an ancestor: every step from it to the target is a containment
+  // step, inside one selector, with no engine boundary to reason across.
+  if (!arm.combinators.every((step) => SCOPING_COMBINATORS.has(step))) {
+    return null
+  }
+  // ...and every compound means the same thing whatever the query scope is.
+  // The `scope` rewrite MOVES the scope — from the page to the test-id element
+  // — so any pseudo-class Playwright evaluates against the scope picks a
+  // different element afterwards: `:nth-match(li, 2)` counts matches inside
+  // the new scope, `:right-of(.label)` measures against candidates in it,
+  // `:is(.list .item)` and `:not(.hidden li)` test ancestry that may now lie
+  // outside it, and `:scope` becomes the test-id element itself. Each of those
+  // was verified wrong in Chromium. The combinator axis was closed last round;
+  // this closes the pseudo axis the same way — an allowlist of what is safe,
+  // not a list of what is not.
+  if (!arm.compounds.every(isScopeIndependent)) {
+    return null
+  }
+  return {
+    kind: 'scope',
+    attribute: found.match.name,
+    exactValue,
+    scopeHasOtherConditions: !isOnlyHandle(arm.compounds[0] as CompoundSelector),
+  }
+}
+
+/**
+ * Pseudo-classes whose meaning is a property of the element alone — its own
+ * text, state, visibility, or position among its siblings — and so cannot
+ * change when the query scope does. Deliberately short: a pseudo-class not
+ * listed here makes the `scope` rewrite unsafe until someone shows otherwise.
+ */
+const SCOPE_INDEPENDENT_PSEUDOS: ReadonlySet<string> = new Set([
+  // Playwright's own, evaluated against the element's text or box.
+  'visible',
+  'text',
+  'has-text',
+  'text-is',
+  'text-matches',
+  // Position among siblings: the parent is unchanged by a scope move.
+  'first-child',
+  'last-child',
+  'only-child',
+  'first-of-type',
+  'last-of-type',
+  'only-of-type',
+  'nth-of-type',
+  'nth-last-of-type',
+  // Element state.
+  'empty',
+  'checked',
+  'disabled',
+  'enabled',
+  'required',
+  'optional',
+  'read-only',
+  'read-write',
+  'indeterminate',
+  'hover',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'active',
+])
+
+/**
+ * Pseudo-classes that take a selector argument, accepted only when every arm of
+ * that argument is a single compound that is itself scope-independent. A
+ * combinator inside them — `:not(.hidden li)`, `:is(.list .item)` — tests
+ * ancestry, which may lie outside the new scope.
+ */
+const COMPOUND_ARGUMENT_PSEUDOS: ReadonlySet<string> = new Set([
+  'not',
+  'is',
+  'where',
+  'matches',
+  'has',
+])
+
+/** A control character or a lone surrogate — anything JSON-escaping changes in transit. */
+function hasUnsafeCharacter(value: string): boolean {
+  // `for…of` walks code points, so a well-formed pair is one astral character
+  // and only an unpaired surrogate lands in the surrogate range.
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f || (code >= 0xd800 && code <= 0xdfff)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `odd`, `even`, `3`, `2n`, `-n+3`, `2n + 1` — and nothing else. */
+const AN_PLUS_B = /^\s*(?:odd|even|[+-]?\d*n(?:\s*[+-]\s*\d+)?|[+-]?\d+)\s*$/i
+
+/** True when this compound selects the same elements under any query scope. */
+function isScopeIndependent(compound: CompoundSelector): boolean {
+  return compound.pseudos.every((pseudo) => {
+    if (pseudo.element) {
+      return false
+    }
+    if (SCOPE_INDEPENDENT_PSEUDOS.has(pseudo.name)) {
+      return true
+    }
+    // `:nth-child(2)` is sibling position; `:nth-child(2 of .a .b)` is not. Accept
+    // only an argument that is visibly An+B — "no `of` was parsed" is not the same
+    // as "there is no `of`": an escaped `o\66` hid it from the tokenizer.
+    if (pseudo.name === 'nth-child' || pseudo.name === 'nth-last-child') {
+      return pseudo.selectors === undefined && AN_PLUS_B.test(pseudo.argument ?? '')
+    }
+    if (COMPOUND_ARGUMENT_PSEUDOS.has(pseudo.name)) {
+      // `=== true`: an argument we did not parse is not an argument we checked.
+      return (
+        pseudo.selectors?.every(
+          (arm) =>
+            arm.compounds.length === 1 && isScopeIndependent(arm.compounds[0] as CompoundSelector),
+        ) === true
+      )
+    }
+    return false
+  })
+}
+
+/**
+ * The `data-testid=value` selector ENGINE, as a test id with an exact
+ * `getByTestId()` form — or `null`.
+ *
+ * Kept beside `testIdReplacement`, and shared by both rules, for the reason
+ * that function is: the engine branch used to live inside one rule, outside
+ * every bound the CSS path had, and so reproduced the defect class on its own.
+ *
+ * - One part only, like the CSS path: `data-testid=a >> div` scopes across an
+ *   engine boundary this does not reason about.
+ * - The engine must be one of the configured test-id attributes. With
+ *   `testIdAttributes: ['data-qa']`, `[data-test=x]` is not a test id to the
+ *   CSS path, and `data-test=x` must not be one to this path either — the same
+ *   locator, spelled two ways, got two different rules.
+ * - No whitespace around `=` or at either end. Playwright's attribute engine
+ *   builds `[attr=${JSON.stringify(body)}]` from the body *as written*, so
+ *   `data-testid= save` queries `" save"`; the tokenizer trims it, and the rule
+ *   used to offer `getByTestId("save")` — a different element.
+ */
+export function testIdEngineReplacement(
+  parsed: ParsedSelector,
+  names: readonly string[],
+  selector: string,
+): { attribute: string; value: string } | null {
+  if (parsed.unparsed.length > 0 || parsed.parts.length !== 1) {
+    return null
+  }
+  const part = parsed.parts[0]
+  if (part?.engine !== 'test-id' || part.engineName === undefined) {
+    return null
+  }
+  if (!names.includes(part.engineName)) {
+    return null
+  }
+  if (selector !== selector.trim() || /\s=|=\s/.test(selector)) {
+    return null
+  }
+  // Playwright builds `[attr=${JSON.stringify(body)}]`, and CSS then reads the
+  // JSON escape `\t` as a plain `t`: `data-testid=a<TAB>b` queries "atb", not
+  // the "a\tb" that `getByTestId()` would. Control characters and lone
+  // surrogates change the value in transit, so there is no exact rewrite.
+  if (hasUnsafeCharacter(part.body)) {
+    return null
+  }
+  return { attribute: part.engineName, value: part.body }
 }
 
 /** The one selector in a part, or `null` when the part is a list (or unparsed). */

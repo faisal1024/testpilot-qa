@@ -20,18 +20,20 @@ still have a working suite. Zero lock-in.
 ## Install
 
 ```bash
-npm i -D testpilot-qa@alpha     # requires Node >= 20
+npm i -D -E testpilot-qa@alpha     # requires Node >= 20
 ```
 
 Then every `npx testpilot-qa …` example below resolves to your local copy — no network round-trip.
+The package installs three interchangeable binaries: **`testpilot`**, **`testpilot-qa`**, and
+**`tpq`**. This README uses the first two; pick whichever you prefer.
 Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
 
-> **Pin `@alpha`.** A plain `npm i testpilot-qa` resolves `latest`, which today happens to point at the
-> same alpha build — but that is not guaranteed to track future alphas. Always pin.
->
-> **What "alpha" promises:** the CLI flags, JSON/SARIF report shapes, baseline file format, and scoring
-> weights may change between `alpha.N` releases without a major version bump. If you gate CI on
-> `--min-score`, pin an exact version (`testpilot-qa@0.1.0-alpha.0`).
+> **`-E` pins the exact version.** `@alpha` resolves to the newest prerelease, and `-E`
+> (`--save-exact`) records that exact version in your `package.json` rather than a range. That
+> matters: between `alpha.N` releases the CLI flags, JSON/SARIF report shapes, baseline file format,
+> rule ids, and scoring weights may all change without a major version bump — see
+> [Known limitations](#known-limitations-alpha) for what moved most recently — and it matters most
+> if you gate CI on `--min-score`. Upgrade deliberately by re-running the same command.
 
 ---
 
@@ -73,8 +75,43 @@ That's it. The rest of this README goes deeper on each command.
 | `doctor` | Diagnose project readiness, setup problems, and AI-guidance drift. |
 | `explain` | Explain a rule: why it matters, with bad/good examples. |
 
-All commands accept `--quiet` and `--cwd <dir>`, and emit stable `--json` output — except `run`, which
-is a pass-through and forwards everything to Playwright.
+### Options every command accepts
+
+| Flag | Effect |
+|---|---|
+| `--json` | Machine-readable output. `run` accepts the flag but ignores it — it forwards to Playwright, whose output it does not reshape. |
+| `--cwd <path>` | Run as if in this directory. |
+| `--config <path>` | Path to `testpilot.config.ts` (otherwise discovered upward from `--cwd`). |
+| `-q, --quiet` | Only print errors. |
+| `--verbose` | Explain what was discovered and why, on stderr. |
+| `--no-color` | Accepted for compatibility. Output is plain text today, so there is no color to turn off. |
+| `-y, --yes` | Skip confirmation prompts. |
+| `--no-playwright-discovery` | Don't read `testDir`/`testMatch` from `playwright.config.*`. |
+| `-v, --version` · `-h, --help` | Version / help. |
+
+### Per-command options
+
+| Command | Options |
+|---|---|
+| `init [directory]` | `--template <id>` (default `ui-api-fullstack`), `--force` |
+| `run` | `--tag <tags>`, `--exclude-tag <tags>`, `--suite <name>`, then `--` and any Playwright flag |
+| `tags [patterns...]` | `--output <path>` |
+| `analyze [patterns...]` | `--min-score <n>`, `--reporter table\|json\|sarif\|html`, `--output <path>`, `--with-helpers`, `--baseline <path>`, `--update-baseline` |
+| `fix [patterns...]` | `--write`, `--with-helpers` |
+| `doctor` | `--strict-guidance` |
+| `explain <ruleId>` | *(global flags only — `--json` gives the machine-readable rule)* |
+| `add ai [agent]` | `--write`, `--force` |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success — including a reporting-only `analyze` with findings but no threshold. |
+| `1` | Gate failed: below `--min-score`, or new findings vs `--baseline`. |
+| `2` | Usage error — a bad flag, an unknown `--suite`, or explicit patterns that matched no files. |
+| `3` | Config problem — invalid `testpilot.config.ts`, or config-driven discovery matched no files. |
+| `4` | Environment problem — `doctor` found setup issues, or Playwright isn't installed. |
+| `5` | Internal error (a bug; please report it). |
 
 ---
 
@@ -90,17 +127,24 @@ npm install
 npx playwright install
 npx playwright test          # plain Playwright — always works
 
-# Generated npm scripts (plain Playwright)
+# Generated npm scripts (plain Playwright — no TestPilot in any of them)
 npm run test:e2e             # all tests
 npm run test:e2e:ui          # UI tests only
 npm run test:e2e:api         # API tests only
 npm run test:e2e:parallel    # run with 2 workers
+npm run test:e2e:headed      # headed browser
+npm run test:e2e:smoke       # the @smoke tag, as a plain --grep regex
 
 # …or run through TestPilot (a thin pass-through around Playwright)
 npx testpilot-qa run
 npx testpilot-qa run -- --workers=2
 npx testpilot-qa run -- tests/ui --workers=2
 ```
+
+`init` also writes `playwright.config.ts`, `testpilot.config.ts`, UI + API example specs, a
+`.github/workflows/e2e.yml` starter, a `.gitignore`, a project `README.md`, and the four AI guidance
+files. Everything except `testpilot.config.ts` is plain Playwright — that is what "ejectable" means
+here.
 
 `testpilot run` is a convenience wrapper, **not** a custom runner: it locates your project,
 finds the Playwright config, and forwards to your local Playwright, preserving its exit code.
@@ -147,10 +191,12 @@ npx testpilot-qa analyze --min-score 80
 npx testpilot-qa analyze --output testpilot-report.json
 ```
 
-Every run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
+Each run computes a deterministic **Locator Quality Score** (0–100, graded A–F) with Resilience,
 Accessibility, Maintainability, and Flakiness sub-scores. Without `--min-score` it's reporting-only
 (exit 0); with `--min-score <n>` (or `scoring.minScore` in config — the flag wins) it exits non-zero
-when the score is below the threshold. Scoring is static (Tier 1), not DOM-aware. See
+when the score is below the threshold. The one case with no score is a suite where **every** locator
+call site uses a selector that isn't a static string: `score` and `grade` come back `null`, printed
+as *"not enough evidence"*, and `--min-score` fails rather than passing on an absent number. Scoring is static (Tier 1), not DOM-aware. See
 **[docs/Scoring.md](docs/Scoring.md)** for exactly how the score is computed, with worked examples,
 and **[docs/rules](docs/rules/README.md)** for every rule with bad → better examples.
 
@@ -167,7 +213,7 @@ when it does this; `--no-playwright-discovery` turns it off.
 
 Most suites keep their locators in page objects and fixtures, which Playwright's `testMatch` never
 runs — `npx testpilot-qa analyze --with-helpers` includes them, tagged separately so the two are never
-conflated. On the Ghost repository that is the difference between 2 findings and 116. A candidate has to
+conflated. On the Ghost repository that is the difference between 2 findings and 109. A candidate has to
 actually use Playwright to count, so a `pages/` directory of Next.js routes is not mistaken for page
 objects. **A run that matches no files fails** (exit
 `3` for config discovery, `2` for patterns) instead of reporting an empty 100/A — so a wrong `testDir`
@@ -228,7 +274,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: faisal1024/testpilot-qa/action@v0
         with:
-          version: alpha          # pin the dist-tag; the action defaults to `latest`
+          version: alpha          # newest prerelease; set an exact version to freeze CI
           min-score: 80
           baseline: testpilot-baseline.json
       - uses: github/codeql-action/upload-sarif@v3
@@ -295,13 +341,18 @@ npx testpilot-qa tags
 ```
 
 ```
-TAG              TESTS  FILES  DECLARED
-@regression         86     14  details
-@accessibility      55     10  details
-@here                1      1  title
+TAG          TESTS  FILES  DECLARED
+@smoke           2  2      title
+@regression      1  1      details
 
-3 tag(s) across 153 test declarations in 28 file(s); 41 untagged.
+2 tag(s) across 3 test declarations in 3 file(s); 0 untagged.
+
+Suites (testpilot.config.ts):
+  regression: any of @regression — 1 test declaration(s)
+  smoke: any of @smoke — 2 test declaration(s)
 ```
+
+That is the real output for the project `init` generates, so you can reproduce it exactly.
 
 Static and instant — no browser, no test run. `DECLARED` separates a real vocabulary from noise:
 Playwright treats any `@word` in a title as a tag, so a test named *"turn off mentions for @here"*
@@ -387,6 +438,76 @@ you pass `--force`, so your customizations are safe.
 
 ---
 
+## Configure — `testpilot.config.ts`
+
+Every key is optional, and so is the file. The block below shows every key with its default. It
+is a **reference, not a starting point**: the four discovery keys are commented out because *setting
+one changes behaviour even when you set it to its default*. An explicit `testDir` switches off
+reading your `playwright.config.*`, and an explicit `playwrightConfig` stops TestPilot looking for
+`.js`/`.mjs` variants or a config one directory down. Uncomment one only to override what your
+Playwright config already says.
+
+```ts
+import { defineConfig } from 'testpilot-qa'
+
+export default defineConfig({
+  // ── Discovery. Leave these unset to follow your playwright.config.*. ──
+  // Where tests live, relative to this file (or the project root if you have no config).
+  // testDir: 'tests',
+  // Which Playwright config to read testDir/testMatch/testIgnore from. Parsed, never executed.
+  // playwrightConfig: 'playwright.config.ts',
+  // Setting either of these REPLACES the default list — repeat what you still want.
+  // include: ['**/*.{spec,test,e2e,e2e-spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+  // exclude: [
+  //   '**/node_modules/**', '**/dist/**', '**/build/**',
+  //   '**/coverage/**', '**/test-results/**', '**/playwright-report/**',
+  // ],
+
+  // ── Everything below is safe to set to its default. ──
+  // Page objects / fixtures, analyzed only with --with-helpers. Empty means
+  // "use the conventional directory names" (see Known limitations).
+  includeHelpers: [],
+  // Named tag sets for `run --suite`. A list is any-of; the object form can
+  // require all of them: { all: [...], any: [...], none: [...] }.
+  suites: {},
+  // Per-rule severity: 'off' | 'info' | 'warn' | 'error'. Omitted rules keep
+  // their default — see the table below.
+  rules: {},
+  // Per-rule settings, kept apart from `rules` so a severity stays a severity.
+  ruleOptions: {
+    'no-deep-css-chain': { maxChainDepth: 3 },
+    // Mirror your Playwright `use.testIdAttribute` — getByTestId() queries only that one.
+    'prefer-get-by-test-id': { testIdAttributes: ['data-testid', 'data-test-id', 'data-test'] },
+  },
+  // `minScore` is unset by default, so `analyze` is reporting-only until you
+  // set it here or pass --min-score (the flag wins).
+  scoring: { weights: { error: 5, warn: 2, info: 0.5 } },
+  // Which guidance files `init` and `add ai` generate.
+  ai: { agents: ['claude', 'codex', 'cursor', 'copilot'] },
+})
+```
+
+### The rules
+
+| Rule | Category | Default | Flags |
+|---|---|---|---|
+| [`no-xpath`](docs/rules/no-xpath.md) | locator | `error` | XPath selectors. |
+| [`no-css-class-selector`](docs/rules/no-css-class-selector.md) | locator | `error` | Class selectors, which belong to the styling layer. |
+| [`no-nth-child`](docs/rules/no-nth-child.md) | locator | `error` | CSS `:nth-child()` / `:nth-last-child()`. |
+| [`no-hard-wait`](docs/rules/no-hard-wait.md) | flakiness | `error` | `page.waitForTimeout()`. |
+| [`no-deep-css-chain`](docs/rules/no-deep-css-chain.md) | locator | `warn` | Long descendant/`>` chains. Threshold via `ruleOptions`. |
+| [`prefer-get-by-test-id`](docs/rules/prefer-get-by-test-id.md) | locator | `warn` | A test id addressed as raw CSS, when `getByTestId()` says the same thing. |
+| [`avoid-positional-access`](docs/rules/avoid-positional-access.md) | locator | `warn` | `.nth()` — selecting by position rather than identity. |
+| [`avoid-parent-traversal`](docs/rules/avoid-parent-traversal.md) | locator | `info` | `locator('..')`. |
+| [`prefer-semantic-locator`](docs/rules/prefer-semantic-locator.md) | locator | `info` | A selector with no role/label/ARIA handle. |
+| [`require-test-tag`](docs/rules/require-test-tag.md) | maintainability | **`off`** (`info` when on) | A test carrying no selectable tag. **Counted but not scored.** |
+
+Nine rules are scored; `require-test-tag` is opt-in and excluded from the score. Every page above has
+a *"Does not fire on"* section listing what the rule deliberately allows — each entry is executed
+against the rule in the test suite, so those are facts rather than intentions.
+
+---
+
 ## The Locator Quality Hierarchy (the core idea)
 
 Everything `analyze`, `fix`, and the AI guidance push toward the same thing: locators that survive
@@ -437,9 +558,11 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
 
-**Shipped:** `testpilot-qa@0.1.0-alpha.0` is on npm under the `alpha` dist-tag, CI-published with
-provenance. Next up is post-alpha hardening — the deferred dependency majors, each in its own PR. See
-the **[release checklist](docs/Release-Checklist.md)**.
+**Shipped:** the current prerelease is on npm under the `alpha` tag
+(`npm view testpilot-qa@alpha version`), CI-published with SLSA provenance. `0.1.0-alpha.1` was
+versioned but never published, so the releases so far are `alpha.0` and `alpha.2` onward. Next up is the
+scoring work described under [Known limitations](#known-limitations-alpha), plus the deferred
+dependency majors, each in its own PR. See the **[release checklist](docs/Release-Checklist.md)**.
 
 ---
 
@@ -476,7 +599,7 @@ Written down because a tool that hides these is worse than one that doesn't have
 - **`.first()` and `.last()` are not detected.** `avoid-positional-access` covers `.nth()` only.
   The other two are the same pattern, but counting them changes the score's denominator, so they
   arrive with the scoring work in Phase 12.
-- **Your score will change substantially when you upgrade to the next alpha.** Three re-gradings
+- **Scores moved substantially between `alpha.0` and `alpha.2`.** Three re-gradings
   stack: `.nth()` `error`→`warn`, `locator('..')` `error`→`info`, and the general "prefer
   user-facing locators" nudge `warn`→`info` (as `prefer-semantic-locator`). Measured end-to-end on
   five real suites, from the **earliest recorded corpus baseline** to now: **cal.com 68→82,
@@ -484,7 +607,7 @@ Written down because a tool that hides these is worse than one that doesn't have
   whose locators did not change. (That is the honest reference point: the benchmark did not exist
   when `0.1.0-alpha.0` was tagged, so there is no measurement at that tag to compare against.) **If you gate on `--min-score`, re-choose the threshold**: one you had tuned tightly is now
   much looser than you meant. In the other direction, `no-nth-child` now also covers
-  `:nth-last-child()`, so a suite using it gains one new `error` finding.
+  `:nth-last-child()`, so a suite gains one new `error` finding per use of it.
   `--baseline` files keep working: a finding recorded under a rule's previous id still matches.
 - **Accessibility and Maintainability sub-scores are always 100 A.** No *scored* rule feeds them yet (`require-test-tag` is maintainability, but is excluded from the score).
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
@@ -505,7 +628,8 @@ sequencing):
 
 | Document | What it covers |
 |---|---|
-| [CLI Spec](docs/CLI-Spec.md) | Every command, option, example, and exit code — the reference. |
+| [Rules](docs/rules/README.md) | Every rule, with why it matters, bad → better examples, and what it deliberately does **not** fire on. |
+| [CLI Spec](docs/CLI-Spec.md) | Every command, option, exit code, and the exact `--json` / SARIF shapes — the reference. |
 | [Scoring](docs/Scoring.md) | How the Locator Quality Score is computed — formula, weights, grades, worked examples. |
 | [Architecture](docs/Architecture.md) | System architecture, components, package boundaries, dependency & extension strategy — plus **challenged assumptions**. |
 | [Locator Intelligence Design](docs/Locator-Intelligence-Design.md) | Locator hierarchy, rules engine, scoring model, suggestions, future AI enhancements. |
@@ -513,6 +637,8 @@ sequencing):
 | [Adoption Plan](docs/Adoption-Plan.md) | Public-alpha readiness, brownfield adoption, CI surfaces, and sequencing tradeoffs. |
 | [Roadmap](docs/Roadmap.md) | MVP → V1 → V2 → V3, with sequencing rationale. |
 | [GitHub Issues](docs/GitHub-Issues.md) | Prioritized backlog: Epics → Stories → Tasks, with suggested labels. |
+| [Post-Alpha Plan](docs/Post-Alpha-Plan.md) | What shipped after `alpha.0` and what is next, with the corpus measurements behind each claim. |
+| [Release Checklist](docs/Release-Checklist.md) | The pre-release gate and the publish flow. |
 
 ---
 
@@ -527,7 +653,8 @@ sequencing):
 The original MVP was deliberately narrow — five commands (`init`/`run`/`analyze`/`doctor`/`explain`),
 one `ui-api-fullstack` template, six static rules, Tier 1 only — and has since grown the brownfield,
 CI, fix, and guidance-regeneration surfaces above. See [Architecture §2](docs/Architecture.md) for the
-full set of challenged assumptions and the [Roadmap](docs/Roadmap.md) for the Phase 0–10 plan.
+full set of challenged assumptions, the [Roadmap](docs/Roadmap.md) for the original MVP → V3
+sequencing, and the [Post-Alpha Plan](docs/Post-Alpha-Plan.md) for what shipped after `alpha.0`.
 
 ---
 

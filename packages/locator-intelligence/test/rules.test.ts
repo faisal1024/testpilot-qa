@@ -113,11 +113,12 @@ describe('prefer-get-by-test-id', () => {
   })
 
   it('offers a scope only when the test id is genuinely an ancestor', () => {
-    for (const selector of ['[data-testid="list"] > li a', '[data-testid="list"] >> button']) {
-      const violation = preferGetByTestId.evaluate(css(selector))
-      expect(violation?.message, selector).toContain('ancestor')
-      expect(violation?.suggestion, selector).toContain('Scope with getByTestId("list")')
-    }
+    // Within ONE selector only. The `>>` spelling used to report here too, and
+    // reasoning across an engine boundary is what produced ten rounds of wrong
+    // "ancestor" claims — see the multi-part test below.
+    const violation = preferGetByTestId.evaluate(css('[data-testid="list"] > li a'))
+    expect(violation?.message).toContain('ancestor')
+    expect(violation?.suggestion).toContain('Scope with getByTestId("list")')
   })
 
   it('says nothing when the test id is a sibling, not an ancestor', () => {
@@ -199,6 +200,40 @@ describe('prefer-get-by-test-id', () => {
     // calling it an ancestor is false — even though the rewrite itself would
     // hold. The sentence is what this rule sells.
     expect(preferGetByTestId.evaluate(css('[data-testid="x"] >> .. >> div'))).toBeNull()
+    // ...and a leading SIBLING step on a later part leaves the subtree the same
+    // way. `'[data-testid=a] + div'` has abstained since round 2; the `>>`
+    // spelling of it had not, which is the same split an eighth time.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> ~ div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> + div >> span'))).toBeNull()
+    // Every spelling of "the scope". Playwright parses `+ div`, `:scope + div`
+    // and `*:scope + div` identically — `*:scope` is the implied universal
+    // selector written out — so matching only the tokenizer's synthetic bare
+    // `:scope` gave them opposite answers. Ninth instance of that split.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope ~ div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope:hover + div'))).toBeNull()
+    // Including the spellings a `:scope`-recognising predicate could not see —
+    // `:is(:scope)` IS `:scope` to Playwright, which was the tenth instance,
+    // inside the fix for the ninth. Nothing here recognises `:scope` any more.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :is(:scope) + div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :where(:scope) + div'))).toBeNull()
+    expect(
+      preferGetByTestId.evaluate(css('[data-testid="a"] >> :nth-match(:scope + div, 1)')),
+    ).toBeNull()
+    // A part that IS the scope targets the same element, not a descendant.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> :scope'))).toBeNull()
+    // Multi-part, so silent now — including the descendant/child forms that
+    // were genuinely correct. See the note on the closed shape set above.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> *:scope > div'))).toBeNull()
+    // ...and so does every multi-part selector, descendant steps included. The
+    // rule now recognises a closed set of shapes it can prove, rather than
+    // enumerating the ways a later part might escape the subtree — that list
+    // was incomplete ten times running. `>> div` is a real finding given up to
+    // close the class; it occurs zero times in the corpus.
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> div'))).toBeNull()
+    expect(preferGetByTestId.evaluate(css('[data-testid="a"] >> > div'))).toBeNull()
     // Still fires where nothing precedes it, including under a getBy* parent —
     // there the chain preserves the scope.
     expect(preferGetByTestId.evaluate(css('[data-testid="save"]'))).not.toBeNull()
@@ -245,6 +280,45 @@ describe('prefer-get-by-test-id', () => {
     expect(preferGetByTestId.evaluate(css('[data-test="s"]'), stock)?.suggestion).toContain(
       "queries only `data-testid` (Playwright's default)",
     )
+  })
+
+  it('offers a scope only when every pseudo-class means the same under the new scope', () => {
+    // The `scope` rewrite MOVES the query scope from the page to the test-id
+    // element. Each shape below was checked in real Chromium: the original and
+    // `getByTestId(x).locator(tail)` selected different elements.
+    //   :nth-match(li, 2)      i1 vs i2      — counts matches inside the new scope
+    //   input:right-of(.label) in1 vs none   — layout measured against the scope
+    //   :is(.list .item)       s vs none     — ancestry outside the scope
+    //   li:not(.hidden li)     none vs l     — ditto, inverted
+    //   :scope, :is(:scope)    none vs the test-id element itself
+    for (const selector of [
+      '[data-testid=list] :nth-match(li, 2)',
+      '[data-testid=form] input:right-of(.label)',
+      '[data-testid=form] input:near(.label)',
+      '[data-testid=a] :is(.list .item)',
+      '[data-testid=a] li:not(.hidden li)',
+      '[data-testid=a] :scope',
+      '[data-testid=a] :is(:scope)',
+      '[data-testid=a]:scope div',
+      '[data-testid=a] p::before',
+      // An escaped `of` hides the selector argument from the tokenizer; only a
+      // visible An+B argument is accepted as sibling position.
+      '[data-testid=a] li:nth-child(1 o\\66  :scope > li)',
+    ]) {
+      expect(preferGetByTestId.evaluate(css(selector)), selector).toBeNull()
+    }
+    // ...while these were equivalent in Chromium and still get the rewrite.
+    for (const selector of [
+      '[data-testid=a] b',
+      '[data-testid=l] > li',
+      '[data-testid=a] p:has-text("x")',
+      '[data-testid=a] p:visible',
+      '[data-testid=a] i:nth-child(2)',
+      '[data-testid=a] li:not(.hidden)',
+      '[data-testid=a] p:has(b)',
+    ]) {
+      expect(preferGetByTestId.evaluate(css(selector))?.message, selector).toContain('ancestor')
+    }
   })
 
   it('says nothing when a >> part precedes the test id', () => {
@@ -328,6 +402,46 @@ describe('prefer-get-by-test-id', () => {
   it('treats *[data-testid=x] as the same selector as [data-testid=x]', () => {
     expect(preferGetByTestId.evaluate(css('*[data-testid="save"]'))?.suggestion).toBe(
       'Use getByTestId("save") instead.',
+    )
+  })
+
+  it('bounds the data-testid= engine exactly as it bounds the CSS path', () => {
+    const engine = (
+      selector: string,
+      options?: Parameters<typeof preferGetByTestId.evaluate>[1],
+    ) => {
+      const context = ctx({ selector, selectorEngine: 'css', parsed: tokenizeSelector(selector) })
+      return {
+        testId: preferGetByTestId.evaluate(context, options),
+        semantic: preferSemanticLocator.evaluate(context, options),
+      }
+    }
+    // Playwright's attribute engine uses the body AS WRITTEN, so
+    // `data-testid= save` queries " save". The tokenizer trims it, and the rule
+    // used to offer getByTestId("save") — a different element.
+    for (const selector of ['data-testid= save', 'data-testid = save', 'data-testid=save ']) {
+      expect(engine(selector).testId, JSON.stringify(selector)).toBeNull()
+    }
+    // One part only, like the CSS path — and the semantic rule speaks instead,
+    // where this used to be reported by neither.
+    expect(engine('data-testid=a >> div').testId).toBeNull()
+    expect(engine('data-testid=a >> div').semantic).not.toBeNull()
+    // The configured attribute list governs the engine too. With `data-qa`,
+    // `[data-test=x]` is not a test id to the CSS path; `data-test=x` used to
+    // be one to this path — one locator, two rules.
+    const qa = { testIdAttributes: ['data-qa'] }
+    expect(engine('data-test=save', qa).testId).toBeNull()
+    expect(engine('data-test=save', qa).semantic).not.toBeNull()
+    // ...and the semantic rule's wording agrees across both spellings: neither
+    // `data-test=` nor `[data-test=]` is a test id under that config.
+    expect(engine('data-test=save', qa).semantic?.suggestion).toContain('add a data-testid')
+    expect(engine('[data-test="save"]', qa).semantic?.suggestion).toContain('add a data-testid')
+    // A control character is JSON-escaped by Playwright's engine and then read
+    // by CSS as a plain letter, so `a<TAB>b` queries "atb". No exact rewrite.
+    expect(engine('data-testid=a\tb').testId).toBeNull()
+    expect(engine('data-testid=a\nb').testId).toBeNull()
+    expect(engine('data-testid=save button').testId?.suggestion).toContain(
+      'getByTestId("save button")',
     )
   })
 
