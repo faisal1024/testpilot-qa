@@ -79,7 +79,9 @@ credential from the workflow's OIDC identity, and provenance is attached automat
    bundles npm 10, which cannot do OIDC publishing). **In use since `0.1.0-alpha.3`**, the first
    version whose `_npmUser` is GitHub Actions. The workflow passes no token, on purpose: npm falls
    back to a token *silently*, so a broken trusted-publisher config would otherwise go unnoticed.
-   With tokens disallowed on the package, a broken config fails the publish loudly instead.
+   With no real token in the job, a broken config fails the publish loudly instead. Setting the
+   package to *disallow tokens* (an owner step, Road-to-Beta A4) keeps it that way if a token is
+   ever re-added.
 
 **Option B — granular access token (not used).** Only if trusted publishing is unavailable: a
 granular npm token with publish rights, stored as the secret `NPM_TOKEN` and passed to the Changesets
@@ -164,7 +166,7 @@ npm view testpilot-qa dist-tags
 
 **2. Confirm how it was authenticated.** `npm view testpilot-qa@<version> _npmUser` shows a *person*
 for a token publish and the GitHub Actions identity for a trusted publish. It must be GitHub Actions.
-A person here means a token was used, which the package's publishing access should make impossible.
+A person here means a token was used. Once the package disallows tokens, that cannot happen.
 
 The npm registry can take several minutes to show a new version: alpha.3 returned 404 for about four
 minutes after "packages published successfully". Wait before concluding a publish failed.
