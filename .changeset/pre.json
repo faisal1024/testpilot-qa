@@ -15,6 +15,7 @@
     "alpha-1-no-silent-green",
     "fix-sibling-hops-unread-layers",
     "fix-test-id-ancestors",
+    "include-helpers-relative",
     "install-latest",
     "milestone-2-5-init-run",
     "milestone-2-cli-basics",
