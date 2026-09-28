@@ -47,13 +47,17 @@ function errorMessage(error: unknown): string {
  */
 export async function collectTags(options: CollectTagsOptions): Promise<TagsReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const { files } = await resolveFiles({
+  const { files: selected, helpers } = await resolveFiles({
     cwd: options.cwd,
     patterns: options.patterns,
     config: options.config,
     rootDir: options.rootDir,
     scopes: options.scopes,
   })
+  // A named `includeHelpers` list admits page objects on its own, without the flag, and
+  // they declare no tests: counted here they read as "no tests recognized" and made the
+  // vocabulary look incomplete.
+  const files = selected.filter((file) => !helpers.has(file))
   const reportBase = resolve(discoveryBase(options.cwd, options.patterns, options.rootDir))
 
   const warnings: TagsWarning[] = []

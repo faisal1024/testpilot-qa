@@ -209,6 +209,7 @@ const NOTIFICATION_TEXT = {
   'helpers-not-analyzed': 'Page objects exist that were not analyzed.',
   'helpers-not-recognized': 'Helper files matched but show no sign of using Playwright.',
   'uninspected-call-sites': 'Locator call-sites whose selector could not be read statically.',
+  'include-helpers-unmatched': 'An includeHelpers entry that matched no file.',
 } satisfies Record<AnalysisWarning['code'], string>
 
 const NOTIFICATION_DESCRIPTORS = Object.entries(NOTIFICATION_TEXT).map(([id, text]) => ({

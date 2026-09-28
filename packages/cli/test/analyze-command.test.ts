@@ -17,6 +17,10 @@ afterEach(() => {
 })
 
 async function runAnalyze(extraArgs: string[] = []) {
+  return runCli(['analyze', '--cwd', dir, ...extraArgs])
+}
+
+async function runCli(args: string[]) {
   const logs: string[] = []
   const errs: string[] = []
   let exitCode: number | undefined
@@ -31,7 +35,7 @@ async function runAnalyze(extraArgs: string[] = []) {
     throw new Error('__exit__')
   }) as never)
   try {
-    await buildProgram().parseAsync(['node', 'testpilot', 'analyze', '--cwd', dir, ...extraArgs])
+    await buildProgram().parseAsync(['node', 'testpilot', ...args])
   } catch (error) {
     if (!(error instanceof Error) || error.message !== '__exit__') {
       throw error
@@ -380,6 +384,209 @@ describe('analyze — nothing matched is never a pass', () => {
     const gate = await runAnalyze(['--min-score', '50'])
     const gateWithHelpers = await runAnalyze(['--min-score', '50', '--with-helpers'])
     expect(gateWithHelpers.exitCode).toBe(gate.exitCode)
+  })
+
+  it('analyzes the page objects a relative includeHelpers entry names (B2)', async () => {
+    // `pages/**` was matched against absolute paths, so it matched nothing: naming your
+    // page objects, the documented opt-in, analyzed none of them, and adding
+    // --with-helpers still scored the tests alone while the report said "Add
+    // --with-helpers".
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { testDir: 'tests', includeHelpers: ['pages/**'] }\n",
+    )
+    mkdirSync(join(dir, 'pages'), { recursive: true })
+    writeFileSync(
+      join(dir, 'pages', 'login.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    for (const extra of [[], ['--with-helpers']]) {
+      const report = JSON.parse((await runAnalyze(['--json', ...extra])).stdout)
+      expect(report.summary.helperFiles, extra.join(' ')).toBe(1)
+      expect(report.findings.some((f: { inHelper?: boolean }) => f.inHelper)).toBe(true)
+      const codes = report.warnings.map((w: { code: string }) => w.code)
+      expect(codes).not.toContain('helpers-not-analyzed')
+      expect(codes).not.toContain('include-helpers-unmatched')
+    }
+  })
+
+  it('names an includeHelpers entry that matched no file', async () => {
+    // A typo'd entry looked exactly like a project with no page objects.
+    writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+    writeFileSync(
+      join(dir, 'testpilot.config.ts'),
+      "export default { testDir: 'tests', includeHelpers: ['pages/**', 'page-objetcs/**'] }\n",
+    )
+    mkdirSync(join(dir, 'pages'), { recursive: true })
+    writeFileSync(
+      join(dir, 'pages', 'login.ts'),
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n",
+    )
+    const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+    const unmatched = report.warnings.filter(
+      (w: { code: string }) => w.code === 'include-helpers-unmatched',
+    )
+    expect(unmatched).toHaveLength(1)
+    expect(unmatched[0].message).toContain('page-objetcs/**')
+    expect(unmatched[0].message).not.toContain('`pages/**`')
+  })
+
+  describe('includeHelpers resolves from the testpilot config directory, and only there', () => {
+    const PO =
+      "import type { Page } from '@playwright/test'\nexport const f = (p: Page) => p.locator('.bad')\n"
+    const put = (path: string, content = PO) => {
+      mkdirSync(join(dir, path, '..'), { recursive: true })
+      writeFileSync(join(dir, path), content)
+    }
+    const helperFiles = (report: { findings: { file: string; inHelper?: boolean }[] }) =>
+      [...new Set(report.findings.filter((f) => f.inHelper).map((f) => f.file))].sort()
+    const codes = (report: { warnings: { code: string }[] }) => report.warnings.map((w) => w.code)
+
+    it('means the root pages/ even when discovery adopts e2e/playwright.config.ts', async () => {
+      // Matched against two roots, `pages/**` meant `e2e/pages` here and missed the
+      // directory the user wrote it for, then reported the entry as a typo.
+      rmSync(join(dir, 'tests'), { recursive: true, force: true })
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { includeHelpers: ['pages/**'] }\n",
+      )
+      put('e2e/playwright.config.ts', "export default { testDir: './tests' }\n")
+      put('e2e/tests/a.spec.ts', "page.locator('//button')\n")
+      put('pages/login.ts')
+      put('e2e/pages/inner.ts')
+      const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+      expect(report.discovery.testDir).toBe('playwright-config')
+      expect(report.rootDir).toBe(dir)
+      expect(helperFiles(report)).toEqual(['pages/login.ts'])
+      expect(codes(report)).not.toContain('include-helpers-unmatched')
+    })
+
+    it('treats ! entries as exclusions, not as "match everything"', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages/**', '!pages/legacy/**'] }\n",
+      )
+      put('pages/login.ts')
+      put('pages/legacy/old.ts')
+      put('tools/setup.ts')
+      const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+      expect(helperFiles(report)).toEqual(['pages/login.ts'])
+      expect(codes(report)).not.toContain('include-helpers-unmatched')
+    })
+
+    it('reads a bare directory entry as everything under it', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages', 'objects/'] }\n",
+      )
+      put('pages/login.ts')
+      put('objects/cart.ts')
+      const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+      expect(helperFiles(report)).toEqual(['objects/cart.ts', 'pages/login.ts'])
+      expect(codes(report)).not.toContain('include-helpers-unmatched')
+    })
+
+    it('never analyzes — or lets fix rewrite — a ../ entry outside the project', async () => {
+      const app = join(dir, 'app')
+      mkdirSync(join(app, 'tests'), { recursive: true })
+      writeFileSync(join(app, 'package.json'), '{"name":"app"}\n')
+      writeFileSync(join(app, 'tests', 'a.spec.ts'), "page.locator('//button')\n")
+      writeFileSync(
+        join(app, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['../shared/**'] }\n",
+      )
+      put(
+        'shared/po.ts',
+        "export const f = (p: any) => p.locator('text=Save')\nimport '@playwright/test'\n",
+      )
+      const report = JSON.parse((await runCli(['analyze', '--cwd', app, '--json'])).stdout)
+      expect(helperFiles(report)).toEqual([])
+      expect(codes(report)).toContain('helpers-not-recognized')
+      const fix = JSON.parse((await runCli(['fix', '--cwd', app, '--json'])).stdout)
+      expect(fix.files.map((f: { file: string }) => f.file)).not.toContain('../shared/po.ts')
+    })
+
+    it('does not report an entry whose files exclude removed as misspelt', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages/**'], exclude: ['**/pages/**'] }\n",
+      )
+      put('pages/login.ts')
+      const report = JSON.parse((await runAnalyze(['--json'])).stdout)
+      expect(codes(report)).not.toContain('include-helpers-unmatched')
+    })
+
+    it('tells a named-list user to extend the list, not to pass a flag that changes nothing', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages/**'] }\n",
+      )
+      put('pages/login.ts')
+      put('fixtures/base.ts')
+      for (const extra of [[], ['--with-helpers']]) {
+        const report = JSON.parse((await runAnalyze(['--json', ...extra])).stdout)
+        const warning = report.warnings.find(
+          (w: { code: string }) => w.code === 'helpers-not-analyzed',
+        )
+        expect(warning?.message).toContain('includeHelpers')
+        expect(warning?.message).not.toContain('Add --with-helpers')
+      }
+    })
+
+    it('keeps page objects a named list admits out of the tag vocabulary', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pages/**'] }\n",
+      )
+      writeFileSync(
+        join(dir, 'tests', 'a.spec.ts'),
+        "import { test } from '@playwright/test'\ntest('x', { tag: '@smoke' }, async () => {})\n",
+      )
+      put('pages/login.ts')
+      const tags = JSON.parse((await runCli(['tags', '--cwd', dir, '--json'])).stdout)
+      expect(tags.summary.filesAnalyzed).toBe(1)
+      expect(tags.warnings.map((w: { code: string }) => w.code)).not.toContain(
+        'no-tests-recognized',
+      )
+    })
+
+    it('shows fix the same unmatched-entry warning analyze does', async () => {
+      writeFileSync(join(dir, 'package.json'), '{"name":"demo"}\n')
+      writeFileSync(
+        join(dir, 'testpilot.config.ts'),
+        "export default { testDir: 'tests', includeHelpers: ['pags/**'] }\n",
+      )
+      const fix = JSON.parse((await runCli(['fix', '--cwd', dir, '--json'])).stdout)
+      expect(fix.warnings.map((w: { code: string }) => w.code)).toContain(
+        'include-helpers-unmatched',
+      )
+    })
+
+    it('does not treat a checkout under a directory called fixtures/ as all page objects', async () => {
+      // The conventional names were also tested against the absolute path.
+      const project = join(dir, 'fixtures', 'proj')
+      mkdirSync(join(project, 'tests'), { recursive: true })
+      writeFileSync(join(project, 'package.json'), '{"name":"proj"}\n')
+      writeFileSync(join(project, 'tests', 'a.spec.ts'), "page.locator('//button')\n")
+      writeFileSync(
+        join(project, 'playwright.config.ts'),
+        "export default { testDir: './tests' }\n",
+      )
+      mkdirSync(join(project, 'tools'), { recursive: true })
+      writeFileSync(join(project, 'tools', 'global-setup.ts'), PO)
+      const report = JSON.parse(
+        (await runCli(['analyze', '--cwd', project, '--json', '--with-helpers'])).stdout,
+      )
+      expect(helperFiles(report)).toEqual([])
+      expect(codes(report)).not.toContain('helpers-not-analyzed')
+    })
   })
 
   it('says so when helper directories matched but nothing in them uses Playwright', async () => {

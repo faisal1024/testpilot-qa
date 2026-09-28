@@ -165,14 +165,20 @@ function compareFindings(a: Finding, b: Finding): number {
  */
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> {
   const usingPatterns = options.patterns !== undefined && options.patterns.length > 0
-  const { files, helpers, helperCandidatesRejected, helpersNotAnalyzed, helpersNotAnalyzedFiles } =
-    await resolveFiles({
-      cwd: options.cwd,
-      patterns: options.patterns,
-      config: options.config,
-      rootDir: options.rootDir,
-      scopes: options.scopes,
-    })
+  const {
+    files,
+    helpers,
+    helperCandidatesRejected,
+    helpersNotAnalyzed,
+    helpersNotAnalyzedFiles,
+    includeHelpersUnmatched,
+  } = await resolveFiles({
+    cwd: options.cwd,
+    patterns: options.patterns,
+    config: options.config,
+    rootDir: options.rootDir,
+    scopes: options.scopes,
+  })
   // Paths are reported relative to the same base discovery used (see discoveryBase).
   // Always absolute: `rootDir` is part of the report contract and consumers
   // re-resolve reported paths from it in a process with a different cwd.
@@ -184,7 +190,7 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
   if (helpersNotAnalyzed > 0) {
     warnings.push({
       code: 'helpers-not-analyzed',
-      message: `${helpersNotAnalyzed} page object/fixture file(s) use Playwright but were not analyzed (${describeFiles(helpersNotAnalyzedFiles, reportBase)}) — Playwright's testMatch does not select them as test files, so this score covers your tests only. Add --with-helpers to include them.`,
+      message: `${helpersNotAnalyzed} page object/fixture file(s) use Playwright but were not analyzed (${describeFiles(helpersNotAnalyzedFiles, reportBase)}) — Playwright's testMatch does not select them as test files, so this score covers ${usingPatterns ? 'the files you named' : 'your tests'} only. ${helpersAdvice(options.config.includeHelpers.length > 0, usingPatterns)}`,
     })
   }
   if (helperCandidatesRejected > 0) {
@@ -192,7 +198,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisReport> 
     // and twenty real ones are dropped is the same blindness, one level down.
     warnings.push({
       code: 'helpers-not-recognized',
-      message: `${helperCandidatesRejected} file(s) matched the helper patterns but show no sign of using Playwright, so they were not analyzed. Name your page-object locations in \`includeHelpers\` if this is wrong.`,
+      message: `${helperCandidatesRejected} file(s) matched the helper patterns but were not analyzed: they show no sign of using Playwright, or resolve outside the project (a symlink or a \`../\` entry). Name your page-object locations in \`includeHelpers\` if this is wrong.`,
+    })
+  }
+  if (includeHelpersUnmatched.length > 0) {
+    warnings.push({
+      code: 'include-helpers-unmatched',
+      message: `includeHelpers ${includeHelpersUnmatched.map((p) => `\`${p}\``).join(', ')} matched no file, so it added nothing to this run. Entries are globs relative to the directory of your testpilot config, and naming a list replaces the conventional directory names (\`pages/\`, \`fixtures/\`, …) rather than adding to them.`,
     })
   }
   if (options.discovery?.playwrightConfigPartial) {
@@ -625,4 +637,17 @@ function severityFor(
     }
   }
   return undefined
+}
+
+/**
+ * What to do about page objects that were not analyzed. "Add --with-helpers" is wrong
+ * advice twice over: with a named `includeHelpers` list the flag changes nothing (the
+ * list replaces the conventional names), and with explicit patterns it is ignored.
+ */
+export function helpersAdvice(namedList: boolean, usingPatterns: boolean): string {
+  if (usingPatterns) return 'Name them in the patterns, or run without patterns to use discovery.'
+  if (namedList) {
+    return 'Add their location to `includeHelpers` — a named list replaces the conventional directory names, so --with-helpers adds nothing.'
+  }
+  return 'Add --with-helpers to include them.'
 }

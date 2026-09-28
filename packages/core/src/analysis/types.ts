@@ -51,6 +51,7 @@ export interface AnalysisWarning {
     | 'helpers-not-recognized'
     | 'helpers-not-analyzed'
     | 'uninspected-call-sites'
+    | 'include-helpers-unmatched'
   message: string
   ruleId?: string
 }
@@ -182,7 +183,8 @@ export interface AnalysisReport {
  * 1.10 `baseline.matchedByPreviousId`;
  * 1.11 `summary.uninspectedCallSites` + `score.score`/`grade` (headline and every sub-score)
  * become nullable;
- * 1.12 `discovery.playwrightTestIdAttribute`.
+ * 1.12 `discovery.playwrightTestIdAttribute`;
+ * 1.13 the `include-helpers-unmatched` warning code.
  *
  * **1.11 is the first 1.x bump that is not purely additive**: it narrows an
  * existing field. A consumer doing `if (report.score.score < 80) fail()` passes
@@ -190,7 +192,7 @@ export interface AnalysisReport {
  * so check for `null` explicitly. It occurs only when there is at least one
  * locator call-site and not one of them had a statically readable selector.
  */
-export const ANALYSIS_SCHEMA_VERSION = '1.12'
+export const ANALYSIS_SCHEMA_VERSION = '1.13'
 
 /**
  * Human + machine-readable education for a single rule (`testpilot explain`).
