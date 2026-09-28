@@ -309,7 +309,7 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
     })
 
     it('discloses page objects beside an explicit pattern too', async () => {
-      // The README's own quickstart is `analyze tests`. Every narrowing so far — no
+      // The README's quickstart was `analyze tests` for the first alphas. Every narrowing so far — no
       // config, a narrowed includeHelpers, an explicit pattern — silenced this by
       // skipping the probe in one branch.
       write('tests/a.spec.ts')

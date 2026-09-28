@@ -33,9 +33,13 @@ jobs:
   # GITHUB_TOKEN), so nothing tested the code that shipped.
   gate:
     uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
 
   release:
     needs: gate
+    # A manual dispatch from another branch would otherwise publish that branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +56,11 @@ jobs:
       # "simplify" this away or pin pnpm's npm-path). Pinned, because an
       # unpinned @latest that drops Node 22 support would turn main red; and
       # gated, so non-publishing pushes don't pay for it.
+      #
+      # npm tries OIDC first and falls back to NODE_AUTH_TOKEN *silently* (it
+      # logs the failed exchange only at verbose level). alpha.2 was published
+      # this way: the action logged "using npm trusted publishing" and
+      # `_npmUser` still shows a person. `_npmUser` is the only reliable check.
       - name: Upgrade npm for OIDC trusted publishing
         if: vars.PUBLISH_ENABLED == 'true'
         run: |

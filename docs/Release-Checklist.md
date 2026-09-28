@@ -4,14 +4,15 @@
 > Released so far: `0.1.0-alpha.0` and `0.1.0-alpha.2` (`alpha.1` was versioned but never published).
 > The newest is npm's `latest`: `npm view testpilot-qa version`.
 >
-> **Dist-tags.** Every prerelease publishes to `latest` until the first stable release; see
-> [RELEASING.md](../RELEASING.md#prereleases-publish-to-latest). No manual dist-tag step is needed.
-> The legacy `alpha` tag is not documented anywhere any more and only moves by hand.
+> **Dist-tags.** While every published version is an alpha, each new alpha publishes to `latest`; see
+> [RELEASING.md](../RELEASING.md#prereleases-publish-to-latest), including why entering a *beta* pre
+> tag before a stable release would freeze `latest`. No manual dist-tag step is needed. The legacy
+> `alpha` tag is retired and gets removed by hand after alpha.3.
 
 ## Public alpha launch gate
 
 **Steps 1–7 now run automatically**: the release job calls the CI workflow as its `gate` job before it
-publishes, on Node 22 and 24. They are listed so you know what a release has already passed.
+publishes, on Node 20, 22 and 24. They are listed so you know what a release has already passed.
 
 1. `corepack pnpm install --frozen-lockfile` — clean install (lockfile committed and current)
 2. `corepack pnpm lint`

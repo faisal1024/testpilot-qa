@@ -4,7 +4,7 @@ Thanks for your interest in contributing! This document covers local setup and t
 
 ## Prerequisites
 
-- **Node.js** ≥ 20 (see `.nvmrc`)
+- **Node.js** ≥ 20; develop on 22 (`.nvmrc`). CI tests 20, 22 and 24.
 - **pnpm** 9 (`corepack enable` provides it)
 
 ## Setup
@@ -99,7 +99,7 @@ finding lands — file, line, rule — is outside the instrument entirely.
 
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, …).
 - **Branches:** branch off `main`; open a PR. Do not commit directly to `main`.
-- **Changesets:** user-facing changes require a changeset — run `pnpm changeset` and commit the generated file.
+- **Changesets:** user-facing changes require a changeset — run `pnpm changeset` and commit the generated file. CI checks for one on every PR; for a change under `packages/` that users won't see (tests, internal refactors), add an empty one with `pnpm changeset --empty`.
 - **Scope:** keep PRs focused. Foundation/architecture decisions are tracked as ADRs and in `docs/`.
 
 ## Project layout

@@ -10,15 +10,25 @@ on:
   # those PRs — without this call, the code that ships is never tested.
   workflow_call: {}
 
+# Read-only, always. When release.yml calls this workflow the jobs would
+# otherwise inherit its `contents: write` and `id-token: write` — and npm's
+# trusted publisher checks the *calling* workflow's name, so an OIDC token
+# minted here could publish. `smoke:package` installs the tarball's runtime
+# dependencies from the registry with install scripts on; none of that code
+# gets a write token. A called workflow can narrow permissions, never widen.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Node 20 reached end of life in April 2026; 22 is the floor npm's
-        # trusted publishing needs, 24 is current.
-        node: [22, 24]
+        # 20 stays while `engines` still claims it (end of life April 2026;
+        # the floor rises to 22 at beta — Road-to-Beta D6). 22 is what the
+        # release job publishes with; 24 is current.
+        node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -41,7 +51,13 @@ jobs:
       - run: pnpm smoke:package
       # A user-facing change needs a changeset. `@testpilot/ai` changed in four
       # PRs without one, so its guidance changes reached no release note.
-      # Dependency bumps are exempt: Dependabot never writes changesets.
+      # Exempt: Dependabot PRs (it never writes changesets — keyed on the PR's
+      # author, not `github.actor`, which becomes whoever last pushed or
+      # clicked "Update branch"), and the Version PR, which *consumes*
+      # changesets rather than adding one.
       - name: Changeset present
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.user.login != 'dependabot[bot]'
+          && github.head_ref != 'changeset-release/main'
         run: pnpm changeset status --since=origin/main

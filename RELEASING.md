@@ -7,21 +7,43 @@ from `package.json` (never hand-edit a version constant).
 ## Prereleases publish to `latest`
 
 Alphas are cut in Changesets **pre-release mode** (`changeset pre enter alpha`), which produces
-`x.y.z-alpha.N` versions. Until the package has had a **stable** release, `changeset publish` publishes
-every prerelease to **`latest`**, not to the pre-mode tag. This is Changesets' documented behaviour
-(the release log says "…is being published to `latest` rather than `alpha` because there has not been a
-regular release of it yet"), and `changeset publish --tag` is rejected outright in pre mode.
+`x.y.z-alpha.N` versions. `changeset publish` sends a prerelease to **`latest`**, not to the pre-mode
+tag, **while every version already on npm is a prerelease with the current pre tag** (Changesets calls
+this "only-pre"; the release log says "…is being published to `latest` rather than `alpha` because
+there has not been a regular release of it yet"). `changeset publish --tag` is rejected outright in
+pre mode.
 
-**So `latest` is the newest prerelease, and that is the install path we document**:
-`npm i -D -E testpilot-qa`. Nothing needs fixing after a publish.
+**So during the alpha series `latest` is the newest alpha, and that is the install path we
+document**: `npm i -D -E testpilot-qa`. Nothing needs fixing after a publish.
 
-The **`alpha`** dist-tag is legacy. The first alphas were documented as `@alpha`, and CI can't move it:
-trusted publishing authorises `npm publish`, not `npm dist-tag`. It stays where it was last moved by
-hand, and nothing in the docs points at it any more. Move it by hand if you want it current
-(`npm dist-tag add testpilot-qa@<version> alpha`, which needs your 2FA); otherwise leave it or remove it.
+> ⚠️ **Changing pre tag breaks this.** The check is "every published version carries the *current*
+> pre tag". `changeset pre enter beta` while only alphas exist fails it, so betas go to `beta` and
+> `latest` silently freezes on the last alpha — the path the README and the Action's default use.
+> Before the first beta, either cut a stable release first, or plan the `latest` promotion
+> (a manual `npm dist-tag add`, which needs your 2FA) as part of that release, and update the docs.
+
+**The `alpha` dist-tag is retired.** The first alphas were documented as `@alpha`; CI can't move it,
+because trusted publishing authorises `npm publish`, not `npm dist-tag`. A tag left behind serves a
+stale build *silently*, which is the worst way for it to fail, so once alpha.3 is on `latest`, remove
+it: `npm dist-tag rm testpilot-qa alpha` (your 2FA). `@alpha` and the Action's `version: alpha` then
+fail loudly with "No matching version", and the alpha.3 release notes say what to use instead.
 
 At the first stable release (`changeset pre exit`), `latest` becomes the stable line, and later
 prereleases go to their pre-mode tag automatically.
+
+## Merge order around a Version PR
+
+The release workflow keeps **one** pending run (`concurrency`, no cancel). If a PR carrying a changeset
+lands while the Version PR is stale, merging the Version PR produces a commit that *still* has
+pending changesets, so the release run versions again instead of publishing. The version you just
+merged is then never published. That is how `0.1.0-alpha.1` was lost.
+
+1. Merge feature PRs, then **wait for the Release run on that commit to finish**. It regenerates the
+   Version PR.
+2. Confirm the Version PR's head moved and its CHANGELOG diff includes the last change you merged.
+3. Merge **nothing else carrying a changeset**, then merge the Version PR. Dependabot PRs carry no
+   changeset, so they're harmless here.
+4. Wait for the publish run to finish before merging anything else.
 
 ## One-time setup (maintainer)
 
@@ -43,11 +65,16 @@ credential from the workflow's OIDC identity, and provenance is attached automat
 1. On npmjs.com → the `testpilot-qa` package → **Settings → Trusted Publisher → GitHub Actions**.
 2. Repository: `faisal1024/testpilot-qa`; workflow filename: `release.yml` (leave environment blank
    unless the job uses one).
-3. Leave `NPM_TOKEN` **unset**. The workflow already grants `id-token: write` and upgrades npm to
-   >= 11.5.1 (Node 20 bundles npm 10, which cannot do OIDC publishing).
+3. The workflow grants `id-token: write`, runs on Node 22 and upgrades npm to >= 11.5.1 (Node 22
+   bundles npm 10, which cannot do OIDC publishing). `NODE_AUTH_TOKEN` is **kept for one release** as
+   a fallback: npm tries OIDC first and silently falls back to the token. Once a publish's `_npmUser`
+   shows the GitHub Actions identity (see [Post-publish](#post-publish)), remove the line, delete the
+   secret, and disallow tokens.
 
-**Option B — automation token.** Create an npm **automation** token with publish rights and add it as
-the GitHub Actions secret **`NPM_TOKEN`** (read by the workflow as `NODE_AUTH_TOKEN`).
+**Option B — granular access token.** Create a granular npm token with publish rights on
+`testpilot-qa` and add it as the GitHub Actions secret **`NPM_TOKEN`**, which the workflow reads as
+`NODE_AUTH_TOKEN`. npm has removed classic automation tokens, and granular tokens expire, so note the
+expiry date.
 
 ### 2. Turn publishing on
 
@@ -61,12 +88,16 @@ Settings → Actions → General → enable *"Allow GitHub Actions to create and
 
 ## Release flow (CI, via `.github/workflows/release.yml`)
 
-1. Land feature PRs with changesets on `main` (already done for 6A–8A).
-2. Land the alpha pre-mode + version bump (see "Cutting the alpha" below).
+1. Land feature PRs with changesets on `main`. Each push runs the full CI gate (`ci.yml`, called
+   from `release.yml`) and then refreshes the Version PR.
+2. Merge the Version PR in the order under [Merge order](#merge-order-around-a-version-pr). The
+   Version PR gets no CI of its own (GitHub runs no workflows on PRs created with `GITHUB_TOKEN`),
+   which is why the gate runs on the push instead.
 3. With npm auth configured (Option A or B) **and** `PUBLISH_ENABLED=true`, the Changesets action
-   publishes `testpilot-qa@<version>` once there are no pending changesets — on the next push to
-   `main`, or immediately via **Run workflow** (`workflow_dispatch`). Then fix up the dist-tag
-   (see [Post-publish](#post-publish)).
+   publishes `testpilot-qa@<version>` to `latest` once there are no pending changesets and the gate
+   has passed. That happens on the push of the Version PR's merge, or immediately via **Run workflow**
+   (`workflow_dispatch`, on `main` only). A red gate publishes nothing; fix it, then **Re-run failed
+   jobs**. Then run the [Post-publish](#post-publish) checks.
 
 ## Cutting the alpha (the version PR)
 
@@ -103,7 +134,7 @@ See [`docs/Release-Checklist.md`](docs/Release-Checklist.md) for the full launch
 
 ```bash
 corepack pnpm -r build
-cd packages/cli && npm publish --tag alpha   # then re-point `latest` per the policy above
+cd packages/cli && npm publish   # prereleases go to `latest` while only prereleases exist; never `--tag alpha`
 ```
 
 ## Post-publish
@@ -115,7 +146,8 @@ for a token publish and the GitHub Actions identity for a trusted publish. Once 
 confirmed, remove `NODE_AUTH_TOKEN` from `release.yml`, delete the `NPM_TOKEN` secret, and set the
 package's *Publishing access* to "require two-factor authentication and disallow tokens".
 
-- Verify: `npx testpilot-qa@alpha --version` / `--help` / `init demo --yes` / `analyze tests --reporter html`.
-- ✅ Done for 0.1.0-alpha.0: README pins `@alpha` in the first-contact examples and documents `npm i -D testpilot-qa@alpha`.
+**3. Smoke the published package** from an empty directory: `npx testpilot-qa@<version> --version`,
+`--help`, `init demo --yes`, then `analyze --reporter html --output report.html` inside `demo`.
+
 - ✅ The `v0` Action tag exists. **Standing obligation:** re-point `v0` whenever `action/action.yml`
   changes (`git tag -f v0 <sha> && git push -f origin v0`).
