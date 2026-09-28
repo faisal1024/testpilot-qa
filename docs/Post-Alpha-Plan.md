@@ -1,3 +1,8 @@
+> **Superseded 2026-09-28 by [`Road-to-Beta.md`](Road-to-Beta.md).** Phases 9–11 below shipped in
+> `0.1.0-alpha.2`. Phases 12–15 were re-planned there after four reviews found that Phase 12 as written
+> would not meet its own goal and that several items had silently dropped out. This file is kept as the
+> record of what was decided and measured at the time; its figures are historical.
+
 # TestPilot QA — Post-Alpha Plan: from "published" to "worth keeping in CI"
 
 > Status: **Active plan, 2026-09-05** (Phase 9's first PR, #71, is merged; nothing from it is

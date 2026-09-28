@@ -639,7 +639,8 @@ sequencing):
 | [Adoption Plan](docs/Adoption-Plan.md) | Public-alpha readiness, brownfield adoption, CI surfaces, and sequencing tradeoffs. |
 | [Roadmap](docs/Roadmap.md) | MVP → V1 → V2 → V3, with sequencing rationale. |
 | [GitHub Issues](docs/GitHub-Issues.md) | Prioritized backlog: Epics → Stories → Tasks, with suggested labels. |
-| [Post-Alpha Plan](docs/Post-Alpha-Plan.md) | What shipped after `alpha.0` and what is next, with the corpus measurements behind each claim. |
+| [Road to Beta](docs/Road-to-Beta.md) | The active plan: what ships next, in what order, and the beta gate. |
+| [Post-Alpha Plan](docs/Post-Alpha-Plan.md) | The record of Phases 9–11 (shipped in `alpha.2`), with the corpus measurements behind each claim. |
 | [Release Checklist](docs/Release-Checklist.md) | The pre-release gate and the publish flow. |
 
 ---
@@ -656,7 +657,7 @@ The original MVP was deliberately narrow — five commands (`init`/`run`/`analyz
 one `ui-api-fullstack` template, six static rules, Tier 1 only — and has since grown the brownfield,
 CI, fix, and guidance-regeneration surfaces above. See [Architecture §2](docs/Architecture.md) for the
 full set of challenged assumptions, the [Roadmap](docs/Roadmap.md) for the original MVP → V3
-sequencing, and the [Post-Alpha Plan](docs/Post-Alpha-Plan.md) for what shipped after `alpha.0`.
+sequencing, and [Road to Beta](docs/Road-to-Beta.md) for what comes next.
 
 ---
 
