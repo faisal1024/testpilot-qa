@@ -50,7 +50,7 @@ jobs:
           npm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2
         with:
           # Empty publish script => the action only versions / opens the Version
           # PR when changesets are pending; it never attempts to publish.
