@@ -23,6 +23,8 @@ the previous plan. `0.1.0-alpha.1` was versioned but never published.
   cannot read (an imported base, a spread, a computed key) gives `"unresolved"` instead of asserting
   Playwright's default.
 - The README was corrected claim by claim.
+- The Action passes `patterns` verbatim (B1, #107). It reached Action users when `v0` was re-pointed
+  on 2026-09-28; the changelog entry ships with `alpha.3`.
 - The `@typescript-eslint/parser` bump, the only runtime dependency among today's bumps. The others
   (`lint-staged`, `yaml`, `@types/node`, `actions/cache`, `actions/upload-artifact`) don't ship.
 
@@ -105,7 +107,7 @@ Each item is one PR with a reproduction test.
 
 | # | Defect | Source |
 |---|---|---|
-| B1 | **The Action lets bash glob-expand `patterns`** (#107). An unquoted `${TP_PATTERNS}` turns `tests/**/*.spec.ts` into a subset. The score and baseline gate cover files nobody chose, silently. Ships to Action users only when the `v0` tag is re-pointed, which is a standing step after every `action/` change (RELEASING.md). | surface P1 |
+| B1 | ✅ #107 (`v0` re-pointed) — **The Action let bash glob-expand `patterns`**. An unquoted `${TP_PATTERNS}` turns `tests/**/*.spec.ts` into a subset. The score and baseline gate cover files nobody chose, silently. Ships to Action users only when the `v0` tag is re-pointed, which is a standing step after every `action/` change (RELEASING.md). | surface P1 |
 | B2 | **`includeHelpers` never matches a relative glob** (`pages/**`), because it is matched against absolute paths. Setting it also *replaces* the defaults, so `--with-helpers` then analyzes zero helpers. The documented way to opt in does nothing. Also: warn when an entry matches nothing. | surface P1, independently reproduced |
 | B3 | **`init` in an existing Playwright project turns a failing gate green.** It hard-codes `testDir: 'tests'` and adds sample tests, so the real suite is no longer analyzed. A score of 0 becomes 100. Needs a detect-and-augment mode, or refuse without `--force`. | surface P1 |
 | B4 | **`run` resolves a different Playwright config** than `tags`, `analyze` and `doctor` (root only vs one level down). | surface P1 |
@@ -150,10 +152,10 @@ historical defect shape is in D2's replay set. Estimated about 1–1.5 weeks *(r
 
 | # | Item |
 |---|---|
-| E1 | A **labelled sample** in `bench/labels.json`, keyed by baseline identity, drawn uniformly at random with a fixed seed: **150** each for `no-hard-wait` and `avoid-positional-access`, **300** for `no-css-class-selector`, and **all** findings of any `warn`/`error` rule with fewer than 150, about 600 in total. Each label is `tp` / `hard-fp` / `judgement` with a one-line rationale; `hard-fp` counts against the bound, and `judgement` is reported beside it. A test reports each rule's one-sided 95% Wilson upper bound and fails on label rot. (Sizes are chosen so the gate is reachable: at n = 150, up to 3 `hard-fp` stays under 5%; at n = 300, up to 2 stays under 2%. At n = 60 even zero false positives cannot get under 5%.) |
+| E1 | A **labelled sample** in `bench/labels.json`, keyed by baseline identity, drawn uniformly at random with a fixed seed: **150** each for `no-hard-wait` and `avoid-positional-access`, **300** for `no-css-class-selector`, and **all** findings of any `warn`/`error` rule with fewer than 150, about 600 in total. Each label is `tp` / `hard-fp` / `judgement` with a one-line rationale. **n counts every label, `judgement` included**; `hard-fp` is the numerator, and the `judgement` share is reported beside the bound. A test reports each rule's one-sided 95% Wilson upper bound (z = 1.645) and fails on label rot. Sizes are chosen so the gate is reachable with a little room: at n = 150, up to 3 `hard-fp` gives 4.90%, under 5%; at n = 300, up to 2 gives 1.99%, under 2%. The margins are thin (3 of 146 is 5.03%), so a label lost to rot is replaced by a fresh random draw, never dropped. `prefer-get-by-test-id` is `warn` today but becomes `info` in F (D3) before beta, so it is not sampled here; the D2 oracle checks its rewrites instead. |
 | E2 | `examples/fragile-suite` becomes a **sixth bench entry**, so `no-nth-child` and `no-deep-css-chain`, which have zero corpus findings, still get a "went silent" gate. |
 | E3 | A **ranking** of findings (severity, then confidence), so "the top ten findings" exists for the beta's qualitative gate. |
-| E4 | **Runtime budget:** `pnpm bench` records wall time per repo, and CI fails if cal.com (the largest) exceeds 2.5 s on the runner. |
+| E4 | **Runtime budget:** `pnpm bench` records wall time per repo, and CI fails if mattermost exceeds 2.5 s on the runner. Mattermost is the largest corpus repo by files: 298, or 310 with helpers. The old budget was set on it ("≤ 2.5 s at 508 files", with an explicit glob). |
 
 ### F — Score 2.0 (replaces the old Phase 12)
 
@@ -175,8 +177,8 @@ One breaking release, report schema **2.0**, containing:
   share of locator calls.
 - The formula is the **share of clean chains** (D2), `prefer-get-by-test-id` becomes `info` (D3), and
   page objects are analysed by default (D4).
-- **Output prints counts first, grade second** ("412 of 1,326 locator chains have a problem"), so the
-  grade is read as a summary of something checkable.
+- **Output prints counts first, grade second** (for example, "N of M locator chains have a
+  problem"), so the grade is read as a summary of something checkable.
 - **A migration note:** `--min-score` thresholds must be chosen again, because the scale changes.
   Baselines are unaffected, since they key on findings, not scores.
 - Corpus projections re-measured before merge. `docs/Scoring.md` is generated from them (C2).
@@ -248,9 +250,12 @@ Beta ships when **all** of these hold:
 - A, B, C, D and F are complete, each by its own exit criteria.
 - For every `warn`/`error` rule, the one-sided 95% Wilson upper bound on `hard-fp` is **below 5%**,
   and **below 2%** for `no-css-class-selector`, as the old plan set it (E1). A rule with too few corpus
-  findings for the bound to reach that (fewer than 60: today `no-xpath`, `no-nth-child` and
-  `no-deep-css-chain`) needs zero `hard-fp` among all its corpus findings instead, plus an
-  equivalent-spelling table confirmed in Chromium (D6).
+  findings for the bound to reach that needs zero `hard-fp` among all its corpus findings instead.
+  At n = 52 zero `hard-fp` gives 4.95%, and a single one at n = 60 already gives 7.1%, so the
+  threshold is fewer than 52 findings. Today that means `no-xpath` (2), `no-nth-child` (0) and
+  `no-deep-css-chain` (0). For a rule with zero findings, that condition passes vacuously and proves
+  nothing, so the real check is an equivalent-spelling table confirmed in Chromium (D6) plus the
+  fragile-suite bench entry (E2).
 - The nightly oracle and fuzzer runs (D2, D4) have passed **14 nights in a row**.
 - Scores are monotonic: fixing a finding never lowers the score (property test in F).
 - Every number in the published docs is generated (C's exit defines the scope).
@@ -299,5 +304,7 @@ the changesets source showed the first recommendation could not be built.
 | pnpm 10 | J5 |
 | Runtime budget ≤ 2.5 s | E4 |
 | `no-css-class-selector` < 2% false positives | §5, kept rather than loosened to 5% |
+| < 5% hard false positives for the successors of `prefer-user-facing-locator` | `prefer-semantic-locator` is `info`, and `prefer-get-by-test-id` becomes `info` (D3); both leave the gate. The oracle (D2) checks the claims they print |
+| Old decision 3: helpers default-on, *grouped under `inHelper`* | D4 makes helpers default-on. The grouping already ships (`inHelper`, `[helper]` in every reporter), so nothing is dropped |
 | User-facing release notes for every alpha | A's exit; A5 repairs alpha.2 |
 | `role=` → `getByRole` rewrite | **Dropped**: no rule fires on `role=` since 11b |
