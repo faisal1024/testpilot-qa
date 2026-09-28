@@ -13,23 +13,25 @@ It's **local-first, deterministic, and offline** — no network, no API key, no 
 generates is **ejectable plain Playwright**: delete `testpilot.config.ts` and the dependency and you
 still have a working suite. Zero lock-in.
 
-> **Alpha.** Published on npm under the **`alpha`** dist-tag. It does **not** do DOM-aware healing,
+> **Alpha.** Every prerelease is published to npm as `latest`, so a plain install gets the newest
+> one. It does **not** do DOM-aware healing,
 > broad auto-fix, dashboards, MCP, AI-generated tests, or LLM-powered execution — see
 > [Status](#status--public-alpha).
 
 ## Install
 
 ```bash
-npm i -D -E testpilot-qa@alpha     # requires Node >= 20
+npm i -D -E testpilot-qa     # requires Node >= 20
 ```
 
 Then every `npx testpilot-qa …` example below resolves to your local copy — no network round-trip.
 The package installs three interchangeable binaries: **`testpilot`**, **`testpilot-qa`**, and
 **`tpq`**. This README uses the first two; pick whichever you prefer.
-Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
+Prefer not to install? `npx testpilot-qa …` runs the newest prerelease without adding a dependency.
 
-> **`-E` pins the exact version.** `@alpha` resolves to the newest prerelease, and `-E`
-> (`--save-exact`) records that exact version in your `package.json` rather than a range. That
+> **`-E` pins the exact version.** Until the first stable release, `latest` *is* the newest
+> prerelease, and `-E` (`--save-exact`) records that exact version in your `package.json` rather than
+> a range. That
 > matters: between `alpha.N` releases the CLI flags, JSON/SARIF report shapes, baseline file format,
 > rule ids, and scoring weights may all change without a major version bump — see
 > [Known limitations](#known-limitations-alpha) for what moved most recently — and it matters most
@@ -42,20 +44,20 @@ Prefer not to install? Add the tag inline: `npx testpilot-qa@alpha …`.
 **New here?** Scaffold a project and see a locator-quality report in your browser:
 
 ```bash
-npx testpilot-qa@alpha init demo --yes
+npx testpilot-qa init demo --yes
 cd demo
-npx testpilot-qa@alpha analyze tests --reporter html --output testpilot-report.html
+npx testpilot-qa analyze --reporter html --output testpilot-report.html
 # → open testpilot-report.html in your browser
 ```
 
 **Already have a Playwright project?** `analyze` is read-only — just point it at your tests:
 
 ```bash
-npx testpilot-qa@alpha analyze tests                    # human table (add --json for CI)
+npx testpilot-qa analyze                    # finds your suite from playwright.config.* (add --json for CI)
 
 # Adopting on an existing suite? Record a baseline, then gate CI on NEW findings only:
-npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json --update-baseline
-npx testpilot-qa@alpha analyze tests --baseline testpilot-baseline.json
+npx testpilot-qa analyze --baseline testpilot-baseline.json --update-baseline
+npx testpilot-qa analyze --baseline testpilot-baseline.json
 ```
 
 That's it. The rest of this README goes deeper on each command.
@@ -274,7 +276,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: faisal1024/testpilot-qa/action@v0
         with:
-          version: alpha          # newest prerelease; set an exact version to freeze CI
+          version: latest         # the newest prerelease; set an exact version to freeze CI
           min-score: 80
           baseline: testpilot-baseline.json
       - uses: github/codeql-action/upload-sarif@v3
@@ -558,8 +560,8 @@ dashboards, MCP, AI-generated tests, and any LLM-powered execution.
 and teams using AI coding agents (Claude Code, Codex, Cursor, Copilot) who want their agents to write
 resilient Playwright.
 
-**Shipped:** the current prerelease is on npm under the `alpha` tag
-(`npm view testpilot-qa@alpha version`), CI-published with SLSA provenance. `0.1.0-alpha.1` was
+**Shipped:** the newest prerelease is npm's `latest` (`npm view testpilot-qa version`),
+CI-published with SLSA provenance. `0.1.0-alpha.1` was
 versioned but never published, so the releases so far are `alpha.0` and `alpha.2` onward. Next up is the
 scoring work described under [Known limitations](#known-limitations-alpha), plus the deferred
 dependency majors, each in its own PR. See the **[release checklist](docs/Release-Checklist.md)**.

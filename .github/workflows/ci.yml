@@ -4,19 +4,44 @@ on:
   pull_request: {}
   push:
     branches: [main]
+  # The release job calls this workflow, so nothing is published that did not
+  # pass the same gate a PR does. The Version PR the release workflow opens is
+  # created with the workflow's own token, and GitHub runs no workflows for
+  # those PRs — without this call, the code that ships is never tested.
+  workflow_call: {}
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20 reached end of life in April 2026; 22 is the floor npm's
+        # trusted publishing needs, 24 is current.
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # `changeset status` compares against main, which needs its history.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # Both smokes run the BUILT CLI; `smoke:package` installs the packed
+      # tarball as a consumer would. Neither ran in CI before, so a broken
+      # package could pass every check here.
+      - run: pnpm smoke:mvp
+      - run: pnpm smoke:package
+      # A user-facing change needs a changeset. `@testpilot/ai` changed in four
+      # PRs without one, so its guidance changes reached no release note.
+      # Dependency bumps are exempt: Dependabot never writes changesets.
+      - name: Changeset present
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        run: pnpm changeset status --since=origin/main

@@ -1,32 +1,17 @@
 # TestPilot QA — Release Checklist
 
-> Status: **Published — post-alpha hardening is the active focus.** All feature milestones through 8A are merged
-> (6A baseline/output, 6B SARIF + GitHub Action, 6C `add ai`, 7A HTML report, 7B scoring docs, 8A
-> `fix` preview).
-> **✅ Published: `testpilot-qa@0.1.0-alpha.0` is live on npm** under the **`alpha`** dist-tag, with SLSA
-> provenance, released by CI via the Changesets workflow (2026-09-05).
-> **The active plan is [`docs/Post-Alpha-Plan.md`](Post-Alpha-Plan.md)** (signal quality, measured on a
-> five-repo corpus). The deferred runtime/toolchain dependency majors (`commander`, `zod`,
-> `typescript`, `@biomejs/biome`) are **background work** — each in its own PR with full validation,
-> never ahead of a user-visible fix.
+> Status: **alpha, publishing through CI.** The active plan is [`docs/Road-to-Beta.md`](Road-to-Beta.md).
+> Released so far: `0.1.0-alpha.0` and `0.1.0-alpha.2` (`alpha.1` was versioned but never published).
+> The newest is npm's `latest`: `npm view testpilot-qa version`.
 >
-> **`alpha.1` is pending release.** `main` carries the fix for the false-green bug (#71): the
-> published `0.1.0-alpha.0` still reports `100 (A)` on suites it never opened, so publishing this is
-> the highest-value action available. See the launch gate below.
->
->
-> **Dist-tags — decided policy.** npm sets `latest` on a package's first publish, so today both `alpha`
-> and `latest` point at `0.1.0-alpha.0` and a plain `npm i testpilot-qa` happens to get the alpha.
-> **That is not self-sustaining:** Changesets pre-mode does not reliably re-tag, so from `alpha.1` on,
-> `latest` would freeze at `alpha.0` and unpinned installs would silently get a stale build.
-> **Policy for the alpha phase: `latest` tracks the newest published alpha.** After every publish run
-> both: `npm dist-tag add testpilot-qa@<v> alpha && npm dist-tag add testpilot-qa@<v> latest`.
-> (We do **not** remove `latest` — that would make `npm i testpilot-qa` fail outright.)
+> **Dist-tags.** Every prerelease publishes to `latest` until the first stable release; see
+> [RELEASING.md](../RELEASING.md#prereleases-publish-to-latest). No manual dist-tag step is needed.
+> The legacy `alpha` tag is not documented anywhere any more and only moves by hand.
 
 ## Public alpha launch gate
 
-The alpha shipped on the current pinned dependencies. **Every subsequent alpha publish must pass all of
-these** on the release commit — no deferred dependency major is required first.
+**Steps 1–7 now run automatically**: the release job calls the CI workflow as its `gate` job before it
+publishes, on Node 22 and 24. They are listed so you know what a release has already passed.
 
 1. `corepack pnpm install --frozen-lockfile` — clean install (lockfile committed and current)
 2. `corepack pnpm lint`
@@ -36,9 +21,9 @@ these** on the release commit — no deferred dependency major is required first
 6. `corepack pnpm smoke:mvp`
 7. `corepack pnpm smoke:package`
 8. `corepack pnpm changeset status` — every user-facing change has a changeset
-9. **npm alpha publish**, then **verify the dist-tags** (`npm dist-tag ls testpilot-qa`) and apply the
-   policy above — `npm dist-tag add testpilot-qa@<v> alpha` **and** `… latest`. Changesets pre-mode does
-   not reliably keep the pre-tag. Then confirm a fresh `npx testpilot-qa@alpha --version` works
+9. **Publish**: merge the Version PR. Then confirm `npm view testpilot-qa version` is the new version,
+   check `npm view testpilot-qa@<version> _npmUser` (see RELEASING.md), and confirm a fresh
+   `npx testpilot-qa --version` works
 10. **README sanity check** — alpha positioning honest; the Try-it path actually works end to end
 
 npm auth for step 9 (trusted publishing or a token) plus the `PUBLISH_ENABLED` switch are described in
@@ -69,7 +54,7 @@ Checklist:
 - [ ] `pnpm test` green.
 - [ ] `pnpm -r build` succeeds for all packages.
 - [ ] `pnpm smoke:mvp` green (help/version, `explain --json`, `doctor --json`, `analyze`, `--output`, `--reporter sarif`, `--reporter html`, `--baseline` gate, `fix` dry-run + `--write`, `add ai`, `init` + overwrite protection, example-suite analysis).
-- [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx` (now live on the `alpha` tag), and the `v0` tag exists — re-point `v0` whenever `action/action.yml` changes.
+- [ ] **GitHub Action sanity:** `action/action.yml` inputs and the README example agree (covered by `action.test.ts`); the action runs the published `testpilot-qa` via `npx` (its `version` input defaults to `latest`, the newest prerelease), and the `v0` tag exists — re-point `v0` whenever `action/action.yml` changes.
 - [ ] `pnpm smoke:package` green (see below).
 - [ ] **Changeset status:** every user-facing change since the last release has a changeset (`.changeset/*.md`). Run `pnpm changeset status` if needed.
 - [ ] **README reviewed:** alpha positioning and the implemented command surface match reality.

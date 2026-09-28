@@ -4,20 +4,24 @@ The only published package is **`testpilot-qa`** (`packages/cli`). The internal 
 are `private` and bundled into it. Releases run through **Changesets**; the published CLI version is read
 from `package.json` (never hand-edit a version constant).
 
-## Public alpha — dist-tag `alpha` (not `latest`)
+## Prereleases publish to `latest`
 
-The alpha ships under the npm **`alpha`** dist-tag. This uses Changesets **pre-release mode**
-(`changeset pre enter alpha`), which produces `x.y.z-alpha.N` versions.
+Alphas are cut in Changesets **pre-release mode** (`changeset pre enter alpha`), which produces
+`x.y.z-alpha.N` versions. Until the package has had a **stable** release, `changeset publish` publishes
+every prerelease to **`latest`**, not to the pre-mode tag. This is Changesets' documented behaviour
+(the release log says "…is being published to `latest` rather than `alpha` because there has not been a
+regular release of it yet"), and `changeset publish --tag` is rejected outright in pre mode.
 
-> ⚠️ **`changeset publish` does not reliably keep the `alpha` tag.** In pre mode it only uses the
-> pre-tag while the package has no normal release; for a package whose *only* published versions are
-> prereleases it falls back to publishing at **`latest`** (the action logs this: "…except for packages
-> that have not had normal releases which will be published to `latest`"). So the first alpha may land
-> on `alpha` but a later `alpha.N` can land on `latest`.
->
-> **Therefore: verifying and fixing the dist-tag after every alpha publish is mandatory** — see
-> [Post-publish](#post-publish). Passing an explicit `--tag` is rejected by `changeset publish` in pre
-> mode, so the fix-up is `npm dist-tag`.
+**So `latest` is the newest prerelease, and that is the install path we document**:
+`npm i -D -E testpilot-qa`. Nothing needs fixing after a publish.
+
+The **`alpha`** dist-tag is legacy. The first alphas were documented as `@alpha`, and CI can't move it:
+trusted publishing authorises `npm publish`, not `npm dist-tag`. It stays where it was last moved by
+hand, and nothing in the docs points at it any more. Move it by hand if you want it current
+(`npm dist-tag add testpilot-qa@<version> alpha`, which needs your 2FA); otherwise leave it or remove it.
+
+At the first stable release (`changeset pre exit`), `latest` becomes the stable line, and later
+prereleases go to their pre-mode tag automatically.
 
 ## One-time setup (maintainer)
 
@@ -104,19 +108,12 @@ cd packages/cli && npm publish --tag alpha   # then re-point `latest` per the po
 
 ## Post-publish
 
-**1. Verify and fix the dist-tag (mandatory — see the warning above).**
+**1. Confirm it is `latest`:** `npm view testpilot-qa version` should print the new version.
 
-```bash
-npm dist-tag ls testpilot-qa
-# If the new version landed on `latest`, move it to `alpha` and remove `latest`:
-npm dist-tag add testpilot-qa@<version> alpha
-npm dist-tag add testpilot-qa@<version> latest   # policy: `latest` tracks the newest alpha
-# Do NOT `dist-tag rm latest` — that makes a plain `npm i testpilot-qa` fail.
-```
-
-**2. If this was the first trusted-publishing run,** confirm npm's OIDC exchange actually happened in
-the job log (rather than assuming); if it was skipped, drop `registry-url` from the workflow or set
-`NODE_AUTH_TOKEN` only when the secret exists.
+**2. Confirm how it was authenticated.** `npm view testpilot-qa@<version> _npmUser` shows a *person*
+for a token publish and the GitHub Actions identity for a trusted publish. Once a trusted publish is
+confirmed, remove `NODE_AUTH_TOKEN` from `release.yml`, delete the `NPM_TOKEN` secret, and set the
+package's *Publishing access* to "require two-factor authentication and disallow tokens".
 
 - Verify: `npx testpilot-qa@alpha --version` / `--help` / `init demo --yes` / `analyze tests --reporter html`.
 - ✅ Done for 0.1.0-alpha.0: README pins `@alpha` in the first-contact examples and documents `npm i -D testpilot-qa@alpha`.
