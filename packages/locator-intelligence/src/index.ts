@@ -5,7 +5,7 @@
  * analyze). Milestone 3B completes the MVP Tier 1 rule set (six rules) and adds
  * unknown-rule warnings and parse-error reporting to the report envelope.
  */
-export { analyze, type AnalyzeOptions } from './analyze.js'
+export { analyze, type AnalyzeOptions, helpersAdvice } from './analyze.js'
 export { explanationIds, getExplanation, ruleExplanations } from './explanations.js'
 export {
   computeFixes,

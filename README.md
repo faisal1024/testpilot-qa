@@ -466,8 +466,10 @@ export default defineConfig({
   // ],
 
   // ── Everything below is safe to set to its default. ──
-  // Page objects / fixtures, analyzed only with --with-helpers. Empty means
-  // "use the conventional directory names" (see Known limitations).
+  // Page objects / fixtures to analyze, as globs relative to this file, e.g.
+  // ['e2e/pages/**', '!e2e/pages/legacy/**']. Naming any turns helper analysis
+  // on and replaces the conventional names; empty means off unless you pass
+  // --with-helpers.
   includeHelpers: [],
   // Named tag sets for `run --suite`. A list is any-of; the object form can
   // require all of them: { all: [...], any: [...], none: [...] }.
@@ -615,7 +617,9 @@ Written down because a tool that hides these is worse than one that doesn't have
 - **Page objects are not analyzed unless you ask.** Most suites keep most of their locators there.
   `analyze` reports the count when they sit in a conventional directory (`pages/`, `page-objects/`,
   `pageobjects/`, `pom/`, `fixtures/`, `helpers/`, `support/`) — if yours live elsewhere, name them in
-  `includeHelpers`, because nothing will tell you. Add `--with-helpers` to include them in the score.
+  `includeHelpers`, because nothing will tell you. Naming a list turns their analysis on, and it
+  replaces the conventional names rather than adding to them. Otherwise add `--with-helpers` to
+  include the conventional directories in the score.
 - **`no-hard-wait` overlaps `eslint-plugin-playwright`.** If you already run that plugin's
   `no-wait-for-timeout`, TestPilot adds nothing there — its value is the suite-level score, the
   brownfield baseline, and the report formats.

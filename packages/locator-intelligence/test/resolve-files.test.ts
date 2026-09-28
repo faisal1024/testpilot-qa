@@ -289,6 +289,78 @@ describe('resolveTestFiles — Playwright selector semantics', () => {
       ])
     })
 
+    it('matches helper globs relative to the helper root, as the config writes them', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('e2e/pages/login.ts')
+      playwrightFile('pom/cart.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: { ...defaultConfig, includeHelpers: ['e2e/pages/**', './pom/**'] },
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['e2e/pages/**', './pom/**'],
+            helperRoot: dir,
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f)).sort()).toEqual([
+        join('e2e', 'pages', 'login.ts'),
+        join('pom', 'cart.ts'),
+      ])
+      expect(found.includeHelpersUnmatched).toEqual([])
+    })
+
+    it('matches entries from the testpilot config even when the scan root is an adopted sub-directory', async () => {
+      // Discovery adopted `e2e/playwright.config.ts`, so helpers are scanned from `e2e/`;
+      // the list was written in `testpilot.config.ts` at the root.
+      write('e2e/tests/a.spec.ts')
+      playwrightFile('e2e/pages/login.ts')
+      const found = await resolveFiles({
+        cwd: dir,
+        config: { ...defaultConfig, includeHelpers: ['e2e/pages/**'] },
+        rootDir: dir,
+        scopes: [
+          scope({
+            root: join(dir, 'e2e/tests'),
+            includeGlobs: defaultConfig.include,
+            helperGlobs: ['e2e/pages/**'],
+            helperRoot: join(dir, 'e2e'),
+          }),
+        ],
+      })
+      expect([...found.helpers].map((f) => relative(dir, f))).toEqual([
+        join('e2e', 'pages', 'login.ts'),
+      ])
+      expect(found.includeHelpersUnmatched).toEqual([])
+    })
+
+    it('reports only the named entries that matched nothing, never the defaults', async () => {
+      write('e2e/a.spec.ts')
+      playwrightFile('pages/login.ts')
+      const run = (includeHelpers: string[], helperGlobs: string[]) =>
+        resolveFiles({
+          cwd: dir,
+          config: { ...defaultConfig, includeHelpers },
+          rootDir: dir,
+          scopes: [
+            scope({
+              root: join(dir, 'e2e'),
+              includeGlobs: defaultConfig.include,
+              helperGlobs,
+              helperRoot: dir,
+            }),
+          ],
+        })
+      const named = await run(['pages/**', 'nowhere/**'], ['pages/**', 'nowhere/**'])
+      expect(named.includeHelpersUnmatched).toEqual(['nowhere/**'])
+      // `--with-helpers` alone: the conventional names mostly match nothing, legitimately.
+      const flagOnly = await run([], ['**/pages/**', '**/pom/**'])
+      expect(flagOnly.includeHelpersUnmatched).toEqual([])
+    })
+
     it('does not count editor history or cache copies as page objects', async () => {
       // The probe's walk used to include dot-directories, which the patterns never
       // needed — it only reached `.history/` and inflated the number it asks to be

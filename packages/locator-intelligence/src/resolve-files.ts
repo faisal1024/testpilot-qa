@@ -1,5 +1,5 @@
 import { closeSync, openSync, readSync, realpathSync } from 'node:fs'
-import { resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   DEFAULT_HELPER_PATTERNS,
   type DiscoveryScope,
@@ -86,6 +86,8 @@ const ALWAYS_IGNORED = [
 
 /** Candidate set when a Playwright RegExp `testMatch` decides membership. */
 const ANY_SOURCE_FILE = ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}']
+/** The same set as a test on a path: a named helper glob selects files of every type. */
+const SOURCE_EXTENSION = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
 
 /** One directory to scan with the selectors that apply to it (see `resolveDiscovery`). */
 export type FileScope = DiscoveryScope
@@ -181,14 +183,20 @@ export interface ResolvedFiles {
   helpersNotAnalyzed: number
   /** The paths behind that count, so the number can be checked rather than trusted. */
   helpersNotAnalyzedFiles: string[]
-  /** Absolute paths within `files` that came from `helperGlobs`. */
+  /** Absolute paths within `files` that came from the helper layer. */
   helpers: Set<string>
   /**
-   * Files that matched `helperGlobs` but were not admitted — they carry no sign of
-   * using Playwright. Reported, because a helper layer matched and then silently
-   * discarded is indistinguishable from one that does not exist.
+   * Source files the helper layer selected but did not admit — they carry no sign of
+   * using Playwright, or resolve outside the project. Reported, because a helper layer
+   * matched and then silently discarded is indistinguishable from one that does not
+   * exist.
    */
   helperCandidatesRejected: number
+  /**
+   * `includeHelpers` entries that matched no file at all. A typo'd or stale entry
+   * otherwise looks exactly like a project with no page objects.
+   */
+  includeHelpersUnmatched: string[]
 }
 
 export async function resolveTestFiles(options: ResolveFilesOptions): Promise<string[]> {
@@ -205,6 +213,73 @@ interface ProbeResult {
 }
 
 /**
+ * The user's `includeHelpers` list, resolved against **one** base: the directory of the
+ * config file it was written in (`rootDir`). Matching every entry against several roots
+ * at once — the scan root, the config directory and the absolute path — made
+ * `pages/**` mean two different directories when a sub-directory Playwright config was
+ * adopted, and reached files outside the config's directory that `fix --write` would
+ * then rewrite.
+ *
+ * - `!pattern` entries exclude. Handed to picomatch as a list they matched almost
+ *   every file instead, admitting the whole project as page objects.
+ * - A bare directory (`pages`, `pages/`) means everything under it.
+ * - A leading `./` is dropped; an absolute entry is made relative to the base.
+ */
+interface NamedHelpers {
+  base: string
+  /** The entries the user wrote, as written, for reporting. */
+  entries: { written: string; glob: string }[]
+  include: string[]
+  exclude: string[]
+  /** Whether a file (absolute path) is selected by the list. */
+  selects: (file: string) => boolean
+}
+
+function namedHelpers(written: string[], base: string): NamedHelpers {
+  const entries: { written: string; glob: string }[] = []
+  const exclude: string[] = []
+  for (const entry of written) {
+    const negated = entry.startsWith('!')
+    const glob = normaliseHelperEntry(negated ? entry.slice(1) : entry, base)
+    if (negated) exclude.push(glob)
+    else entries.push({ written: entry, glob })
+  }
+  const include = entries.map((entry) => entry.glob)
+  const isMatch = include.length > 0 ? picomatch(include, { dot: true }) : () => false
+  const isExcluded = exclude.length > 0 ? picomatch(exclude, { dot: true }) : () => false
+  return {
+    base,
+    entries,
+    include,
+    exclude,
+    selects: (file) => {
+      const path = toPosix(relative(base, file))
+      return isMatch(path) && !isExcluded(path)
+    },
+  }
+}
+
+function normaliseHelperEntry(entry: string, base: string): string {
+  // On Windows a `\` is a separator the user typed, not a glob escape.
+  const written = sep === '\\' ? entry.replace(/\\/g, '/') : entry
+  let glob = isAbsolute(written) ? toPosix(relative(base, written)) : written.replace(/^\.\//, '')
+  if (!/[*?[{]/.test(glob) && isDirectory(resolve(base, glob))) {
+    glob = `${glob.replace(/\/+$/, '')}/**`
+  }
+  return glob
+}
+
+/**
+ * The conventional names (`pages`, `fixtures`, … at any depth) matched against the path
+ * **below** `helperRoot`. Testing the absolute path too meant a checkout under a directory called
+ * `fixtures/` or `pages/` turned every Playwright file in the project into a page object.
+ */
+function conventionalMatcher(patterns: string[], root: string): (file: string) => boolean {
+  const isMatch = picomatch([...new Set(patterns)], { dot: true })
+  return (file) => isMatch(toPosix(relative(root, file)))
+}
+
+/**
  * Counts page-object / fixture files that use Playwright and were **not** analyzed.
  *
  * Shared by both discovery paths on purpose: every narrowing so far — no config, a
@@ -213,25 +288,33 @@ interface ProbeResult {
  * without saying which of its locators it never read.
  *
  * The probe ignores `config.exclude` and honours `ALWAYS_IGNORED` alone: excluding a
- * directory says "do not analyze it", not "do not tell me it exists".
+ * directory says "do not analyze it", not "do not tell me it exists". A `!` entry in
+ * `includeHelpers` is different — it names page objects the user chose to leave out —
+ * so those are not counted.
  */
 async function probeHelperLayer(
   roots: string[],
-  patterns: string[],
+  conventional: string[],
   alreadyCovered: (file: string) => boolean,
+  named?: NamedHelpers,
 ): Promise<ProbeResult> {
-  const isHelper = picomatch([...new Set(patterns)], { dot: true })
+  const optedOut =
+    named && named.exclude.length > 0 ? picomatch(named.exclude, { dot: true }) : null
   const notAnalyzed: string[] = []
   for (const root of new Set(roots)) {
     const base = realpathOrNull(root)
     if (!base) continue
+    const isConventional = conventionalMatcher(conventional, root)
+    const isHelper = (file: string) =>
+      (isConventional(file) || (named?.selects(file) ?? false)) &&
+      !(named && optedOut?.(toPosix(relative(named.base, file))))
     const candidates = await glob(ANY_SOURCE_FILE, {
       cwd: root,
       absolute: true,
       ignore: ALWAYS_IGNORED,
     })
     for (const file of candidates) {
-      if (alreadyCovered(file) || !isHelper(toPosix(file))) continue
+      if (alreadyCovered(file) || !isHelper(file)) continue
       if (!withinRoot(file, base)) continue
       if (usesPlaywright(file)) notAnalyzed.push(file)
     }
@@ -269,8 +352,11 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
     // would be answering a question they did not ask.
     const { notAnalyzed } = await probeHelperLayer(
       patterns.map((pattern) => patternRoot(cwd, pattern)),
-      [...DEFAULT_HELPER_PATTERNS, ...config.includeHelpers],
+      DEFAULT_HELPER_PATTERNS,
       (file) => matched.has(file),
+      config.includeHelpers.length > 0
+        ? namedHelpers(config.includeHelpers, resolve(options.rootDir ?? cwd))
+        : undefined,
     )
     return {
       files: [...matched].sort(),
@@ -278,6 +364,8 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
       helperCandidatesRejected: 0,
       helpersNotAnalyzed: notAnalyzed.length,
       helpersNotAnalyzedFiles: notAnalyzed,
+      // Explicit patterns skip the helper layer, so no entry was tried.
+      includeHelpersUnmatched: [],
     }
   }
 
@@ -343,25 +431,36 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
   let helpersNotAnalyzed = 0
   const helpersNotAnalyzedFiles: string[] = []
   const helperScope = scopes.find((scope) => scope.helperGlobs.length > 0)
+  // A named list is the user's own and resolves from their config's directory; with
+  // none, the scope's conventional names resolve from the scan root.
+  const named =
+    config.includeHelpers.length > 0
+      ? namedHelpers(config.includeHelpers, resolve(options.rootDir ?? cwd))
+      : undefined
+  const includeHelpersUnmatched: string[] = []
 
   const probeScope = helperScope ?? scopes[0]
   if (probeScope && testFiles.size > 0) {
-    const analysing = helperScope !== undefined
-    if (analysing && helperScope) {
+    if (helperScope) {
       // The layer the user asked for, analyzed. `exclude` applies here — this decides
       // what gets read, not what gets reported.
-      const analysed = picomatch(helperScope.helperGlobs, { dot: true })
-      const base = realpathOrNull(helperScope.helperRoot)
-      const candidates = await run(
-        helperScope.helperRoot,
-        ANY_SOURCE_FILE,
-        helperScope.excludeGlobs,
-      )
+      const root = named ? named.base : helperScope.helperRoot
+      const base = realpathOrNull(root)
+      // A named glob selects every file type; only source files are page objects. A
+      // `.md` that quotes `page.locator(` passed the Playwright sniff and `fix` offered
+      // to rewrite it.
+      const candidates = named
+        ? (await run(root, named.include, [...helperScope.excludeGlobs, ...named.exclude])).filter(
+            (file) => SOURCE_EXTENSION.test(file),
+          )
+        : (await run(root, ANY_SOURCE_FILE, helperScope.excludeGlobs)).filter(
+            conventionalMatcher(helperScope.helperGlobs, root),
+          )
       for (const file of candidates) {
         // Membership as a test always wins: a spec that happens to live under
         // `fixtures/` is still a test, and demoting its findings would hide them.
-        if (testFiles.has(file) || !analysed(toPosix(file))) continue
-        // A symlink can point anywhere; `fix --write` follows it.
+        if (testFiles.has(file)) continue
+        // A symlink — or a `../` entry — can point anywhere; `fix --write` follows it.
         if (!base || !withinRoot(file, base)) {
           helperCandidatesRejected += 1
           continue
@@ -371,13 +470,35 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
         if (usesPlaywright(file)) helpers.add(file)
         else helperCandidatesRejected += 1
       }
+      // Only the user's own entries, and only "matched no file at all": the
+      // conventional names legitimately match nothing in most projects, and an entry
+      // whose files `exclude` removed was not misspelt.
+      if (named) {
+        const selected = candidates.map((file) => toPosix(relative(named.base, file)))
+        for (const entry of named.entries) {
+          const isMatch = picomatch(entry.glob, { dot: true })
+          if (selected.some((path) => isMatch(path))) continue
+          // Nothing admitted; ask again without `exclude`, which removes files on purpose.
+          const any = await glob([entry.glob], {
+            cwd: named.base,
+            dot: true,
+            ignore: ALWAYS_IGNORED,
+          })
+          if (!any.some((file) => SOURCE_EXTENSION.test(file))) {
+            includeHelpersUnmatched.push(entry.written)
+          }
+        }
+      }
     }
     // And the layer that was not analyzed, whatever the reason — no flag, a narrowed
     // `includeHelpers`, or an `exclude` that removed it from analysis.
     const { notAnalyzed } = await probeHelperLayer(
       [probeScope.helperRoot],
-      [...DEFAULT_HELPER_PATTERNS, ...(helperScope?.helperGlobs ?? [])],
+      named
+        ? DEFAULT_HELPER_PATTERNS
+        : [...DEFAULT_HELPER_PATTERNS, ...(helperScope?.helperGlobs ?? [])],
       (file) => testFiles.has(file) || helpers.has(file),
+      named,
     )
     helpersNotAnalyzed = notAnalyzed.length
     helpersNotAnalyzedFiles.push(...notAnalyzed)
@@ -389,5 +510,8 @@ export async function resolveFiles(options: ResolveFilesOptions): Promise<Resolv
     helperCandidatesRejected,
     helpersNotAnalyzed,
     helpersNotAnalyzedFiles: helpersNotAnalyzedFiles.sort(),
+    // Judged only when the helper layer was actually scanned: with no suite found,
+    // nothing was tried, and "matched nothing" would be a claim about nothing.
+    includeHelpersUnmatched,
   }
 }

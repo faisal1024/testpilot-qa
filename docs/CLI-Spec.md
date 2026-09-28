@@ -596,11 +596,11 @@ a `doctor` **failure**: it would select every test. A suite naming a tag no test
 ## 5. Output Contract (`--json`)
 
 Stable, versioned envelope so agents and CI can depend on it. The shape below matches the
-**implemented `analyze` report (`schemaVersion` `1.12`)**. (DOM-derived suggestions remain out of Tier 1.)
+**implemented `analyze` report (`schemaVersion` `1.13`)**. (DOM-derived suggestions remain out of Tier 1.)
 
 ```json
 {
-  "schemaVersion": "1.12",
+  "schemaVersion": "1.13",
   "command": "analyze",
   "rootDir": "/abs/path/to/project",
   "discovery": {
@@ -685,7 +685,7 @@ ignore it.
 `warnings[].code` is `unknown-rule`, `no-files-matched` (1.4), `playwright-config-partial` /
 `playwright-config-ignored` / `test-root-missing` (**1.6**), `helpers-not-analyzed` /
 `helpers-not-recognized` (**1.7**), `test-tag-coverage` (**1.8**), `deprecated-rule-id` (**1.10**),
-or `uninspected-call-sites` (**1.11**), so a discovery problem reaches the table,
+`uninspected-call-sites` (**1.11**), or `include-helpers-unmatched` (**1.13**), so a discovery problem reaches the table,
 the HTML report, and SARIF (as `invocations[].toolExecutionNotifications`), not just stderr. On a **zero-file run** the `--json`
 and `--reporter sarif` outputs are still emitted (`filesAnalyzed: 0`, the `no-files-matched` warning,
 no results) *before* the CLI exits `2`/`3`, so agents and `upload-sarif` steps with `if: always()`
@@ -824,14 +824,40 @@ so running from a sub-directory of a monorepo still finds the suite.
 
 Playwright's `testMatch` selects the files it *runs*. Real suites keep most of their locators
 somewhere else — Ghost's page objects hold 107 of its 109 findings — so `analyze`/`fix` accept
-`--with-helpers`, or a `includeHelpers` list in `testpilot.config.ts` (naming them is itself the
-opt-in). Defaults when the flag is used: `pages`, `page-objects`, `pageobjects`, `pom`, `fixtures`,
-`helpers`, `support`. `lib/` and `utils/` are deliberately absent — broad enough that scanning them
-costs more than it returns; a suite that keeps page objects somewhere else entirely should name its
-own `includeHelpers` list.
+`--with-helpers`, or an `includeHelpers` list in `testpilot.config.ts` (naming them is itself the
+opt-in; the flag is then not needed). Defaults when only the flag is used: `pages`, `page-objects`,
+`pageobjects`, `pom`, `fixtures`, `helpers`, `support`. `lib/` and `utils/` are deliberately absent —
+broad enough that scanning them costs more than it returns; a suite that keeps page objects somewhere
+else entirely should name its own `includeHelpers` list.
 
-These files are scanned from the **config's directory**, not from `testDir` — helpers sit beside the
-test root far more often than inside it. Findings carry `inHelper: true`, are counted in
+**Where each list is resolved.** There are two bases, one per list:
+- An `includeHelpers` list is resolved from the directory of **`testpilot.config.ts`**, the file you
+  wrote it in, and from nowhere else. That holds even when discovery adopts
+  `e2e/playwright.config.ts`: `'pages/**'` then still means `<config dir>/pages`, never `e2e/pages`.
+- The conventional names (`--with-helpers` with no list) match at any depth below the directory of
+  the Playwright config in use, or the project root when there is none. They are matched against
+  the path below that directory, never the absolute path, so a checkout that happens to sit inside a
+  directory named `fixtures/` doesn't turn every file into a page object.
+
+Either way helpers are found beside the test root, not only inside `testDir`: they sit there far more
+often.
+
+**Writing entries.**
+- Entries are globs (`'e2e/pages/**'`), and a `**/`-anchored entry matches at any depth.
+- A bare directory (`'pages'`, `'pages/'`) means everything under it.
+- `'!pages/legacy/**'` excludes. A list of *only* `!` entries selects nothing, so to leave one
+  directory out of the conventional names, list the ones you want and add the `!` entry.
+- Only source files (`.ts`, `.tsx`, `.js`, …) are ever page objects, whatever the glob matches.
+- `exclude` applies too. With a named list it resolves from the config's directory, like the list
+  itself; for the conventional names it resolves from the scan root. The default `exclude` entries
+  are all `**/`-anchored, so they mean the same either way.
+- A named list **replaces** the conventional names rather than adding to them, so list every
+  location you want.
+- A file outside the config's directory, reached by `../` or through a symlink, is never analyzed.
+  `fix --write` would follow it. It is counted under `helpers-not-recognized`.
+- An entry that matches no file at all is reported (`include-helpers-unmatched`, in `analyze` and
+  `fix`), because a misspelt entry otherwise looks exactly like a project with no page objects.
+- Page objects never count toward `tags`, which reads test declarations only. Findings carry `inHelper: true`, are counted in
 `summary.helperFiles`, and are marked `[helper]` in the table, in the HTML report, and as a SARIF
 `properties.inHelper`. "Your page object uses a CSS class" is a different conversation from "your test
 does" — a page object centralizing a selector is doing its job — so the two are never merged silently.

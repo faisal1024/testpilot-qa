@@ -86,6 +86,10 @@ export const configSchema = z
      * where Playwright's own `testMatch` never looks. Empty by default: these files
      * are not tests, so including them changes what the score is measuring. Setting
      * this, or passing `--with-helpers`, turns it on.
+     *
+     * Globs relative to this config file's directory (`'e2e/pages/**'`); a bare
+     * directory means everything under it, and `'!…'` entries exclude. A named list
+     * **replaces** the conventional directory names rather than adding to them.
      */
     includeHelpers: z.array(z.string()).default([]),
     /**

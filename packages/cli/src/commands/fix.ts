@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { relative, sep } from 'node:path'
+import type { AnalysisWarning } from '@testpilot/core'
 import {
   type FixEdit,
   computeFixes,
   discoveryBase,
+  helpersAdvice,
   resolveFiles,
 } from '@testpilot/locator-intelligence'
 import type { Command } from 'commander'
@@ -54,7 +56,7 @@ export async function fixCommand(
   const write = options.write === true
 
   const explicitPatterns = patterns.length > 0 ? patterns : undefined
-  const { files, helpers, helpersNotAnalyzed } = await resolveFiles({
+  const { files, helpers, helpersNotAnalyzed, includeHelpersUnmatched } = await resolveFiles({
     cwd: globals.cwd,
     patterns: explicitPatterns,
     config,
@@ -115,10 +117,14 @@ export async function fixCommand(
     // `fix` rewrites tests while leaving the layer that holds most of the locators
     // untouched — the same gap `analyze` now discloses, with a write attached.
     console.error(
-      `[testpilot] ${helpersNotAnalyzed} page object/fixture file(s) were not considered. Add --with-helpers to fix those too.`,
+      `[testpilot] ${helpersNotAnalyzed} page object/fixture file(s) were not considered. ${helpersAdvice(config.includeHelpers.length > 0, explicitPatterns !== undefined)}`,
     )
   }
-  report(results, diffs, write, skipped, globals, resolved, helpersNotAnalyzed)
+  const unmatched = unmatchedWarning(includeHelpersUnmatched)
+  if (unmatched && !globals.quiet && !globals.json) {
+    console.error(`[testpilot] ${unmatched.message}`)
+  }
+  report(results, diffs, write, skipped, globals, resolved, helpersNotAnalyzed, unmatched)
 }
 
 function totalFixes(results: FileFixSummary[]): number {
@@ -133,6 +139,7 @@ function report(
   globals: GlobalOptions,
   resolved: DiscoveryResult,
   helpersNotAnalyzed: number,
+  unmatched: AnalysisWarning | undefined,
 ): void {
   if (globals.json) {
     console.log(
@@ -151,7 +158,7 @@ function report(
         discovery: resolved.discovery,
         // The agent-facing path must see the same gap the human one is told about.
         helpersNotAnalyzed,
-        warnings: discoveryWarnings(resolved.discovery),
+        warnings: [...discoveryWarnings(resolved.discovery), ...(unmatched ? [unmatched] : [])],
       }),
     )
     return
@@ -185,5 +192,14 @@ function report(
   // Non-fatal heads-up so "fix did nothing" is never ambiguous.
   if (skipped > 0) {
     console.error(`Skipped ${skipped} file(s) that could not be read or parsed.`)
+  }
+}
+
+/** The same `include-helpers-unmatched` warning `analyze` reports: a typo is not quieter here. */
+function unmatchedWarning(entries: string[]): AnalysisWarning | undefined {
+  if (entries.length === 0) return undefined
+  return {
+    code: 'include-helpers-unmatched',
+    message: `includeHelpers ${entries.map((p) => `\`${p}\``).join(', ')} matched no file, so it added nothing to this run. Entries are globs relative to the directory of your testpilot config, and naming a list replaces the conventional directory names (\`pages/\`, \`fixtures/\`, …) rather than adding to them.`,
   }
 }

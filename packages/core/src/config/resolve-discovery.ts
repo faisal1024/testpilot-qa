@@ -51,7 +51,9 @@ export interface DiscoveryScope {
   /** TestPilot's own `exclude`, applied as a root-relative glob ignore. */
   excludeGlobs: string[]
   /**
-   * Page-object / fixture / helper globs, matched against the absolute path. These
+   * Page-object / fixture / helper globs. The conventional names are matched below
+   * `helperRoot`; a user's `includeHelpers` list resolves from the directory of the
+   * testpilot config instead (see `resolveFiles`). These
    * files are not tests — Playwright never runs them — so findings from them are
    * tagged `inHelper` and can be read separately from the suite's own.
    */
