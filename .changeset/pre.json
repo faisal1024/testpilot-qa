@@ -11,8 +11,11 @@
     "@testpilot/templates": "0.0.0"
   },
   "changesets": [
+    "action-pattern-glob",
     "alpha-1-no-silent-green",
+    "fix-sibling-hops-unread-layers",
     "fix-test-id-ancestors",
+    "install-latest",
     "milestone-2-5-init-run",
     "milestone-2-cli-basics",
     "milestone-3-5-parallel-foundation",
