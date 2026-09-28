@@ -161,6 +161,10 @@ describe('GitHub Action wrapper — what the CLI actually receives', () => {
       const [summary] = runAction(blank, ['tests/a.spec.ts'])
       expect(summary, JSON.stringify(blank)).toEqual(['--yes', 'testpilot-qa@latest', 'analyze'])
     }
+    // The crash only reproduces on bash < 4.4 (macOS's /bin/bash); CI's bash 5
+    // accepts an empty "${arr[@]}" under `set -u`. So also pin the shape that
+    // makes it impossible: patterns go straight onto `common`, globbing off.
+    expect(runBody).toMatch(/set -f\n(?:\s*#.*\n)*\s*common\+=\(\$\{TP_PATTERNS\}\)\n\s*set \+f/)
   })
 
   it('passes no pattern at all when the input is empty', () => {

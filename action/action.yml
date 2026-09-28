@@ -20,7 +20,7 @@ inputs:
     required: false
     default: 'latest'
   patterns:
-    description: 'Optional space-separated glob(s) to analyze. Defaults to the configured test dir.'
+    description: 'Optional glob(s) to analyze, separated by spaces, tabs or newlines, and matched by the CLI (quotes are not honoured, so a path cannot contain a space). Defaults to the configured test dir.'
     required: false
     default: ''
   min-score:
