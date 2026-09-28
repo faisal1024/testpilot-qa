@@ -134,7 +134,12 @@ export const preferSemanticLocator: Rule = {
     // to a rule that has nothing to say about their selector.
     const hasTestId =
       attributes.some((attribute) => testIds.includes(attribute.name)) ||
-      context.parsed.parts.some((part) => part.engine === 'test-id')
+      context.parsed.parts.some(
+        (part) =>
+          part.engine === 'test-id' &&
+          part.engineName !== undefined &&
+          testIds.includes(part.engineName),
+      )
     return {
       message:
         'This locator() selector has no semantic handle — no role, label, or ARIA attribute.',

@@ -199,6 +199,22 @@ const COMPOUND_ARGUMENT_PSEUDOS: ReadonlySet<string> = new Set([
   'has',
 ])
 
+/** A control character or a lone surrogate — anything JSON-escaping changes in transit. */
+function hasUnsafeCharacter(value: string): boolean {
+  // `for…of` walks code points, so a well-formed pair is one astral character
+  // and only an unpaired surrogate lands in the surrogate range.
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f || (code >= 0xd800 && code <= 0xdfff)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `odd`, `even`, `3`, `2n`, `-n+3`, `2n + 1` — and nothing else. */
+const AN_PLUS_B = /^\s*(?:odd|even|[+-]?\d*n(?:\s*[+-]\s*\d+)?|[+-]?\d+)\s*$/i
+
 /** True when this compound selects the same elements under any query scope. */
 function isScopeIndependent(compound: CompoundSelector): boolean {
   return compound.pseudos.every((pseudo) => {
@@ -208,9 +224,11 @@ function isScopeIndependent(compound: CompoundSelector): boolean {
     if (SCOPE_INDEPENDENT_PSEUDOS.has(pseudo.name)) {
       return true
     }
-    // `:nth-child(2)` is sibling position; `:nth-child(2 of .a .b)` is not.
+    // `:nth-child(2)` is sibling position; `:nth-child(2 of .a .b)` is not. Accept
+    // only an argument that is visibly An+B — "no `of` was parsed" is not the same
+    // as "there is no `of`": an escaped `o\66` hid it from the tokenizer.
     if (pseudo.name === 'nth-child' || pseudo.name === 'nth-last-child') {
-      return pseudo.selectors === undefined
+      return pseudo.selectors === undefined && AN_PLUS_B.test(pseudo.argument ?? '')
     }
     if (COMPOUND_ARGUMENT_PSEUDOS.has(pseudo.name)) {
       // `=== true`: an argument we did not parse is not an argument we checked.
@@ -260,6 +278,13 @@ export function testIdEngineReplacement(
     return null
   }
   if (selector !== selector.trim() || /\s=|=\s/.test(selector)) {
+    return null
+  }
+  // Playwright builds `[attr=${JSON.stringify(body)}]`, and CSS then reads the
+  // JSON escape `\t` as a plain `t`: `data-testid=a<TAB>b` queries "atb", not
+  // the "a\tb" that `getByTestId()` would. Control characters and lone
+  // surrogates change the value in transit, so there is no exact rewrite.
+  if (hasUnsafeCharacter(part.body)) {
     return null
   }
   return { attribute: part.engineName, value: part.body }

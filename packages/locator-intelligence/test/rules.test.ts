@@ -301,6 +301,9 @@ describe('prefer-get-by-test-id', () => {
       '[data-testid=a] :is(:scope)',
       '[data-testid=a]:scope div',
       '[data-testid=a] p::before',
+      // An escaped `of` hides the selector argument from the tokenizer; only a
+      // visible An+B argument is accepted as sibling position.
+      '[data-testid=a] li:nth-child(1 o\\66  :scope > li)',
     ]) {
       expect(preferGetByTestId.evaluate(css(selector)), selector).toBeNull()
     }
@@ -429,6 +432,17 @@ describe('prefer-get-by-test-id', () => {
     const qa = { testIdAttributes: ['data-qa'] }
     expect(engine('data-test=save', qa).testId).toBeNull()
     expect(engine('data-test=save', qa).semantic).not.toBeNull()
+    // ...and the semantic rule's wording agrees across both spellings: neither
+    // `data-test=` nor `[data-test=]` is a test id under that config.
+    expect(engine('data-test=save', qa).semantic?.suggestion).toContain('add a data-testid')
+    expect(engine('[data-test="save"]', qa).semantic?.suggestion).toContain('add a data-testid')
+    // A control character is JSON-escaped by Playwright's engine and then read
+    // by CSS as a plain letter, so `a<TAB>b` queries "atb". No exact rewrite.
+    expect(engine('data-testid=a\tb').testId).toBeNull()
+    expect(engine('data-testid=a\nb').testId).toBeNull()
+    expect(engine('data-testid=save button').testId?.suggestion).toContain(
+      'getByTestId("save button")',
+    )
   })
 
   it("owns Playwright's own data-testid= selector engine", () => {
