@@ -90,21 +90,26 @@ describe('GitHub Action wrapper — what the CLI actually receives', () => {
         `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n')\n`,
       )
       chmodSync(join(bin, 'npx'), 0o755)
-      const result = spawnSync('bash', ['-c', runBody], {
-        cwd: dir,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          PATH: `${bin}:${process.env.PATH}`,
-          TP_VERSION: 'latest',
-          TP_PATTERNS: patterns,
-          TP_MIN_SCORE: '',
-          TP_BASELINE: '',
-          TP_OUTPUT: 'testpilot.sarif',
-          GITHUB_OUTPUT: join(dir, 'out'),
-          GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+      // GitHub runs `shell: bash` steps as `bash --noprofile --norc -eo pipefail`.
+      const result = spawnSync(
+        'bash',
+        ['--noprofile', '--norc', '-eo', 'pipefail', '-c', runBody],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            TP_VERSION: 'latest',
+            TP_PATTERNS: patterns,
+            TP_MIN_SCORE: '',
+            TP_BASELINE: '',
+            TP_OUTPUT: 'testpilot.sarif',
+            GITHUB_OUTPUT: join(dir, 'out'),
+            GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+          },
         },
-      })
+      )
       expect(result.status, result.stderr).toBe(0)
       return readFileSync(log, 'utf8')
         .trim()
@@ -132,6 +137,17 @@ describe('GitHub Action wrapper — what the CLI actually receives', () => {
 
   it('still splits several whitespace-separated patterns', () => {
     const calls = runAction('e2e/**/*.ts  tests/*.spec.ts', ['e2e/a.ts', 'tests/b.spec.ts'])
+    for (const argv of calls) {
+      expect(argv).toContain('e2e/**/*.ts')
+      expect(argv).toContain('tests/*.spec.ts')
+    }
+  })
+
+  it('keeps every line of a multi-line patterns block', () => {
+    // `patterns: |` with one glob per line is natural YAML. `read -a` would
+    // stop at the first newline and silently drop the rest — the bug this file
+    // fixes, in another shape — so this pins the newline split too.
+    const calls = runAction('e2e/**/*.ts\ntests/*.spec.ts\n', ['e2e/a.ts', 'tests/b.spec.ts'])
     for (const argv of calls) {
       expect(argv).toContain('e2e/**/*.ts')
       expect(argv).toContain('tests/*.spec.ts')

@@ -74,14 +74,19 @@ runs:
 
         # The inputs shared by both runs (the baseline scopes the report to new findings).
         common=(analyze)
-        # Split on whitespace so several globs can be passed — but with `read`,
-        # which does not do pathname expansion. The previous unquoted
-        # `common+=(${TP_PATTERNS})` let bash expand `tests/**/*.spec.ts` itself
-        # against the runner's files (without globstar, `**` means `*`), so the
-        # CLI received a partial file list and the gate silently covered files
-        # nobody chose.
+        # Split on whitespace (spaces, tabs, and newlines, so a YAML `|` block
+        # with one glob per line works) — with pathname expansion OFF. Unquoted,
+        # bash also globbed each pattern against the runner's files before the
+        # CLI saw it: without globstar `**` means `*`, so `tests/**/*.spec.ts`
+        # became a partial file list and the gate silently covered files nobody
+        # chose. `set -f` keeps the splitting and drops only the globbing; `read
+        # -a` would have split too, but stops at the first newline and silently
+        # drops every line after it — the same bug in a new place.
         if [ -n "${TP_PATTERNS}" ]; then
-          read -r -a tp_patterns <<< "${TP_PATTERNS}"
+          set -f
+          # shellcheck disable=SC2206 # word-splitting wanted; globbing disabled above
+          tp_patterns=(${TP_PATTERNS})
+          set +f
           common+=("${tp_patterns[@]}")
         fi
         [ -n "${TP_BASELINE}" ] && common+=(--baseline "${TP_BASELINE}")
