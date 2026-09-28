@@ -154,6 +154,15 @@ describe('GitHub Action wrapper — what the CLI actually receives', () => {
     }
   })
 
+  it('treats a whitespace-only input as no pattern, without crashing', () => {
+    // Splits to nothing. Through an intermediate array this crashed under
+    // `set -u` on bash < 4.4; appended straight onto `common` it cannot.
+    for (const blank of [' ', '\n', '\t \n']) {
+      const [summary] = runAction(blank, ['tests/a.spec.ts'])
+      expect(summary, JSON.stringify(blank)).toEqual(['--yes', 'testpilot-qa@latest', 'analyze'])
+    }
+  })
+
   it('passes no pattern at all when the input is empty', () => {
     const [summary] = runAction('', ['tests/a.spec.ts'])
     expect(summary).toEqual(['--yes', 'testpilot-qa@latest', 'analyze'])

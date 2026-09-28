@@ -82,12 +82,15 @@ runs:
         # chose. `set -f` keeps the splitting and drops only the globbing; `read
         # -a` would have split too, but stops at the first newline and silently
         # drops every line after it — the same bug in a new place.
+        # Appended straight onto `common`, never via an intermediate array: a
+        # whitespace-only input splits to nothing, and expanding an EMPTY array
+        # under `set -u` crashes on bash < 4.4 (stock macOS `/bin/bash` on a
+        # self-hosted runner). `common` always holds `analyze`, so it is never empty.
         if [ -n "${TP_PATTERNS}" ]; then
           set -f
           # shellcheck disable=SC2206 # word-splitting wanted; globbing disabled above
-          tp_patterns=(${TP_PATTERNS})
+          common+=(${TP_PATTERNS})
           set +f
-          common+=("${tp_patterns[@]}")
         fi
         [ -n "${TP_BASELINE}" ] && common+=(--baseline "${TP_BASELINE}")
 
