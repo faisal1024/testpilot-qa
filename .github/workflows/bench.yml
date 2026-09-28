@@ -39,7 +39,7 @@ jobs:
           cache: pnpm
       # Every repo is pinned to a fixed SHA, so the corpus is a perfect cache key —
       # without this the job re-clones five repos and becomes a network-flakiness canary.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .bench-cache
           key: bench-corpus-${{ hashFiles('bench/corpus.json') }}
