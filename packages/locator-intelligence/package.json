@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@testpilot/core": "workspace:*",
-    "@typescript-eslint/parser": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.1",
     "picomatch": "^4.0.2",
     "tinyglobby": "^0.2.10"
   },
